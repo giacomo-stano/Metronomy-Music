@@ -3,31 +3,57 @@ import MediaPlayer
 import UIKit
 
 public final class MetronomySystemVolumeView: ExpoView {
-  private let volumeView = MPVolumeView(frame: .zero)
+  private var volumeView: MPVolumeView?
+  private var installScheduled = false
 
   public required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
 
     backgroundColor = .clear
     clipsToBounds = false
+  }
 
-    volumeView.backgroundColor = .clear
-    volumeView.showsVolumeSlider = true
-    volumeView.showsRouteButton = false
-    volumeView.clipsToBounds = false
+  public override func didMoveToWindow() {
+    super.didMoveToWindow()
 
-    addSubview(volumeView)
-    styleSlider()
+    guard window != nil, volumeView == nil, !installScheduled else {
+      return
+    }
+
+    installScheduled = true
+
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.installScheduled = false
+
+      guard self.window != nil, self.volumeView == nil else {
+        return
+      }
+
+      let volumeView = MPVolumeView(frame: self.bounds)
+      volumeView.backgroundColor = .clear
+      volumeView.showsVolumeSlider = true
+      volumeView.showsRouteButton = false
+      volumeView.clipsToBounds = false
+      volumeView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+
+      self.addSubview(volumeView)
+      self.volumeView = volumeView
+      self.styleSlider()
+    }
   }
 
   public override func layoutSubviews() {
     super.layoutSubviews()
-    volumeView.frame = bounds
+    volumeView?.frame = bounds
     styleSlider()
   }
 
   private func styleSlider() {
-    guard let slider = volumeView.subviews.compactMap({ $0 as? UISlider }).first else {
+    guard
+      let volumeView,
+      let slider = volumeView.subviews.compactMap({ $0 as? UISlider }).first
+    else {
       return
     }
 
