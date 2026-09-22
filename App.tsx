@@ -26,6 +26,7 @@ import { clearAlbumSongsCache, peekAlbumSongs, preloadAlbumSongs } from './src/a
 import NowPlayingWaves from './src/NowPlayingWaves';
 import ElasticPlayPauseButton from './src/ElasticPlayPauseButton';
 import { migrateBrandData } from './src/brandMigration';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Tab = 'Home' | 'Novità' | 'Libreria' | 'Cerca';
 
@@ -67,13 +68,53 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+const ACCOUNT_STORAGE_KEY = 'metronomy.activeAccount.v1';
+
 function AccountGate() {
   const [account, setAccount] = useState<Account | null>(null);
+  const [accountReady, setAccountReady] = useState(false);
 
   function clear() {
     configureAccount(null);
     setAccount(null);
+    void AsyncStorage.removeItem(ACCOUNT_STORAGE_KEY).catch(() => {});
   }
+
+  useEffect(() => {
+    let active = true;
+
+    void AsyncStorage.getItem(ACCOUNT_STORAGE_KEY)
+      .then(raw => {
+        if (!active || !raw) return;
+
+        const saved = JSON.parse(raw) as Account;
+        const valid =
+          !!saved &&
+          typeof saved.baseURL === 'string' &&
+          typeof saved.username === 'string' &&
+          typeof saved.token === 'string' &&
+          Number.isFinite(saved.expires) &&
+          saved.expires * 1000 > Date.now();
+
+        if (!valid) {
+          void AsyncStorage.removeItem(ACCOUNT_STORAGE_KEY).catch(() => {});
+          return;
+        }
+
+        configureAccount(saved);
+        setAccount(saved);
+      })
+      .catch(() => {
+        void AsyncStorage.removeItem(ACCOUNT_STORAGE_KEY).catch(() => {});
+      })
+      .finally(() => {
+        if (active) setAccountReady(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     onSessionExpired(clear);
@@ -95,6 +136,13 @@ function AccountGate() {
   function enter(value: Account) {
     configureAccount(value);
     setAccount(value);
+
+    if (!value.offline) {
+      void AsyncStorage.setItem(
+        ACCOUNT_STORAGE_KEY,
+        JSON.stringify(value)
+      ).catch(() => {});
+    }
   }
 
   function logout() {
@@ -104,7 +152,23 @@ function AccountGate() {
      */
     const pending = endSession();
     setAccount(null);
+    void AsyncStorage.removeItem(ACCOUNT_STORAGE_KEY).catch(() => {});
     void pending.catch(() => {});
+  }
+
+  if (!accountReady) {
+    return (
+      <SafeAreaView
+        style={{
+          flex: 1,
+          backgroundColor: '#111',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <ActivityIndicator color="#ff375f" />
+      </SafeAreaView>
+    );
   }
 
   return account ? (
