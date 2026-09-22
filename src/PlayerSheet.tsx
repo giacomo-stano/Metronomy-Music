@@ -19,6 +19,7 @@ import { useVisiblePlaybackStatus } from './usePlaybackSignals';
 import { useTheme } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
 import ElasticPlayPauseButton from './ElasticPlayPauseButton';
+import { AirPlayButton, nativeAirPlayAvailable } from '../modules/metronomy-audio-controls';
 
 type Props = {
   visible: boolean;
@@ -1427,23 +1428,30 @@ export default function PlayerSheet(p: Props) {
                       />
                     </Pressable>
 
-                    <Pressable
-                      accessibilityLabel="AirPlay"
-                      onPress={() =>
-                        Alert.alert(
-                          'AirPlay',
-                          'La selezione della destinazione audio di sistema verrà collegata nella development build.'
-                        )
-                      }
-                      style={playerStyles.bottomTool}
-                    >
-                      <SymbolView
-                        name={'airplayaudio' as SFSymbol}
-                        size={27}
-                        weight="medium"
-                        tintColor={playerSecondary}
+                    {nativeAirPlayAvailable ? (
+                      <AirPlayButton
+                        accessibilityLabel="AirPlay"
+                        style={playerStyles.bottomTool}
                       />
-                    </Pressable>
+                    ) : (
+                      <Pressable
+                        accessibilityLabel="AirPlay"
+                        onPress={() =>
+                          Alert.alert(
+                            'AirPlay',
+                            'AirPlay nativo è disponibile nella build iOS di Metronomy.'
+                          )
+                        }
+                        style={playerStyles.bottomTool}
+                      >
+                        <SymbolView
+                          name={'airplayaudio' as SFSymbol}
+                          size={27}
+                          weight="medium"
+                          tintColor={playerSecondary}
+                        />
+                      </Pressable>
+                    )}
 
                     <Pressable
                       accessibilityLabel={
