@@ -29,3 +29,5 @@ export function addRemoteNextListener(listener: () => void) {
 export function addRemotePreviousListener(listener: () => void) {
   return RemoteControls?.addListener('onPreviousTrack', listener);
 }
+
+export * from './src';
