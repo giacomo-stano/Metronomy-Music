@@ -2,7 +2,8 @@ import ExpoModulesCore
 import MediaPlayer
 
 public final class MetronomyRemoteControlsModule: Module {
-  private var commandsRegistered = false
+  private var nextTarget: Any?
+  private var previousTarget: Any?
 
   public func definition() -> ModuleDefinition {
     Name("MetronomyRemoteControls")
@@ -24,57 +25,43 @@ public final class MetronomyRemoteControlsModule: Module {
     center.nextTrackCommand.isEnabled = true
     center.previousTrackCommand.isEnabled = true
 
-    guard !commandsRegistered else {
-      return
+    if nextTarget == nil {
+      nextTarget = center.nextTrackCommand.addTarget { [weak self] _ in
+        guard let self else {
+          return .commandFailed
+        }
+
+        self.sendEvent("onNextTrack", [:])
+        return .success
+      }
     }
 
-    center.nextTrackCommand.addTarget(
-      self,
-      action: #selector(handleNextTrack(_:))
-    )
+    if previousTarget == nil {
+      previousTarget = center.previousTrackCommand.addTarget { [weak self] _ in
+        guard let self else {
+          return .commandFailed
+        }
 
-    center.previousTrackCommand.addTarget(
-      self,
-      action: #selector(handlePreviousTrack(_:))
-    )
-
-    commandsRegistered = true
+        self.sendEvent("onPreviousTrack", [:])
+        return .success
+      }
+    }
   }
 
   private func disableRemoteCommands() {
     let center = MPRemoteCommandCenter.shared()
 
-    if commandsRegistered {
-      center.nextTrackCommand.removeTarget(
-        self,
-        action: #selector(handleNextTrack(_:))
-      )
+    if let nextTarget {
+      center.nextTrackCommand.removeTarget(nextTarget)
+      self.nextTarget = nil
+    }
 
-      center.previousTrackCommand.removeTarget(
-        self,
-        action: #selector(handlePreviousTrack(_:))
-      )
-
-      commandsRegistered = false
+    if let previousTarget {
+      center.previousTrackCommand.removeTarget(previousTarget)
+      self.previousTarget = nil
     }
 
     center.nextTrackCommand.isEnabled = false
     center.previousTrackCommand.isEnabled = false
-  }
-
-  @objc
-  private func handleNextTrack(
-    _ event: MPRemoteCommandEvent
-  ) -> MPRemoteCommandHandlerStatus {
-    sendEvent("onNextTrack", [:])
-    return .success
-  }
-
-  @objc
-  private func handlePreviousTrack(
-    _ event: MPRemoteCommandEvent
-  ) -> MPRemoteCommandHandlerStatus {
-    sendEvent("onPreviousTrack", [:])
-    return .success
   }
 }
