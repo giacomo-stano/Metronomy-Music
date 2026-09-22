@@ -3,7 +3,8 @@
   "apple": {
     "modules": [
       "MetronomyRemoteControlsModule",
-      "MetronomyAirPlayModule"
+      "MetronomyAirPlayModule",
+      "MetronomySystemVolumeModule"
     ]
   }
 }
