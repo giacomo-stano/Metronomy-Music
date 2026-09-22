@@ -27,6 +27,7 @@ import NowPlayingWaves from './src/NowPlayingWaves';
 import ElasticPlayPauseButton from './src/ElasticPlayPauseButton';
 import { migrateBrandData } from './src/brandMigration';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { addRemoteNextListener, addRemotePreviousListener, setRemoteControlsEnabled } from './modules/metronomy-audio-controls';
 
 type Tab = 'Home' | 'Novità' | 'Libreria' | 'Cerca';
 
@@ -817,8 +818,8 @@ function MusicApp({
             artworkUrl: coverURL(next.coverArt),
           },
           {
-            showSeekBackward: true,
-            showSeekForward: true,
+            showSeekBackward: false,
+            showSeekForward: false,
           }
         );
       } catch {
@@ -879,6 +880,31 @@ function MusicApp({
     else if (repeat === 'all' && queue.length) start(queue, 0, false);
   }
   useEffect(() => { if (status.didJustFinish && repeat !== 'one') next(); }, [status.didJustFinish]);
+
+  useEffect(() => {
+    setRemoteControlsEnabled(true);
+
+    const nextSubscription = addRemoteNextListener(() => {
+      next();
+    });
+
+    const previousSubscription = addRemotePreviousListener(() => {
+      if (player.currentTime > 3) {
+        seek(0);
+        return;
+      }
+
+      if (index > 0) {
+        start(queue, index - 1, false);
+      }
+    });
+
+    return () => {
+      nextSubscription?.remove();
+      previousSubscription?.remove();
+      setRemoteControlsEnabled(false);
+    };
+  }, [index, player, queue, repeat, shuffle]);
   useEffect(() => () => { if (sleepTimer.current) clearTimeout(sleepTimer.current); }, []);
   function sleep(minutes: number) { if (sleepTimer.current) clearTimeout(sleepTimer.current); setSleepMinutes(minutes); if (minutes) sleepTimer.current = setTimeout(() => { player.pause(); setSleepMinutes(0); }, minutes * 60000); }
   function browse(type: 'album' | 'artist') {
