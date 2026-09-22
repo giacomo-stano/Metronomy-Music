@@ -808,12 +808,19 @@ function MusicApp({
       player.play();
 
       try {
-        player.setActiveForLockScreen(true, {
-          title: next.title,
-          artist: next.artist,
-          albumTitle: next.album,
-          artworkUrl: coverURL(next.coverArt),
-        });
+        player.setActiveForLockScreen(
+          true,
+          {
+            title: next.title,
+            artist: next.artist,
+            albumTitle: next.album,
+            artworkUrl: coverURL(next.coverArt),
+          },
+          {
+            showSeekBackward: true,
+            showSeekForward: true,
+          }
+        );
       } catch {
         /* Optional in Expo Go. */
       }
