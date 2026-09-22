@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Metronomy – Expo
 
 ## Prima esecuzione su Windows
@@ -8,3 +9,6 @@
 4. Avvia `npx expo start` e scansiona il QR code con Expo Go.
 
 Accedi nell'app con le tue credenziali Navidrome. L'iPhone deve poter raggiungere il server tramite Wi-Fi domestico o VPN. Per aggiornare un'installazione precedente senza perdere i dati, leggi `../RINOMINA-METRONOMY.md`.
+=======
+# Metronomy-Music
+>>>>>>> dc32575532da88f3306416b3c9278616fdf55d30
