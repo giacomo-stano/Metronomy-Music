@@ -499,8 +499,6 @@ export default function PlayerSheet(p: Props) {
     });
   };
 
-  const onClose = p.onClose;
-
   const dismissPlayer = (velocity = 0) => {
     if (closingPlayer.current) return;
     closingPlayer.current = true;
@@ -508,13 +506,11 @@ export default function PlayerSheet(p: Props) {
 
     const duration = velocity > 900 ? 180 : 245;
     sheetY.value = withTiming(height * 0.36, { duration });
-    openProgress.value = withTiming(
-      0,
-      { duration },
-      finished => {
-        if (finished) runOnJS(onClose)();
-      }
-    );
+    openProgress.value = withTiming(0, { duration });
+
+    setTimeout(() => {
+      p.onClose();
+    }, duration);
   };
 
   const restorePlayer = () => {
@@ -526,6 +522,7 @@ export default function PlayerSheet(p: Props) {
   };
 
   const playerPan = Gesture.Pan()
+    .runOnJS(true)
     .enabled(!menu)
     .activeOffsetY(4)
     .failOffsetX([-28, 28])
@@ -539,15 +536,7 @@ export default function PlayerSheet(p: Props) {
         event.velocityY > 820;
 
       if (shouldClose) {
-        const duration = event.velocityY > 1200 ? 165 : 225;
-        sheetY.value = withTiming(height * 0.36, { duration });
-        openProgress.value = withTiming(
-          0,
-          { duration },
-          finished => {
-            if (finished) runOnJS(onClose)();
-          }
-        );
+        dismissPlayer(event.velocityY);
       } else {
         sheetY.value = withSpring(0, {
           damping: 25,
@@ -558,20 +547,11 @@ export default function PlayerSheet(p: Props) {
     });
 
   const playerTap = Gesture.Tap()
+    .runOnJS(true)
     .enabled(!menu)
     .maxDistance(8)
     .onEnd((_, success) => {
-      if (!success) return;
-
-      const duration = 245;
-      sheetY.value = withTiming(height * 0.36, { duration });
-      openProgress.value = withTiming(
-        0,
-        { duration },
-        finished => {
-          if (finished) runOnJS(onClose)();
-        }
-      );
+      if (success) dismissPlayer();
     });
 
   const playerGesture = Gesture.Race(playerPan, playerTap);
