@@ -4,6 +4,6 @@ public final class MetronomySystemVolumeModule: Module {
   public func definition() -> ModuleDefinition {
     Name("MetronomySystemVolume")
 
-    View(MetronomySystemVolumeView.self)
+    View(MetronomySystemVolumeView.self) {}
   }
 }
