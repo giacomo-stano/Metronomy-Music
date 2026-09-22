@@ -822,6 +822,10 @@ function MusicApp({
             showSeekForward: false,
           }
         );
+
+        // expo-audio can update MPRemoteCommandCenter when activating
+        // lock-screen controls. Re-enable our track commands afterwards.
+        setRemoteControlsEnabled(true);
       } catch {
         /* Optional in Expo Go. */
       }
