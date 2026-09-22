@@ -1,4 +1,4 @@
-import { requireNativeModule } from 'expo-modules-core';
+import { requireOptionalNativeModule } from 'expo-modules-core';
 
 type Subscription = { remove: () => void };
 
@@ -10,18 +10,22 @@ type RemoteControlsNativeModule = {
   ) => Subscription;
 };
 
-const RemoteControls = requireNativeModule(
+const RemoteControls = requireOptionalNativeModule(
   'MetronomyRemoteControls'
-) as RemoteControlsNativeModule;
+) as RemoteControlsNativeModule | null;
+
+export function remoteControlsAvailable() {
+  return !!RemoteControls;
+}
 
 export function setRemoteControlsEnabled(enabled: boolean) {
-  RemoteControls.setEnabled(enabled);
+  RemoteControls?.setEnabled(enabled);
 }
 
 export function addRemoteNextListener(listener: () => void) {
-  return RemoteControls.addListener('onNextTrack', listener);
+  return RemoteControls?.addListener('onNextTrack', listener);
 }
 
 export function addRemotePreviousListener(listener: () => void) {
-  return RemoteControls.addListener('onPreviousTrack', listener);
+  return RemoteControls?.addListener('onPreviousTrack', listener);
 }
