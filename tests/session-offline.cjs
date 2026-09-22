@@ -1,0 +1,26 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const ts = require('typescript');
+const api = {}; let fetches = 0, finish;
+const source = ts.transpileModule(fs.readFileSync('src/api.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+vm.runInNewContext(source, { exports: api, URL, AbortController, setTimeout, clearTimeout, fetch: () => { fetches++; return new Promise(r => finish = r); } });
+const online = { username: 'one', baseURL: 'https://server.test', token: 'token', admin: false, expires: 9999999999, destinations: [] };
+(async () => {
+  api.configureAccount(online);
+  const logout = api.endSession();
+  assert.equal(api.currentAccount(), null, 'logout clears locally before server response');
+  const another = { ...online, username: 'two' }; api.configureAccount(another);
+  finish({ status: 200 }); await logout;
+  assert.equal(api.currentAccount().username, 'two', 'old revocation cannot log out new account');
+  api.configureAccount({ ...online, token: '', offline: true, expires: 0 });
+  api.configureLocal({ read: async (path, body) => { if (body) throw Error('online required'); return { songs: ['cached'] }; }, cover: () => 'file:///cached.jpg' });
+  const before = fetches;
+  assert.equal((await api.request('library/songs')).songs[0], 'cached');
+  assert.equal(api.coverURL('id'), 'file:///cached.jpg');
+  assert.throws(() => api.streamURL('missing'), /scaricato/);
+  await assert.rejects(api.request('songs/id/delete', 1, {}), /online/);
+  await api.endSession(); assert.equal(api.currentAccount(), null);
+  assert.equal(fetches, before, 'offline reads, denied writes and logout never call server');
+  console.log('Session: immediate logout, stale revocation, offline reads/media and no network bypass passed.');
+})().catch(e => { console.error(e); process.exitCode = 1; });

@@ -1,11 +1,12 @@
 {
   "expo": {
-    "name": "aurora-expo",
-    "slug": "aurora-expo",
+    "name": "Metronomy",
+    "slug": "metronomy",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/metronomy-icon-v1.png",
+    "userInterfaceStyle": "automatic",
+    "plugins": [["expo-audio", { "enableBackgroundPlayback": true }]],
     "ios": {
       "supportsTablet": true
     },
