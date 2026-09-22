@@ -1,0 +1,7 @@
+{
+  "name": "metronomy-audio-controls",
+  "version": "1.0.0",
+  "description": "Native iOS AirPlay and system volume controls for Metronomy",
+  "main": "index.ts",
+  "license": "MIT"
+}
