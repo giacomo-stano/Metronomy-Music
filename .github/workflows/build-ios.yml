@@ -1,0 +1,116 @@
+name: Build Metronomy iOS IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build unsigned iOS IPA
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Generate iOS project
+        env:
+          CI: "1"
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Ensure CocoaPods are installed
+        run: |
+          cd ios
+          pod install
+
+      - name: Detect Xcode workspace and scheme
+        id: xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          if [ -z "$WORKSPACE" ]; then
+            echo "No .xcworkspace found in ios/"
+            find ios -maxdepth 2 -print
+            exit 1
+          fi
+
+          SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
+
+          echo "workspace=$WORKSPACE" >> "$GITHUB_OUTPUT"
+          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
+
+          echo "Workspace: $WORKSPACE"
+          echo "Scheme: $SCHEME"
+
+          xcodebuild -workspace "$WORKSPACE" -list
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build Metronomy for a physical iPhone without signing
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf build/DerivedData
+          mkdir -p build
+
+          xcodebuild \
+            -workspace "${{ steps.xcode.outputs.workspace }}" \
+            -scheme "${{ steps.xcode.outputs.scheme }}" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PRODUCTS="build/DerivedData/Build/Products/Release-iphoneos"
+          APP_PATH="$(find "$PRODUCTS" -maxdepth 1 -type d -name '*.app' -print -quit)"
+
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle was produced."
+            find build/DerivedData/Build/Products -maxdepth 3 -print || true
+            exit 1
+          fi
+
+          echo "Packaging: $APP_PATH"
+
+          rm -rf build/Payload build/Metronomy.ipa
+          mkdir -p build/Payload
+          cp -R "$APP_PATH" build/Payload/
+
+          cd build
+          /usr/bin/zip -qry Metronomy.ipa Payload
+
+          echo "Created:"
+          ls -lh Metronomy.ipa
+
+      - name: Upload Metronomy IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Metronomy-iOS-unsigned
+          path: build/Metronomy.ipa
+          if-no-files-found: error
+          retention-days: 14
