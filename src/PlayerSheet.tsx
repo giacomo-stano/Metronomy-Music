@@ -19,7 +19,7 @@ import { useVisiblePlaybackStatus } from './usePlaybackSignals';
 import { useTheme } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
 import ElasticPlayPauseButton from './ElasticPlayPauseButton';
-import { AirPlayButton, nativeAirPlayAvailable } from '../modules/metronomy-audio-controls';
+import { AirPlayButton, SystemVolumeSlider, nativeAirPlayAvailable, nativeSystemVolumeAvailable } from '../modules/metronomy-audio-controls';
 
 type Props = {
   visible: boolean;
@@ -1393,18 +1393,25 @@ export default function PlayerSheet(p: Props) {
                       weight="regular"
                       tintColor={playerSecondary}
                     />
-                    <View style={{ flex: 1 }}>
-                      <Range
-                        value={volume}
-                        onChange={v => {
-                          p.player.volume = v;
-                          setVolume(v);
-                        }}
-                        color="rgba(255,255,255,0.80)"
-                        track="rgba(255,255,255,0.22)"
-                        label="Volume del player"
-                        height={5}
-                      />
+                    <View style={{ flex: 1, justifyContent: 'center' }}>
+                      {nativeSystemVolumeAvailable ? (
+                        <SystemVolumeSlider
+                          accessibilityLabel="Volume di sistema"
+                          style={{ width: '100%', height: 34 }}
+                        />
+                      ) : (
+                        <Range
+                          value={volume}
+                          onChange={v => {
+                            p.player.volume = v;
+                            setVolume(v);
+                          }}
+                          color="rgba(255,255,255,0.80)"
+                          track="rgba(255,255,255,0.22)"
+                          label="Volume del player"
+                          height={5}
+                        />
+                      )}
                     </View>
                     <SymbolView
                       name="speaker.wave.3.fill"
