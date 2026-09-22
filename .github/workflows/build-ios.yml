@@ -82,6 +82,7 @@ jobs:
           rm -rf build/DerivedData
           mkdir -p build
 
+          set +e
           xcodebuild \
             -workspace "${{ steps.xcode.outputs.workspace }}" \
             -scheme "${{ steps.xcode.outputs.scheme }}" \
@@ -92,7 +93,17 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            build
+            build 2>&1 | tee build/xcodebuild.log
+
+          BUILD_STATUS=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$BUILD_STATUS" -ne 0 ]; then
+            echo
+            echo "===== Compiler errors ====="
+            grep -nE '(^|[[:space:]])error:|CompileSwift|SwiftCompile' build/xcodebuild.log | tail -n 200 || true
+            exit "$BUILD_STATUS"
+          fi
 
       - name: Package unsigned IPA
         shell: bash
