@@ -499,6 +499,8 @@ export default function PlayerSheet(p: Props) {
     });
   };
 
+  const onClose = p.onClose;
+
   const dismissPlayer = (velocity = 0) => {
     if (closingPlayer.current) return;
     closingPlayer.current = true;
@@ -510,7 +512,7 @@ export default function PlayerSheet(p: Props) {
       0,
       { duration },
       finished => {
-        if (finished) runOnJS(p.onClose)();
+        if (finished) runOnJS(onClose)();
       }
     );
   };
@@ -543,7 +545,7 @@ export default function PlayerSheet(p: Props) {
           0,
           { duration },
           finished => {
-            if (finished) runOnJS(p.onClose)();
+            if (finished) runOnJS(onClose)();
           }
         );
       } else {
@@ -559,7 +561,17 @@ export default function PlayerSheet(p: Props) {
     .enabled(!menu)
     .maxDistance(8)
     .onEnd((_, success) => {
-      if (success) runOnJS(dismissPlayer)();
+      if (!success) return;
+
+      const duration = 245;
+      sheetY.value = withTiming(height * 0.36, { duration });
+      openProgress.value = withTiming(
+        0,
+        { duration },
+        finished => {
+          if (finished) runOnJS(onClose)();
+        }
+      );
     });
 
   const playerGesture = Gesture.Race(playerPan, playerTap);
