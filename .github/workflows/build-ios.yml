@@ -35,6 +35,19 @@ jobs:
           cd ios
           pod install
 
+      - name: Verify Metronomy native audio controls are linked
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! grep -q "MetronomyAudioControls" ios/Podfile.lock; then
+            echo "MetronomyAudioControls was not linked into the iOS project."
+            echo "Native AirPlay, system volume, and previous/next controls would be unavailable."
+            exit 1
+          fi
+
+          echo "MetronomyAudioControls is linked."
+
       - name: Detect Xcode workspace and scheme
         id: xcode
         shell: bash
