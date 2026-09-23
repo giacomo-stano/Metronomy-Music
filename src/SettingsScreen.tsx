@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { request, currentAccount } from './api';
 import { useTheme } from './theme';
 import StorageSection from './StorageSection';
+import appConfig from '../app.json';
 import { useOffline } from './OfflineDownloads';
 import Pressable from './SpringPressable';
 import GlassBackground from './GlassBackground';
@@ -101,6 +102,9 @@ export default function SettingsScreen({ onClose, onLogout }: { onClose: () => v
           {heading('La tua app')}
           {group(<>{link('device', 'download-outline', '#30a66c', tracks.length + ' brani salvati su iPhone')}{link('appearance', 'contrast-outline', '#737380', mode === 'system' ? 'Automatico' : mode === 'dark' ? 'Scuro' : 'Chiaro')}</>)}
           {logout}
+          <Text style={{ color: c.muted, fontSize: 12, textAlign: 'center', marginTop: 18 }}>
+            Versione {appConfig.expo.version}
+          </Text>
           {note('Le copie locali restano sul telefono dopo il logout, accessibili da “Ascolta offline”.')}
         </>}
         {page === 'server' && <>
