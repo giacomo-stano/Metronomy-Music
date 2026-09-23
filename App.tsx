@@ -354,6 +354,7 @@ function MusicApp({
     if (!wasOffline || isOffline) return;
 
     setOnlineRestored(true);
+    setReload(value => value + 1);
 
     const timer = setTimeout(() => {
       setOnlineRestored(false);
@@ -1380,7 +1381,7 @@ function MusicApp({
 
     {tab === 'Cerca' && (
       <SearchScreen
-        key={query}
+        key={query + ':' + (isOffline ? 'offline' : 'online')}
         initialQuery={query}
         onSettings={() => setSettingsOpen(true)}
         onPlay={song => start([song], 0, false)}
