@@ -4,10 +4,7 @@ import Pressable from './SpringPressable';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from 'expo-speech-recognition';
+import { optionalSpeechRecognition } from './optionalSpeechRecognition';
 import { coverURL, request, accountStorageKey, currentAccount, isConnectivityFailure, type Album, type SearchResponse, type Song } from './api';
 import { useTheme } from './theme';
 import GlassBackground from './GlassBackground';
@@ -51,7 +48,9 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   const previewGeneration = useRef(0);
   const recentTouched = useRef(false);
   const recentWrites = useRef(Promise.resolve());
+  const recentRef = useRef(recent);
   const alive = useRef(true);
+  recentRef.current = recent;
 
   const restorePlaybackAudioMode = () =>
     setAudioModeAsync({
@@ -60,78 +59,97 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
       interruptionMode: 'doNotMix',
     }).catch(() => {});
 
-  useSpeechRecognitionEvent('start', () => {
-    setListening(true);
-    setSpeechError('');
-  });
+  useEffect(() => {
+    const speech = optionalSpeechRecognition;
+    if (!speech) return;
 
-  useSpeechRecognitionEvent('result', event => {
-    const transcript = event.results[0]?.transcript?.trim() ?? '';
-    if (!transcript) return;
+    const subscriptions = [
+      speech.addListener('start', () => {
+        setListening(true);
+        setSpeechError('');
+      }),
+      speech.addListener('result', event => {
+        const transcript =
+          event?.results?.[0]?.transcript?.trim?.() ?? '';
 
-    setQuery(transcript);
+        if (!transcript) return;
 
-    if (event.isFinal) {
-      saveRecent([
-        transcript,
-        ...recent.filter(value => value !== transcript),
-      ].slice(0, 10));
-    }
-  });
+        setQuery(transcript);
 
-  useSpeechRecognitionEvent('volumechange', event => {
-    const level = Math.max(0, Math.min(1, (event.value + 2) / 12));
+        if (event?.isFinal) {
+          saveRecent([
+            transcript,
+            ...recentRef.current.filter(
+              value => value !== transcript
+            ),
+          ].slice(0, 10));
+        }
+      }),
+      speech.addListener('volumechange', event => {
+        const level = Math.max(
+          0,
+          Math.min(1, ((event?.value ?? -2) + 2) / 12)
+        );
 
-    Animated.spring(micScale, {
-      toValue: 1 + level * 0.18,
-      stiffness: 320,
-      damping: 20,
-      mass: 0.5,
-      useNativeDriver: true,
-    }).start();
-  });
+        Animated.spring(micScale, {
+          toValue: 1 + level * 0.18,
+          stiffness: 320,
+          damping: 20,
+          mass: 0.5,
+          useNativeDriver: true,
+        }).start();
+      }),
+      speech.addListener('end', () => {
+        setListening(false);
+        void restorePlaybackAudioMode();
 
-  useSpeechRecognitionEvent('end', () => {
-    setListening(false);
-    void restorePlaybackAudioMode();
+        Animated.spring(micScale, {
+          toValue: 1,
+          stiffness: 340,
+          damping: 22,
+          mass: 0.5,
+          useNativeDriver: true,
+        }).start();
+      }),
+      speech.addListener('error', event => {
+        setListening(false);
 
-    Animated.spring(micScale, {
-      toValue: 1,
-      stiffness: 340,
-      damping: 22,
-      mass: 0.5,
-      useNativeDriver: true,
-    }).start();
-  });
+        if (event?.error === 'aborted') return;
 
-  useSpeechRecognitionEvent('error', event => {
-    setListening(false);
+        if (event?.error === 'no-speech') {
+          setSpeechError(
+            'Non ho sentito nulla. Tocca il microfono e riprova.'
+          );
+          return;
+        }
 
-    if (event.error === 'aborted') return;
+        if (
+          event?.error === 'not-allowed' ||
+          event?.error === 'service-not-allowed'
+        ) {
+          setSpeechError(
+            'Consenti microfono e riconoscimento vocale nelle Impostazioni di iPhone.'
+          );
+          return;
+        }
 
-    if (event.error === 'no-speech') {
-      setSpeechError('Non ho sentito nulla. Tocca il microfono e riprova.');
-      return;
-    }
+        if (event?.error === 'network') {
+          setSpeechError(
+            'La ricerca vocale non è disponibile senza connessione.'
+          );
+          return;
+        }
 
-    if (
-      event.error === 'not-allowed' ||
-      event.error === 'service-not-allowed'
-    ) {
-      setSpeechError(
-        'Consenti microfono e riconoscimento vocale nelle Impostazioni di iPhone.'
-      );
-      return;
-    }
+        setSpeechError('Ricerca vocale non disponibile. Riprova.');
+      }),
+    ];
 
-    if (event.error === 'network') {
-      setSpeechError('La ricerca vocale non è disponibile senza connessione.');
-      return;
-    }
+    return () => {
+      subscriptions.forEach(subscription => subscription.remove());
+    };
+  }, [micScale]);
 
-    setSpeechError('Ricerca vocale non disponibile. Riprova.');
-  });
-  useEffect(() => { alive.current = true; AsyncStorage.getItem(searchStorageKey).then(value => { if (alive.current && !recentTouched.current) { const parsed = JSON.parse(value || '[]'); if (Array.isArray(parsed)) setRecent(parsed.filter(v => typeof v === 'string').slice(0, 10)); } }).catch(() => {}); return () => { alive.current = false; previewGeneration.current++; try { ExpoSpeechRecognitionModule.abort(); } catch {} void restorePlaybackAudioMode(); }; }, []);
+  useEffect(() => { alive.current = true; AsyncStorage.getItem(searchStorageKey).then(value => { if (alive.current && !recentTouched.current) { const parsed = JSON.parse(value || '[]'); if (Array.isArray(parsed)) setRecent(parsed.filter(v => typeof v === 'string').slice(0, 10)); } }).catch(() => {}); return () => { alive.current = false; previewGeneration.current++; try { optionalSpeechRecognition?.abort(); } catch {} void restorePlaybackAudioMode(); }; }, []);
   function saveRecent(values: string[]) { recentTouched.current = true; setRecent(values); recentWrites.current = recentWrites.current.then(() => AsyncStorage.setItem(searchStorageKey, JSON.stringify(values))).catch(() => {}); }
   function remember() { if (query.trim()) saveRecent([query.trim(), ...recent.filter(q => q !== query.trim())].slice(0, 10)); }
   function stopPreview() { previewGeneration.current++; preview.pause(); setPreviewId(''); setPreviewBusy(''); }
@@ -140,7 +158,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
 
     if (listening) {
       try {
-        ExpoSpeechRecognitionModule.abort();
+        optionalSpeechRecognition?.abort();
       } catch {}
     }
 
@@ -157,8 +175,19 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   }
 
   async function showDictation() {
+    const speech = optionalSpeechRecognition;
+
+    if (!speech) {
+      setSpeechError(
+        'In Expo Go usa il microfono della tastiera. La ricerca vocale integrata è disponibile nella development build.'
+      );
+      setFocused(true);
+      input.current?.focus();
+      return;
+    }
+
     if (listening) {
-      ExpoSpeechRecognitionModule.stop();
+      speech.stop();
       return;
     }
 
@@ -168,7 +197,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
     Keyboard.dismiss();
 
     try {
-      if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
+      if (!speech.isRecognitionAvailable()) {
         setSpeechError(
           'Il riconoscimento vocale non è disponibile su questo iPhone.'
         );
@@ -176,7 +205,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
       }
 
       const permission =
-        await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+        await speech.requestPermissionsAsync();
 
       if (!permission.granted) {
         setSpeechError(
@@ -188,7 +217,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
       const offline = !!currentAccount()?.offline;
       const onDevice =
         offline &&
-        ExpoSpeechRecognitionModule.supportsOnDeviceRecognition();
+        speech.supportsOnDeviceRecognition();
 
       if (offline && !onDevice) {
         setSpeechError(
@@ -199,7 +228,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
 
       beforePreview();
 
-      ExpoSpeechRecognitionModule.start({
+      speech.start({
         lang: 'it-IT',
         interimResults: true,
         continuous: false,
