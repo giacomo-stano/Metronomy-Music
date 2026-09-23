@@ -51,6 +51,50 @@ export async function login(base: string, username: string, password: string): P
   } finally { clearTimeout(timer); }
 }
 
+export async function probeConnectivity(
+  value: Account,
+  timeoutMs = 1800
+): Promise<boolean> {
+  if (value.offline) return false;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    await fetch(value.baseURL + '/home', {
+      method: 'GET',
+      headers: {
+        Authorization: 'Bearer ' + value.token,
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+      redirect: 'error',
+    });
+
+    // Any HTTP response means the network/server path is reachable.
+    // Authentication/server errors are handled by normal API flows.
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export function isConnectivityFailure(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+
+  const value = (e.name + ' ' + e.message).toLowerCase();
+
+  return (
+    value.includes('aborterror') ||
+    value.includes('network request failed') ||
+    value.includes('failed to fetch') ||
+    value.includes('fetch failed') ||
+    value.includes('network error')
+  );
+}
+
 export async function probeAccount(value: Account, timeoutMs = 5000): Promise<boolean> {
   if (value.offline) return false;
 
