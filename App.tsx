@@ -19,7 +19,7 @@ import { useMiniMotion } from './src/useMiniMotion';
 import { ThemeProvider, useTheme, type Palette } from './src/theme';
 import SettingsScreen from './src/SettingsScreen';
 import LoginScreen from './src/LoginScreen';
-import { accountStorageKey, configureAccount, onSessionExpired, endSession, type Account } from './src/api';
+import { accountStorageKey, configureAccount, onSessionExpired, endSession, probeAccount, type Account } from './src/api';
 import { rememberAlbum } from './src/listeningHistory';
 import { offlineAccount, offlineProfiles } from './src/offlineProfiles';
 import { OfflineProvider, useOffline, DownloadBadge } from './src/OfflineDownloads';
@@ -187,6 +187,75 @@ function AccountGate() {
     }
   }
 
+  async function restoreOnlineForCurrentAccount(): Promise<boolean> {
+    const active = account;
+
+    if (!active?.offline) return false;
+
+    try {
+      const raw = await AsyncStorage.getItem(ACCOUNT_STORAGE_KEY);
+      if (!raw) return false;
+
+      const saved = JSON.parse(raw) as Account;
+      const valid =
+        !!saved &&
+        !saved.offline &&
+        saved.baseURL === active.baseURL &&
+        saved.username === active.username &&
+        typeof saved.token === 'string' &&
+        Number.isFinite(saved.expires) &&
+        saved.expires * 1000 > Date.now();
+
+      if (!valid) return false;
+      if (!(await probeAccount(saved, 4500))) return false;
+
+      configureAccount(saved);
+      setAccount(saved);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  useEffect(() => {
+    if (!account?.offline) return;
+
+    let active = true;
+    let checking = false;
+
+    const check = async () => {
+      if (!active || checking) return;
+
+      checking = true;
+      try {
+        await restoreOnlineForCurrentAccount();
+      } finally {
+        checking = false;
+      }
+    };
+
+    void check();
+
+    const interval = setInterval(() => {
+      void check();
+    }, 15000);
+
+    const subscription = AppState.addEventListener(
+      'change',
+      state => {
+        if (state === 'active') {
+          void check();
+        }
+      }
+    );
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, [account?.offline, account?.baseURL, account?.username]);
+
   function logout() {
     /*
      * endSession() chiude la sessione API senza dover passare null
@@ -215,13 +284,7 @@ function AccountGate() {
 
   return account ? (
     <OfflineProvider
-      key={
-        account.baseURL +
-        ':' +
-        account.username +
-        ':' +
-        (account.offline ? 'offline' : account.token)
-      }
+      key={account.baseURL + ':' + account.username}
     >
       <MusicApp
         account={account}
@@ -265,6 +328,8 @@ function MusicApp({
   );
   const s = useMemo(() => makeStyles(c), [c]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const previousOffline = useRef(isOffline);
+  const [onlineRestored, setOnlineRestored] = useState(false);
   const [actionSong, setActionSong] = useState<Song | null>(null);
   const [actionAlbum, setActionAlbum] = useState<Album | null>(null);
   const [tab, setTab] = useState<Tab>('Home');
@@ -281,6 +346,21 @@ function MusicApp({
   const albumCloseAnimation = useRef<Animated.CompositeAnimation | null>(null);
   const albumOpenFrame = useRef<number | null>(null);
   const [albumMotionDone, setAlbumMotionDone] = useState(false);
+
+  useEffect(() => {
+    const wasOffline = previousOffline.current;
+    previousOffline.current = isOffline;
+
+    if (!wasOffline || isOffline) return;
+
+    setOnlineRestored(true);
+
+    const timer = setTimeout(() => {
+      setOnlineRestored(false);
+    }, 2600);
+
+    return () => clearTimeout(timer);
+  }, [isOffline]);
 
   const safeAreaRef = useRef<any>(null);
   const safeAreaMetrics = useRef({ x: 0, y: 0, width: 0, height: 0 });
@@ -898,7 +978,7 @@ function MusicApp({
       clearTimeout(timer);
       generation.current++;
     };
-  }, [tab, album, albumMotionDone, query, reload]);
+  }, [tab, album, albumMotionDone, query, reload, isOffline]);
 
   useEffect(() => {
     clearAlbumSongsCache();
@@ -1247,11 +1327,18 @@ function MusicApp({
       }}
     >
     <StatusBar style={album ? 'light' : isDark ? 'light' : 'dark'} />
-    {isOffline && (
-      <View style={{ paddingHorizontal: 20, paddingVertical: 5 }}>
-        <Text style={{ color: c.secondary, fontSize: 12 }}>
-          Offline · solo contenuti su questo iPhone
-        </Text>
+    {onlineRestored && (
+      <View pointerEvents="none" style={s.onlineToastWrap}>
+        <View style={s.onlineToast}>
+          <Ionicons
+            name="checkmark-circle"
+            size={16}
+            color={c.accent}
+          />
+          <Text style={s.onlineToastText}>
+            Di nuovo online
+          </Text>
+        </View>
       </View>
     )}
     {settingsOpen && (
@@ -2487,6 +2574,30 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     lineHeight: 14,
   },
   search: { color: c.text, backgroundColor: c.surface, borderRadius: 26, padding: 16, marginTop: 18, fontSize: 16 },
+  onlineToastWrap: {
+    position: 'absolute',
+    top: 10,
+    left: 0,
+    right: 0,
+    zIndex: 120,
+    alignItems: 'center',
+  },
+  onlineToast: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: c.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+  },
+  onlineToastText: {
+    color: c.text,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   offlineNotice: {
     paddingVertical: 11,
     paddingHorizontal: 13,
