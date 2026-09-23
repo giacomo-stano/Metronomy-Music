@@ -1,0 +1,50 @@
+{
+  "name": "Metronomy",
+  "identifier": "com.giacomostano.metronomy.source",
+  "sourceURL": "https://raw.githubusercontent.com/giacomo-stano/Metronomy-Music/main/altstore-source.json",
+  "apps": [
+    {
+      "name": "Metronomy",
+      "bundleIdentifier": "com.anonymous.metronomy",
+      "developerName": "Giacomo Stano",
+      "subtitle": "La tua musica, sul tuo server.",
+      "localizedDescription": "Metronomy è un client musicale iOS per la tua libreria personale, con riproduzione, download offline e integrazione con il tuo server.",
+      "iconURL": "https://raw.githubusercontent.com/giacomo-stano/Metronomy-Music/main/assets/metronomy-icon-v1.png",
+      "tintColor": "#111111",
+      "versions": [
+        {
+          "version": "0.2.3",
+          "buildVersion": "16",
+          "date": "2026-09-23",
+          "localizedDescription": "Metronomy 0.2.3",
+          "downloadURL": "https://github.com/giacomo-stano/Metronomy-Music/releases/download/v0.2.3-stable/Metronomy.ipa",
+          "size": 16805053
+        },
+        {
+          "version": "0.2.2",
+          "buildVersion": "1",
+          "date": "2026-09-23T14:50:15Z",
+          "localizedDescription": "Corregge il tempo rimanente del brano usando la durata del catalogo come riferimento, con fallback alla durata del player.",
+          "downloadURL": "https://github.com/giacomo-stano/Metronomy-Music/releases/download/v0.2.2-stable/Metronomy.ipa",
+          "size": 16679943
+        },
+        {
+          "version": "0.2.1",
+          "buildVersion": "1",
+          "date": "2026-09-23T14:27:27Z",
+          "localizedDescription": "Mostra la versione dell’app nelle Impostazioni e aggiunge la scelta Più recenti prima / Più vecchi prima per Data di aggiunta.",
+          "downloadURL": "https://github.com/giacomo-stano/Metronomy-Music/releases/download/v0.2.1-stable/Metronomy.ipa",
+          "size": 16679914
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSMicrophoneUsageDescription": "Consenti a Metronomy di usare il microfono per la ricerca vocale.",
+          "NSSpeechRecognitionUsageDescription": "Consenti a Metronomy di riconoscere la tua voce per cercare musica."
+        }
+      }
+    }
+  ],
+  "news": []
+}
