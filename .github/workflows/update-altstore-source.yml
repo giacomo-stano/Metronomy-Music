@@ -158,7 +158,15 @@ jobs:
             throw new Error('AltStore source has no apps');
           }
           for (const app of source.apps) {
-            if (!app.name || !app.bundleIdentifier || !Array.isArray(app.versions)) {
+            if (
+              !app.name ||
+              !app.bundleIdentifier ||
+              !Array.isArray(app.versions) ||
+              !app.appPermissions ||
+              !Array.isArray(app.appPermissions.entitlements) ||
+              typeof app.appPermissions.privacy !== 'object' ||
+              app.appPermissions.privacy === null
+            ) {
               throw new Error('Invalid AltStore app entry');
             }
             for (const version of app.versions) {
