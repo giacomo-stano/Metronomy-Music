@@ -19,7 +19,7 @@ import { useMiniMotion } from './src/useMiniMotion';
 import { ThemeProvider, useTheme, type Palette } from './src/theme';
 import SettingsScreen from './src/SettingsScreen';
 import LoginScreen from './src/LoginScreen';
-import { accountStorageKey, configureAccount, onSessionExpired, endSession, probeAccount, type Account } from './src/api';
+import { accountStorageKey, configureAccount, onSessionExpired, endSession, probeAccount, probeConnectivity, isConnectivityFailure, type Account } from './src/api';
 import { rememberAlbum } from './src/listeningHistory';
 import { offlineAccount, offlineProfiles } from './src/offlineProfiles';
 import { OfflineProvider, useOffline, DownloadBadge } from './src/OfflineDownloads';
@@ -49,19 +49,6 @@ const tabs: { name: Tab; icon: SFSymbol; size: number }[] = [
 ];
 
 const message = (e: unknown) => e instanceof Error ? e.message : 'Connessione non riuscita.';
-const isConnectivityError = (e: unknown) => {
-  if (!(e instanceof Error)) return false;
-
-  const value = (e.name + ' ' + e.message).toLowerCase();
-
-  return (
-    value.includes('aborterror') ||
-    value.includes('network request failed') ||
-    value.includes('failed to fetch') ||
-    value.includes('fetch failed') ||
-    value.includes('network error')
-  );
-};
 const clock = (n: number) => { const t = Math.max(0, Math.floor(n || 0)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
 
 export default function App() {
@@ -218,13 +205,13 @@ function AccountGate() {
   }
 
   useEffect(() => {
-    if (!account?.offline) return;
+    if (!account) return;
 
     let active = true;
     let checking = false;
 
-    const check = async () => {
-      if (!active || checking) return;
+    const checkOfflineReconnect = async () => {
+      if (!active || checking || !account.offline) return;
 
       checking = true;
       try {
@@ -234,11 +221,43 @@ function AccountGate() {
       }
     };
 
-    void check();
+    const checkOnlineReachability = async () => {
+      if (!active || checking || account.offline) return;
 
-    const interval = setInterval(() => {
+      checking = true;
+
+      try {
+        const reachable = await probeConnectivity(account, 1800);
+        if (!active || reachable) return;
+
+        // Repeat once before changing mode so a single transient packet loss
+        // never throws the whole UI into offline mode.
+        await new Promise(resolve => setTimeout(resolve, 250));
+        if (!active) return;
+
+        const confirmed = await probeConnectivity(account, 2200);
+        if (!active || confirmed) return;
+
+        await enterOfflineForCurrentAccount();
+      } finally {
+        checking = false;
+      }
+    };
+
+    const check = account.offline
+      ? checkOfflineReconnect
+      : checkOnlineReachability;
+
+    if (account.offline) {
       void check();
-    }, 15000);
+    }
+
+    const interval = setInterval(
+      () => {
+        void check();
+      },
+      account.offline ? 15000 : 4000
+    );
 
     const subscription = AppState.addEventListener(
       'change',
@@ -254,7 +273,12 @@ function AccountGate() {
       clearInterval(interval);
       subscription.remove();
     };
-  }, [account?.offline, account?.baseURL, account?.username]);
+  }, [
+    account?.offline,
+    account?.baseURL,
+    account?.username,
+    account?.token,
+  ]);
 
   function logout() {
     /*
@@ -365,9 +389,7 @@ function MusicApp({
 
     const kind = isOffline ? 'offline' : 'online';
 
-    if (!isOffline) {
-      setReload(value => value + 1);
-    }
+    setReload(value => value + 1);
 
     connectivityBannerAnimation.current?.stop();
     connectivityBannerScale.stopAnimation();
@@ -1064,7 +1086,7 @@ function MusicApp({
         }
       } catch (e) {
         if (generation.current === version) {
-          if (!isOffline && isConnectivityError(e)) {
+          if (!isOffline && isConnectivityFailure(e)) {
             const switched = await onOffline();
 
             if (!switched && generation.current === version) {
