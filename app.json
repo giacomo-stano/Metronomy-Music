@@ -6,7 +6,21 @@
     "orientation": "portrait",
     "icon": "./assets/metronomy-icon-v1.png",
     "userInterfaceStyle": "automatic",
-    "plugins": [["expo-audio", { "enableBackgroundPlayback": true }]],
+    "plugins": [
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Consenti a Metronomy di usare il microfono per la ricerca vocale.",
+          "speechRecognitionPermission": "Consenti a Metronomy di riconoscere la tua voce per cercare musica."
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true
     },
