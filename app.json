@@ -2,7 +2,7 @@
   "expo": {
     "name": "Metronomy",
     "slug": "metronomy",
-    "version": "0.2.2",
+    "version": "0.2.3",
     "orientation": "portrait",
     "icon": "./assets/metronomy-icon-v1.png",
     "userInterfaceStyle": "automatic",
@@ -22,7 +22,9 @@
       ]
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.metronomy",
+      "buildNumber": "15"
     },
     "android": {
       "adaptiveIcon": {
