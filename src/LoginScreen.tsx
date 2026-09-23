@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Platform, SafeAreaView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { login, type Account } from './api';
@@ -10,16 +10,10 @@ import Pressable from './SpringPressable';
 export default function LoginScreen({ onLogin }: { onLogin: (account: Account) => void }) {
   const { colors: c, isDark } = useTheme();
   const { height } = useWindowDimensions();
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const compact = height < 900;
   const small = height < 700;
-  const tight = compact || keyboardOpen;
+  const tight = compact;
   const [offlinePage, setOfflinePage] = useState(0);
-  useEffect(() => {
-    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKeyboardOpen(true));
-    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardOpen(false));
-    return () => { show.remove(); hide.remove(); };
-  }, []);
   const [url, setURL] = useState(process.env.EXPO_PUBLIC_METRONOMY_BASE_URL || 'http://192.168.1.24:8180');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -53,28 +47,34 @@ export default function LoginScreen({ onLogin }: { onLogin: (account: Account) =
     } else void submit();
   }
   const inputStyle = [s.input, { color: c.text }, tight && { minHeight: 44, paddingVertical: 8 }];
-  const labelStyle = [s.label, { color: c.secondary }, tight && { marginTop: 12, marginBottom: 6 }, keyboardOpen && { display: 'none' as const }];
+  const labelStyle = [s.label, { color: c.secondary }, tight && { marginTop: 12, marginBottom: 6 }];
   return <SafeAreaView style={{ flex: 1, backgroundColor: c.background }}>
     <LinearGradient pointerEvents="none" colors={isDark ? ['#39121e', '#130c12', c.background] : ['#fff0f3', '#fff9fa', c.background]} locations={[0, .42, 1]} style={StyleSheet.absoluteFill} />
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View style={[s.content, { paddingVertical: keyboardOpen ? 6 : 16 }]}>
+      <ScrollView
+        contentContainerStyle={[s.content, { paddingVertical: 16 }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={s.body}>
-          {!keyboardOpen && <View style={[s.hero, { marginBottom: compact ? 16 : 28 }]}>
+          <View style={[s.hero, { marginBottom: compact ? 16 : 28 }]}>
             {!small && <View style={[s.iconShadow, { shadowColor: '#ba2448' }]}><Image source={require('../assets/metronomy-icon-v1.png')} accessibilityLabel="Icona Metronomy" style={{ width: compact ? 64 : 100, height: compact ? 64 : 100, borderRadius: compact ? 16 : 25 }} /></View>}
             <Text accessibilityRole="header" style={[s.brand, { color: c.text }, compact && { fontSize: 32, marginTop: small ? 0 : 10 }]}>Metronomy</Text>
             {!small && <Text style={[s.tagline, { color: c.secondary }]}>La tua musica. Il tuo ritmo.</Text>}
-          </View>}
-          <View style={[s.card, { backgroundColor: c.surface, borderColor: c.border }, tight && { padding: 16 }, keyboardOpen && { padding: 12 }]}>
-            {!keyboardOpen && <Text style={[s.cardTitle, { color: c.text }]}>Bentornato</Text>}
-            {!keyboardOpen && !small && <Text style={[s.subtitle, { color: c.secondary }]}>Accedi con il tuo account Navidrome.</Text>}
+          </View>
+          <View style={[s.card, { backgroundColor: c.surface, borderColor: c.border }, tight && { padding: 16 }]}>
+            <Text style={[s.cardTitle, { color: c.text }]}>Bentornato</Text>
+            {!small && <Text style={[s.subtitle, { color: c.secondary }]}>Accedi con il tuo account Navidrome.</Text>}
             <Text style={labelStyle}>SERVER METRONOMY</Text>
             <View style={[s.field, { borderColor: c.border, backgroundColor: c.background }, tight && { minHeight: 44 }]}>
               <Ionicons name="server-outline" size={19} color={c.secondary} />
               <TextInput accessibilityLabel="URL server Metronomy" editable={!busy} style={[inputStyle, { fontSize: 15 }]} value={url} onChangeText={setURL} placeholder="https://musica.example.com" placeholderTextColor={c.secondary} keyboardType="url" autoCapitalize="none" autoCorrect={false} returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => usernameInput.current?.focus()} />
             </View>
-            {!keyboardOpen && !small && <Text style={[s.hint, { color: c.secondary }]}>Indirizzo del bridge · di solito porta 8180</Text>}
+            {!small && <Text style={[s.hint, { color: c.secondary }]}>Indirizzo del bridge · di solito porta 8180</Text>}
             <Text style={labelStyle}>ACCOUNT</Text>
-            <View style={[s.credentials, { borderColor: c.border, backgroundColor: c.background }, keyboardOpen && { marginTop: 8 }]}>
+            <View style={[s.credentials, { borderColor: c.border, backgroundColor: c.background }]}>
               <View style={s.credentialRow}>
                 <Ionicons name="person-outline" size={19} color={c.secondary} />
                 <TextInput ref={usernameInput} accessibilityLabel="Utente Navidrome" editable={!busy} style={inputStyle} placeholder="Nome utente" placeholderTextColor={c.secondary} value={username} onChangeText={setUsername} textContentType="username" autoCapitalize="none" autoCorrect={false} returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => passwordInput.current?.focus()} />
@@ -91,8 +91,8 @@ export default function LoginScreen({ onLogin }: { onLogin: (account: Account) =
               {busy ? <ActivityIndicator color="#fff" /> : <><Text style={s.submitText}>Accedi</Text><Ionicons name="arrow-forward" size={20} color="#fff" /></>}
             </Pressable>
           </View>
-          {!keyboardOpen && checking && <Text style={[s.footer, { color: c.secondary }]}>Verifica musica scaricata…</Text>}
-          {!keyboardOpen && !!profiles.length && <View style={[s.offline, { backgroundColor: c.surface, borderColor: c.border }]}>
+          {checking && <Text style={[s.footer, { color: c.secondary }]}>Verifica musica scaricata…</Text>}
+          {!!profiles.length && <View style={[s.offline, { backgroundColor: c.surface, borderColor: c.border }]}>
             <Pressable accessibilityRole="button" accessibilityState={{ expanded: offlineOpen, disabled: busy }} disabled={busy} onPress={() => { Keyboard.dismiss(); setOfflinePage(0); setOfflineOpen(true); }} style={[s.offlineButton, tight && { minHeight: 62, padding: 12 }]}>
               <View style={[s.offlineIcon, { backgroundColor: c.background }]}><Ionicons name="download-outline" color={c.accent} size={21} /></View>
               <View style={{ flex: 1 }}><Text style={{ color: c.text, fontWeight: '600', fontSize: 16 }}>Ascolta offline</Text><Text style={{ color: c.secondary, fontSize: 12, marginTop: 4 }}>La musica già sul tuo iPhone</Text></View>
@@ -100,9 +100,9 @@ export default function LoginScreen({ onLogin }: { onLogin: (account: Account) =
             </Pressable>
 
           </View>}
-          {!keyboardOpen && !small && <Text style={[s.footer, { color: c.secondary }]}>La password non viene salvata nell’app.{"\n"}Usa la rete domestica, una VPN o HTTPS.</Text>}
+          {!small && <Text style={[s.footer, { color: c.secondary }]}>La password non viene salvata nell’app.{"\n"}Usa la rete domestica, una VPN o HTTPS.</Text>}
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
     {offlineOpen && <View accessibilityViewIsModal style={[StyleSheet.absoluteFill, { backgroundColor: c.background, justifyContent: 'center', padding: 24 }]}>
       <View style={[s.card, s.body, { backgroundColor: c.surface, borderColor: c.border }]}>
@@ -121,7 +121,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (account: Account) =
 }
 
 const s = StyleSheet.create({
-  content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24 },
   body: { width: '100%', maxWidth: 420, alignSelf: 'center' },
   hero: { alignItems: 'center' },
   iconShadow: { shadowOpacity: .2, shadowRadius: 24, shadowOffset: { width: 0, height: 10 } },
