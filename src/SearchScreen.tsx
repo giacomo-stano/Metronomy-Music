@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Animated, Image, Keyboard, ScrollView, StyleS
 import Pressable from './SpringPressable';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -53,6 +53,13 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   const recentWrites = useRef(Promise.resolve());
   const alive = useRef(true);
 
+  const restorePlaybackAudioMode = () =>
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: 'doNotMix',
+    }).catch(() => {});
+
   useSpeechRecognitionEvent('start', () => {
     setListening(true);
     setSpeechError('');
@@ -86,6 +93,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
 
   useSpeechRecognitionEvent('end', () => {
     setListening(false);
+    void restorePlaybackAudioMode();
 
     Animated.spring(micScale, {
       toValue: 1,
@@ -123,7 +131,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
 
     setSpeechError('Ricerca vocale non disponibile. Riprova.');
   });
-  useEffect(() => { alive.current = true; AsyncStorage.getItem(searchStorageKey).then(value => { if (alive.current && !recentTouched.current) { const parsed = JSON.parse(value || '[]'); if (Array.isArray(parsed)) setRecent(parsed.filter(v => typeof v === 'string').slice(0, 10)); } }).catch(() => {}); return () => { alive.current = false; previewGeneration.current++; try { ExpoSpeechRecognitionModule.abort(); } catch {} }; }, []);
+  useEffect(() => { alive.current = true; AsyncStorage.getItem(searchStorageKey).then(value => { if (alive.current && !recentTouched.current) { const parsed = JSON.parse(value || '[]'); if (Array.isArray(parsed)) setRecent(parsed.filter(v => typeof v === 'string').slice(0, 10)); } }).catch(() => {}); return () => { alive.current = false; previewGeneration.current++; try { ExpoSpeechRecognitionModule.abort(); } catch {} void restorePlaybackAudioMode(); }; }, []);
   function saveRecent(values: string[]) { recentTouched.current = true; setRecent(values); recentWrites.current = recentWrites.current.then(() => AsyncStorage.setItem(searchStorageKey, JSON.stringify(values))).catch(() => {}); }
   function remember() { if (query.trim()) saveRecent([query.trim(), ...recent.filter(q => q !== query.trim())].slice(0, 10)); }
   function stopPreview() { previewGeneration.current++; preview.pause(); setPreviewId(''); setPreviewBusy(''); }
@@ -155,7 +163,6 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
     }
 
     stopPreview();
-    beforePreview();
     setSpeechError('');
     input.current?.blur();
     Keyboard.dismiss();
@@ -189,6 +196,8 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
         );
         return;
       }
+
+      beforePreview();
 
       ExpoSpeechRecognitionModule.start({
         lang: 'it-IT',
