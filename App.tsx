@@ -1482,21 +1482,11 @@ function MusicApp({
             />
           </View>
 
-          <View style={{ flex: 1 }}>
-            <Text style={s.connectivityBannerTitle}>
-              {connectivityBanner === 'offline'
-                ? 'Sei offline'
-                : 'Di nuovo online'}
-            </Text>
-            <Text
-              style={s.connectivityBannerMessage}
-              numberOfLines={1}
-            >
-              {connectivityBanner === 'offline'
-                ? 'Continui con la musica disponibile su questo iPhone.'
-                : 'La libreria online è di nuovo disponibile.'}
-            </Text>
-          </View>
+          <Text style={s.connectivityBannerTitle}>
+            {connectivityBanner === 'offline'
+              ? 'Sei offline'
+              : 'Di nuovo online'}
+          </Text>
         </Animated.View>
       </View>
     )}
@@ -2773,49 +2763,43 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   search: { color: c.text, backgroundColor: c.surface, borderRadius: 26, padding: 16, marginTop: 18, fontSize: 16 },
   connectivityBannerWrap: {
     position: 'absolute',
-    top: 8,
+    top: 58,
     left: 14,
     right: 14,
     zIndex: 140,
     alignItems: 'center',
   },
   connectivityBanner: {
-    width: '100%',
-    maxWidth: 390,
-    minHeight: 54,
-    paddingVertical: 9,
-    paddingHorizontal: 11,
-    borderRadius: 27,
+    minHeight: 40,
+    maxWidth: 220,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
+    gap: 8,
     backgroundColor: c.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     shadowColor: '#000',
-    shadowOpacity: 0.16,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
   },
   connectivityBannerIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: c.background,
   },
   connectivityBannerTitle: {
     color: c.text,
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: -0.1,
-  },
-  connectivityBannerMessage: {
-    color: c.secondary,
-    fontSize: 11,
-    lineHeight: 14,
-    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: -0.05,
   },
   offlineNotice: {
     paddingVertical: 11,
