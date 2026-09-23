@@ -457,17 +457,6 @@ function MusicApp({
     connectivityBannerY,
   ]);
 
-  useEffect(() => {
-    if (!current?.coverArt || isOffline) return;
-
-    const uri = coverURL(current.coverArt);
-
-    if (uri) {
-      setCurrentArtworkUri(uri);
-      void Image.prefetch(uri).catch(() => {});
-    }
-  }, [current?.id, current?.coverArt, isOffline]);
-
   const safeAreaRef = useRef<any>(null);
   const safeAreaMetrics = useRef({ x: 0, y: 0, width: 0, height: 0 });
   const [busy, setBusy] = useState(false);
@@ -492,6 +481,18 @@ function MusicApp({
   const player = useAudioPlayer(null, { updateInterval: 250 });
   const status = usePlaybackSignals(player);
   const current = queue[index];
+
+  useEffect(() => {
+    if (!current?.coverArt || isOffline) return;
+
+    const uri = coverURL(current.coverArt);
+
+    if (uri) {
+      setCurrentArtworkUri(uri);
+      void Image.prefetch(uri).catch(() => {});
+    }
+  }, [current?.id, current?.coverArt, isOffline]);
+
   const playback = useRef({ queue, index });
   const lastKnownPosition = useRef(0);
   playback.current = { queue, index };
