@@ -2,7 +2,7 @@
   "expo": {
     "name": "Metronomy",
     "slug": "metronomy",
-    "version": "1.0.0",
+    "version": "0.2.1",
     "orientation": "portrait",
     "icon": "./assets/metronomy-icon-v1.png",
     "userInterfaceStyle": "automatic",
