@@ -370,6 +370,9 @@ function MusicApp({
   const [home, setHome] = useState<HomeResponse | null>(null);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [hasMore, setHasMore] = useState(false);
+  const catalogOpacity = useRef(new Animated.Value(1)).current;
+  const catalogTransition =
+    useRef<Animated.CompositeAnimation | null>(null);
   const [album, setAlbum] = useState<Album | null>(null);
   const [albumSongs, setAlbumSongs] = useState<Song[]>([]);
   const [albumOrigin, setAlbumOrigin] = useState<AlbumOpenOrigin | null>(null);
@@ -1051,16 +1054,69 @@ function MusicApp({
     }
 
     setError('');
-    setBusy(true);
+
+    const hasVisibleCatalog =
+      tab === 'Home'
+        ? !!home
+        : albums.length > 0;
+
+    setBusy(!hasVisibleCatalog);
     setResults(null);
-    setAlbums([]);
-    setHasMore(false);
+
+    const warmArtwork = async (items: { coverArt?: string }[]) => {
+      const uris = items
+        .map(item => coverURL(item.coverArt))
+        .filter((uri): uri is string => !!uri)
+        .slice(0, 14);
+
+      if (!uris.length) return;
+
+      await Promise.race([
+        Promise.all(
+          uris.map(uri => Image.prefetch(uri).catch(() => false))
+        ),
+        new Promise(resolve => setTimeout(resolve, 220)),
+      ]);
+    };
+
+    const revealCatalog = (apply: () => void) => {
+      catalogTransition.current?.stop();
+      catalogOpacity.stopAnimation();
+      catalogOpacity.setValue(0.86);
+
+      apply();
+
+      const animation = Animated.timing(catalogOpacity, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      });
+
+      catalogTransition.current = animation;
+
+      requestAnimationFrame(() => {
+        animation.start(() => {
+          if (catalogTransition.current === animation) {
+            catalogTransition.current = null;
+          }
+        });
+      });
+    };
 
     const run = async () => {
       try {
         if (tab === 'Home') {
           const data = await request<HomeResponse>('home');
-          if (generation.current === version) setHome(data);
+
+          await warmArtwork([
+            ...data.recentAlbums,
+            ...data.madeForYou,
+          ]);
+
+          if (generation.current === version) {
+            revealCatalog(() => setHome(data));
+          }
         } else if (tab === 'Cerca') {
           if (query.trim()) {
             const data = await request<SearchResponse>(
@@ -1079,9 +1135,13 @@ function MusicApp({
                 : 'alphabeticalByName')
           );
 
+          await warmArtwork(data.albums);
+
           if (generation.current === version) {
-            setAlbums(data.albums);
-            setHasMore(data.hasMore);
+            revealCatalog(() => {
+              setAlbums(data.albums);
+              setHasMore(data.hasMore);
+            });
           }
         }
       } catch (e) {
@@ -1667,6 +1727,7 @@ function MusicApp({
           />
         )}
 
+        <Animated.View style={{ opacity: catalogOpacity }}>
         {tab === 'Home' ? (
           <>
             {home && (
@@ -1719,6 +1780,7 @@ function MusicApp({
             )}
           </>
         )}
+        </Animated.View>
       </ScrollView>
     )}
 
