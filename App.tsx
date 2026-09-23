@@ -329,7 +329,17 @@ function MusicApp({
   const s = useMemo(() => makeStyles(c), [c]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const previousOffline = useRef(isOffline);
-  const [onlineRestored, setOnlineRestored] = useState(false);
+  const [connectivityBanner, setConnectivityBanner] = useState<
+    'offline' | 'online' | null
+  >(null);
+  const connectivityBannerScale = useRef(new Animated.Value(0.82)).current;
+  const connectivityBannerOpacity = useRef(new Animated.Value(0)).current;
+  const connectivityBannerY = useRef(new Animated.Value(-8)).current;
+  const connectivityBannerAnimation =
+    useRef<Animated.CompositeAnimation | null>(null);
+  const [currentArtworkUri, setCurrentArtworkUri] = useState<
+    string | undefined
+  >(undefined);
   const [actionSong, setActionSong] = useState<Song | null>(null);
   const [actionAlbum, setActionAlbum] = useState<Album | null>(null);
   const [tab, setTab] = useState<Tab>('Home');
@@ -351,17 +361,112 @@ function MusicApp({
     const wasOffline = previousOffline.current;
     previousOffline.current = isOffline;
 
-    if (!wasOffline || isOffline) return;
+    if (wasOffline === isOffline) return;
 
-    setOnlineRestored(true);
-    setReload(value => value + 1);
+    const kind = isOffline ? 'offline' : 'online';
 
-    const timer = setTimeout(() => {
-      setOnlineRestored(false);
-    }, 2600);
+    if (!isOffline) {
+      setReload(value => value + 1);
+    }
 
-    return () => clearTimeout(timer);
-  }, [isOffline]);
+    connectivityBannerAnimation.current?.stop();
+    connectivityBannerScale.stopAnimation();
+    connectivityBannerOpacity.stopAnimation();
+    connectivityBannerY.stopAnimation();
+
+    connectivityBannerScale.setValue(0.82);
+    connectivityBannerOpacity.setValue(0);
+    connectivityBannerY.setValue(-8);
+    setConnectivityBanner(kind);
+
+    const animation = Animated.sequence([
+      Animated.parallel([
+        Animated.spring(connectivityBannerScale, {
+          toValue: 1.05,
+          stiffness: 360,
+          damping: 18,
+          mass: 0.62,
+          overshootClamping: false,
+          restDisplacementThreshold: 0.001,
+          restSpeedThreshold: 0.001,
+          useNativeDriver: true,
+        }),
+        Animated.timing(connectivityBannerOpacity, {
+          toValue: 1,
+          duration: 150,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.spring(connectivityBannerY, {
+          toValue: 0,
+          stiffness: 320,
+          damping: 21,
+          mass: 0.62,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.spring(connectivityBannerScale, {
+        toValue: 1,
+        stiffness: 420,
+        damping: 20,
+        mass: 0.48,
+        useNativeDriver: true,
+      }),
+      Animated.delay(2300),
+      Animated.parallel([
+        Animated.timing(connectivityBannerScale, {
+          toValue: 0.88,
+          duration: 180,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(connectivityBannerOpacity, {
+          toValue: 0,
+          duration: 180,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(connectivityBannerY, {
+          toValue: -6,
+          duration: 180,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    ]);
+
+    connectivityBannerAnimation.current = animation;
+
+    animation.start(({ finished }) => {
+      if (connectivityBannerAnimation.current === animation) {
+        connectivityBannerAnimation.current = null;
+      }
+
+      if (finished) {
+        setConnectivityBanner(null);
+      }
+    });
+
+    return () => {
+      animation.stop();
+    };
+  }, [
+    isOffline,
+    connectivityBannerOpacity,
+    connectivityBannerScale,
+    connectivityBannerY,
+  ]);
+
+  useEffect(() => {
+    if (!current?.coverArt || isOffline) return;
+
+    const uri = coverURL(current.coverArt);
+
+    if (uri) {
+      setCurrentArtworkUri(uri);
+      void Image.prefetch(uri).catch(() => {});
+    }
+  }, [current?.id, current?.coverArt, isOffline]);
 
   const safeAreaRef = useRef<any>(null);
   const safeAreaMetrics = useRef({ x: 0, y: 0, width: 0, height: 0 });
@@ -806,6 +911,13 @@ function MusicApp({
         setQueue([song]);
         setIndex(0);
 
+        const restoredArtwork = coverURL(song.coverArt);
+        setCurrentArtworkUri(restoredArtwork);
+
+        if (restoredArtwork) {
+          void Image.prefetch(restoredArtwork).catch(() => {});
+        }
+
         try {
           player.setActiveForLockScreen(
             true,
@@ -1086,6 +1198,8 @@ function MusicApp({
     setIndex(position);
 
     const artwork = coverURL(next.coverArt);
+    setCurrentArtworkUri(artwork);
+
     if (artwork) {
       void Image.prefetch(artwork).catch(() => {});
     }
@@ -1328,18 +1442,59 @@ function MusicApp({
       }}
     >
     <StatusBar style={album ? 'light' : isDark ? 'light' : 'dark'} />
-    {onlineRestored && (
-      <View pointerEvents="none" style={s.onlineToastWrap}>
-        <View style={s.onlineToast}>
-          <Ionicons
-            name="checkmark-circle"
-            size={16}
-            color={c.accent}
-          />
-          <Text style={s.onlineToastText}>
-            Di nuovo online
-          </Text>
-        </View>
+    {connectivityBanner && (
+      <View pointerEvents="none" style={s.connectivityBannerWrap}>
+        <Animated.View
+          style={[
+            s.connectivityBanner,
+            {
+              opacity: connectivityBannerOpacity,
+              transform: [
+                { translateY: connectivityBannerY },
+                { scale: connectivityBannerScale },
+              ],
+            },
+          ]}
+        >
+          <View
+            style={[
+              s.connectivityBannerIcon,
+              connectivityBanner === 'online' && {
+                backgroundColor: c.background,
+              },
+            ]}
+          >
+            <Ionicons
+              name={
+                connectivityBanner === 'offline'
+                  ? 'cloud-offline-outline'
+                  : 'checkmark-circle'
+              }
+              size={17}
+              color={
+                connectivityBanner === 'offline'
+                  ? c.secondary
+                  : c.accent
+              }
+            />
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={s.connectivityBannerTitle}>
+              {connectivityBanner === 'offline'
+                ? 'Sei offline'
+                : 'Di nuovo online'}
+            </Text>
+            <Text
+              style={s.connectivityBannerMessage}
+              numberOfLines={1}
+            >
+              {connectivityBanner === 'offline'
+                ? 'Continui con la musica disponibile su questo iPhone.'
+                : 'La libreria online è di nuovo disponibile.'}
+            </Text>
+          </View>
+        </Animated.View>
       </View>
     )}
     {settingsOpen && (
@@ -1984,7 +2139,11 @@ function MusicApp({
           accessibilityRole="button"
           accessibilityLabel="Apri player"
         >
-          <Artwork id={current.coverArt} size={38} />
+          <Artwork
+            id={current.coverArt}
+            size={38}
+            fallbackUri={currentArtworkUri}
+          />
 
           <View style={s.flex}>
             <Text style={s.miniTitle} numberOfLines={1}>
@@ -2036,7 +2195,7 @@ function MusicApp({
     />
     </View>
 
-    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => lastKnownPosition.current > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
+    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => lastKnownPosition.current > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
     </SafeAreaView>
   );
 }
@@ -2350,12 +2509,46 @@ function LiquidTabBar({
   );
 }
 
-function Artwork({ id, size }: { id?: string; size: number }) {
+function Artwork({
+  id,
+  size,
+  fallbackUri,
+}: {
+  id?: string;
+  size: number;
+  fallbackUri?: string;
+}) {
   const { colors: c } = useTheme();
   const [failed, setFailed] = useState(false);
-  const uri = coverURL(id);
+  const uri = coverURL(id) ?? fallbackUri;
+
   useEffect(() => setFailed(false), [id, uri]);
-  return uri && !failed ? <Image source={{ uri }} onError={() => setFailed(true)} style={{ width: size, height: size, borderRadius: 12, backgroundColor: c.surface }} /> : <View style={{ width: size, height: size, borderRadius: 12, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: c.secondary, fontSize: size / 3 }}>♪</Text></View>;
+
+  return uri && !failed ? (
+    <Image
+      source={{ uri }}
+      onError={() => setFailed(true)}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 12,
+        backgroundColor: c.surface,
+      }}
+    />
+  ) : (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 12,
+        backgroundColor: c.surface,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Text style={{ color: c.secondary, fontSize: size / 3 }}>♪</Text>
+    </View>
+  );
 }
 function Button({ label, onPress, disabled = false, large = false, accessibilityLabel }: { label: string; onPress: () => void; disabled?: boolean; large?: boolean; accessibilityLabel?: string }) {
   const { colors: c } = useTheme(); const s = makeStyles(c);
@@ -2575,29 +2768,51 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     lineHeight: 14,
   },
   search: { color: c.text, backgroundColor: c.surface, borderRadius: 26, padding: 16, marginTop: 18, fontSize: 16 },
-  onlineToastWrap: {
+  connectivityBannerWrap: {
     position: 'absolute',
-    top: 10,
-    left: 0,
-    right: 0,
-    zIndex: 120,
+    top: 8,
+    left: 14,
+    right: 14,
+    zIndex: 140,
     alignItems: 'center',
   },
-  onlineToast: {
-    minHeight: 34,
-    paddingHorizontal: 12,
-    borderRadius: 17,
+  connectivityBanner: {
+    width: '100%',
+    maxWidth: 390,
+    minHeight: 54,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    borderRadius: 27,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 10,
     backgroundColor: c.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
   },
-  onlineToastText: {
+  connectivityBannerIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.background,
+  },
+  connectivityBannerTitle: {
     color: c.text,
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  connectivityBannerMessage: {
+    color: c.secondary,
+    fontSize: 11,
+    lineHeight: 14,
+    marginTop: 2,
   },
   offlineNotice: {
     paddingVertical: 11,
