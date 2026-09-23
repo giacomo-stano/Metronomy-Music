@@ -1473,7 +1473,7 @@ function MusicApp({
                   ? 'cloud-offline-outline'
                   : 'checkmark-circle'
               }
-              size={17}
+              size={15}
               color={
                 connectivityBanner === 'offline'
                   ? c.secondary
@@ -2763,7 +2763,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   search: { color: c.text, backgroundColor: c.surface, borderRadius: 26, padding: 16, marginTop: 18, fontSize: 16 },
   connectivityBannerWrap: {
     position: 'absolute',
-    top: 58,
+    top: 66,
     left: 14,
     right: 14,
     zIndex: 140,
