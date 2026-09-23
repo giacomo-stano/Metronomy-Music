@@ -4,7 +4,7 @@ import Pressable from './SpringPressable';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { coverURL, request, accountStorageKey, currentAccount, type Album, type SearchResponse, type Song } from './api';
+import { coverURL, request, accountStorageKey, currentAccount, isConnectivityFailure, type Album, type SearchResponse, type Song } from './api';
 import { useTheme } from './theme';
 import GlassBackground from './GlassBackground';
 import Discover from './Discover';
@@ -15,7 +15,7 @@ type Job = { id: string; target: string; title: string; status: string; message:
 type Catalog = { items: Item[]; hasMore: boolean; libraryChecked: boolean };
 type Props = { onSettings: () => void; onPlay: (song: Song) => void; onAlbum: (album: Album) => void; onAlbumActions: (album: Album) => void; beforePreview: () => void; localPlaying: boolean; initialQuery: string; onActions: (song: Song) => void; onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void };
 const label: Record<string, string> = { queued: 'In coda', downloading: 'Download in corso', completed: 'Già scaricato', failed: 'Non completato' };
-const msg = (e: unknown) => e instanceof Error ? e.message : 'Connessione non riuscita';
+const msg = (e: unknown) => isConnectivityFailure(e) ? 'Connessione non disponibile.' : e instanceof Error ? e.message : 'Connessione non riuscita';
 
 export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActions, beforePreview, localPlaying, initialQuery, onActions, onScroll }: Props) {
   const { colors: c } = useTheme();
@@ -62,7 +62,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   useEffect(() => { if (previewStatus.currentTime >= 30 || previewStatus.didJustFinish) { preview.pause(); setPreviewId(''); } }, [previewStatus.currentTime, previewStatus.didJustFinish]);
   useEffect(() => {
     let active = true; let timer: ReturnType<typeof setTimeout>;
-    async function poll() { try { const data = await request<{ jobs: Job[] }>('network/downloads'); if (active) { setJobs(data.jobs); setJobError(''); } } catch (e) { if (active) setJobError(msg(e)); } if (active) timer = setTimeout(poll, 5000); }
+    async function poll() { try { const data = await request<{ jobs: Job[] }>('network/downloads'); if (active) { setJobs(data.jobs); setJobError(''); } } catch (e) { if (active) setJobError(isConnectivityFailure(e) ? '' : msg(e)); } if (active) timer = setTimeout(poll, 5000); }
     void poll(); return () => { active = false; clearTimeout(timer); };
   }, []);
   useEffect(() => {
@@ -73,7 +73,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
       try {
         if (scope === 'library') { const data = await request<SearchResponse>('search?q=' + encodeURIComponent(query.trim())); if (version === generation.current) setLocal(data); }
         else { const data = await request<Catalog>(`network/search?q=${encodeURIComponent(query.trim())}&kind=${kind}`, 100000); if (version === generation.current) setCatalog(data); }
-      } catch (e) { if (version === generation.current) setError(msg(e)); }
+      } catch (e) { if (version === generation.current) setError(isConnectivityFailure(e) ? '' : msg(e)); }
       finally { if (version === generation.current) setBusy(false); }
     }, 400);
     return () => { clearTimeout(timer); generation.current++; previewGeneration.current++; };
@@ -81,7 +81,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   async function more() {
     const version = generation.current; setBusy(true);
     try { const data = await request<Catalog>(`network/search?q=${encodeURIComponent(query.trim())}&kind=${kind}&offset=${catalog?.items.length ?? 0}`, 100000); if (version === generation.current) setCatalog(old => ({ ...data, items: [...(old?.items ?? []), ...data.items], libraryChecked: !!old?.libraryChecked && data.libraryChecked })); }
-    catch (e) { if (version === generation.current) setError(msg(e)); }
+    catch (e) { if (version === generation.current) setError(isConnectivityFailure(e) ? '' : msg(e)); }
     finally { if (version === generation.current) setBusy(false); }
   }
   async function listen(item: Item) {
