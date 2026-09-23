@@ -1317,22 +1317,63 @@ function MusicApp({
 
         {!!error && (
           <View style={s.notice}>
-            <Text style={s.text}>{error}</Text>
-            <View style={s.recoveryActions}>
-              <Button
-                label="Riprova"
-                onPress={() => setReload(n => n + 1)}
-              />
-              {!isOffline && (
-                <Button
-                  label="Ascolta offline"
-                  onPress={onOffline}
+            <View style={s.noticeHeader}>
+              <View style={s.noticeIcon}>
+                <Ionicons
+                  name="wifi-outline"
+                  size={17}
+                  color={c.accent}
                 />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={s.noticeTitle}>
+                  Connessione non disponibile
+                </Text>
+                <Text
+                  style={s.noticeMessage}
+                  numberOfLines={2}
+                >
+                  {error}
+                </Text>
+              </View>
+            </View>
+
+            <View style={s.recoveryActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Riprova connessione"
+                onPress={() => setReload(n => n + 1)}
+                style={[s.recoveryPill, s.recoveryPillPrimary]}
+              >
+                <Text style={s.recoveryPillPrimaryText}>
+                  Riprova
+                </Text>
+              </Pressable>
+
+              {!isOffline && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Ascolta offline"
+                  onPress={onOffline}
+                  style={s.recoveryPill}
+                >
+                  <Text style={s.recoveryPillText}>
+                    Offline
+                  </Text>
+                </Pressable>
               )}
-              <Button
-                label="Disconnetti"
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Disconnetti account"
                 onPress={onLogout}
-              />
+                style={s.recoveryPill}
+              >
+                <Text style={s.recoveryPillText}>
+                  Disconnetti
+                </Text>
+              </Pressable>
             </View>
           </View>
         )}
@@ -2422,13 +2463,66 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     lineHeight: 14,
   },
   search: { color: c.text, backgroundColor: c.surface, borderRadius: 26, padding: 16, marginTop: 18, fontSize: 16 },
-  notice: { padding: 15, backgroundColor: c.surface, borderRadius: 12, marginVertical: 16 },
+  notice: {
+    padding: 14,
+    backgroundColor: c.surface,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    marginVertical: 14,
+  },
+  noticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 11,
+  },
+  noticeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.background,
+  },
+  noticeTitle: {
+    color: c.text,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  noticeMessage: {
+    color: c.secondary,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 3,
+  },
   recoveryActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 8,
+    gap: 8,
+    marginTop: 12,
+  },
+  recoveryPill: {
+    minHeight: 34,
+    paddingHorizontal: 13,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.background,
+  },
+  recoveryPillPrimary: {
+    backgroundColor: c.accent,
+  },
+  recoveryPillText: {
+    color: c.text,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  recoveryPillPrimaryText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   mini: {
     height: 54,
