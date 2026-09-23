@@ -751,7 +751,7 @@ export default function PlayerSheet(p: Props) {
       <View style={menuStyles.rowIcon}>
         <SymbolView
           name={name}
-          size={17}
+          size={15}
           weight="regular"
           tintColor={destructive ? '#ff453a' : menuText}
         />
@@ -1819,7 +1819,7 @@ const playerStyles = StyleSheet.create({
   },
   connectivityBannerWrap: {
     position: 'absolute',
-    top: 62,
+    top: 70,
     left: 14,
     right: 14,
     zIndex: 250,
