@@ -117,7 +117,7 @@ jobs:
 
           export IPA_SIZE="$(stat -c%s release-asset/Metronomy.ipa)"
           export DOWNLOAD_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/Metronomy.ipa"
-          export RELEASE_DATE="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json publishedAt --jq '.publishedAt')"
+          export RELEASE_DATE="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json publishedAt --jq '.publishedAt' | cut -c1-10)"
           export RELEASE_BODY="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body --jq '.body')"
 
           node <<'NODE'
@@ -149,6 +149,31 @@ jobs:
           app.versions.unshift(release);
 
           fs.writeFileSync(sourcePath, JSON.stringify(source, null, 2) + '\n');
+          NODE
+
+          node <<'NODE'
+          const fs = require('fs');
+          const source = JSON.parse(fs.readFileSync('altstore-source.json', 'utf8'));
+          if (!Array.isArray(source.apps) || source.apps.length === 0) {
+            throw new Error('AltStore source has no apps');
+          }
+          for (const app of source.apps) {
+            if (!app.name || !app.bundleIdentifier || !Array.isArray(app.versions)) {
+              throw new Error('Invalid AltStore app entry');
+            }
+            for (const version of app.versions) {
+              if (
+                !version.version ||
+                !version.buildVersion ||
+                !/^\d{4}-\d{2}-\d{2}$/.test(version.date) ||
+                !version.downloadURL ||
+                !Number.isFinite(version.size)
+              ) {
+                throw new Error('Invalid AltStore version entry: ' + JSON.stringify(version));
+              }
+            }
+          }
+          console.log('AltStore source JSON validated.');
           NODE
 
       - name: Commit AltStore source
