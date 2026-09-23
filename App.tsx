@@ -1,7 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
-import { ActivityIndicator, Alert, Animated, Easing, Image, PanResponder, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Animated, AppState, Easing, Image, PanResponder, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { coverURL, streamURL, request, type Album, type HomeResponse, type Song, type SearchResponse, type Lyrics } from './src/api';
 import SearchScreen from './src/SearchScreen';
 import PlayerSheet from './src/PlayerSheet';
@@ -19,7 +19,7 @@ import { useMiniMotion } from './src/useMiniMotion';
 import { ThemeProvider, useTheme, type Palette } from './src/theme';
 import SettingsScreen from './src/SettingsScreen';
 import LoginScreen from './src/LoginScreen';
-import { configureAccount, onSessionExpired, endSession, type Account } from './src/api';
+import { accountStorageKey, configureAccount, onSessionExpired, endSession, type Account } from './src/api';
 import { rememberAlbum } from './src/listeningHistory';
 import { OfflineProvider, useOffline, DownloadBadge } from './src/OfflineDownloads';
 import { clearAlbumSongsCache, peekAlbumSongs, preloadAlbumSongs } from './src/albumPrefetch';
@@ -70,6 +70,11 @@ export default function App() {
   );
 }
 const ACCOUNT_STORAGE_KEY = 'metronomy.activeAccount.v1';
+
+type PersistedPlayerState = {
+  song: Song;
+  position: number;
+};
 
 function AccountGate() {
   const [account, setAccount] = useState<Account | null>(null);
@@ -215,6 +220,10 @@ function MusicApp({
     }>;
   };
   const isOffline = !!account.offline;
+  const playerStateKey = useMemo(
+    () => accountStorageKey('player.v1'),
+    [account.baseURL, account.username]
+  );
   const s = useMemo(() => makeStyles(c), [c]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [actionSong, setActionSong] = useState<Song | null>(null);
@@ -261,6 +270,24 @@ function MusicApp({
   const playback = useRef({ queue, index });
   playback.current = { queue, index };
 
+  function persistPlayerState(
+    song: Song,
+    position = player.currentTime
+  ) {
+    const safePosition =
+      Number.isFinite(position) && position > 0
+        ? position
+        : 0;
+
+    return AsyncStorage.setItem(
+      playerStateKey,
+      JSON.stringify({
+        song,
+        position: safePosition,
+      } satisfies PersistedPlayerState)
+    ).catch(() => {});
+  }
+
   // Keep the artwork required by the player already decoded/cached.
   useEffect(() => {
     const candidates = queue
@@ -279,7 +306,11 @@ function MusicApp({
     const now = playback.current;
     const selected = now.queue[now.index]?.id;
     const remaining = now.queue.filter(song => !ids.includes(song.id));
-    if (selected && ids.includes(selected)) { player.pause(); setExpanded(false); }
+    if (selected && ids.includes(selected)) {
+      player.pause();
+      setExpanded(false);
+      void AsyncStorage.removeItem(playerStateKey).catch(() => {});
+    }
     setQueue(remaining); setIndex(remaining.findIndex(song => song.id === selected));
     setReload(n => n + 1);
   }
@@ -569,6 +600,127 @@ function MusicApp({
   }, []);
 
   useEffect(() => {
+    let active = true;
+    const version = ++audioGeneration.current;
+
+    const restore = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(playerStateKey);
+
+        if (!active || version !== audioGeneration.current || !raw) {
+          return;
+        }
+
+        const saved = JSON.parse(raw) as Partial<PersistedPlayerState>;
+        const song = saved.song;
+
+        if (
+          !song ||
+          typeof song.id !== 'string' ||
+          typeof song.title !== 'string' ||
+          typeof song.artist !== 'string' ||
+          typeof song.duration !== 'number'
+        ) {
+          void AsyncStorage.removeItem(playerStateKey).catch(() => {});
+          return;
+        }
+
+        await audioReady.current;
+
+        if (!active || version !== audioGeneration.current) {
+          return;
+        }
+
+        const source = isOffline
+          ? await offlineStore.source(song.id)
+          : streamURL(song.id);
+
+        if (
+          !active ||
+          version !== audioGeneration.current ||
+          !source
+        ) {
+          return;
+        }
+
+        player.replace(source);
+
+        if (
+          typeof saved.position === 'number' &&
+          Number.isFinite(saved.position) &&
+          saved.position > 0
+        ) {
+          await player.seekTo(saved.position).catch(() => {});
+        }
+
+        player.pause();
+
+        if (!active || version !== audioGeneration.current) {
+          return;
+        }
+
+        setQueue([song]);
+        setIndex(0);
+
+        try {
+          player.setActiveForLockScreen(
+            true,
+            {
+              title: song.title,
+              artist: song.artist,
+              albumTitle: song.album,
+              artworkUrl: coverURL(song.coverArt),
+            },
+            {
+              showSeekBackward: false,
+              showSeekForward: false,
+            }
+          );
+
+          setRemoteControlsEnabled(true);
+        } catch {
+          /* Optional in Expo Go. */
+        }
+      } catch {
+        if (active && version === audioGeneration.current) {
+          void AsyncStorage.removeItem(playerStateKey).catch(() => {});
+        }
+      }
+    };
+
+    void restore();
+
+    return () => {
+      active = false;
+    };
+  }, [playerStateKey]);
+
+  useEffect(() => {
+    const saveCurrent = () => {
+      const now = playback.current;
+      const song = now.queue[now.index];
+
+      if (song) {
+        void persistPlayerState(song);
+      }
+    };
+
+    const subscription = AppState.addEventListener(
+      'change',
+      state => {
+        if (state !== 'active') {
+          saveCurrent();
+        }
+      }
+    );
+
+    return () => {
+      subscription.remove();
+      saveCurrent();
+    };
+  }, [playerStateKey, player]);
+
+  useEffect(() => {
     if (current?.albumId && status.playing && status.listened && remembered.current !== current.id) {
       remembered.current = current.id;
       rememberAlbum({ id: current.albumId, name: current.album ?? current.title, artist: current.artist, coverArt: current.coverArt });
@@ -829,6 +981,8 @@ function MusicApp({
       } catch {
         /* Optional in Expo Go. */
       }
+
+      void persistPlayerState(next, 0);
     } catch (e) {
       if (version === audioGeneration.current) {
         setQueue(previousQueue);
@@ -845,7 +999,10 @@ function MusicApp({
   }
   const seek = (seconds: number) => { void player.seekTo(Math.max(0, seconds)).catch(() => Alert.alert('Riproduzione', 'Impossibile spostarsi in questo brano.')); };
   const toggle = () => {
-    if (status.playing) player.pause();
+    if (status.playing) {
+      player.pause();
+      if (current) void persistPlayerState(current);
+    }
     else if (status.didJustFinish) { void player.seekTo(0).then(() => player.play()).catch(() => Alert.alert('Audio', 'Impossibile riavviare il brano.')); }
     else player.play();
   };
