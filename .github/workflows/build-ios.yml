@@ -2,6 +2,14 @@ name: Build Metronomy iOS IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Versione da compilare (es. 0.2.3)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
   build-ios:
@@ -12,12 +20,59 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
+      - name: Validate and apply release version
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version: $RELEASE_VERSION"
+            echo "Use semantic versioning, for example 0.2.3"
+            exit 1
+          fi
+
+          node <<'NODE'
+          const fs = require('fs');
+
+          const version = process.env.RELEASE_VERSION;
+          const buildNumber = process.env.BUILD_NUMBER;
+
+          const appPath = 'app.json';
+          const app = JSON.parse(fs.readFileSync(appPath, 'utf8'));
+          app.expo.version = version;
+          app.expo.ios = app.expo.ios || {};
+          app.expo.ios.bundleIdentifier = 'com.anonymous.metronomy';
+          app.expo.ios.buildNumber = buildNumber;
+          fs.writeFileSync(appPath, JSON.stringify(app, null, 2) + '\n');
+
+          const packagePath = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+          pkg.version = version;
+          fs.writeFileSync(packagePath, JSON.stringify(pkg, null, 2) + '\n');
+
+          const lockPath = 'package-lock.json';
+          const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+          lock.version = version;
+          if (lock.packages && lock.packages['']) {
+            lock.packages[''].version = version;
+          }
+          fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
+          NODE
+
+          echo "Metronomy $RELEASE_VERSION (build $BUILD_NUMBER)"
 
       - name: Install JavaScript dependencies
         run: npm ci
@@ -42,7 +97,6 @@ jobs:
 
           if ! grep -q "MetronomyAudioControls" ios/Podfile.lock; then
             echo "MetronomyAudioControls was not linked into the iOS project."
-            echo "Native AirPlay, system volume, and previous/next controls would be unavailable."
             exit 1
           fi
 
@@ -69,11 +123,6 @@ jobs:
           echo "Workspace: $WORKSPACE"
           echo "Scheme: $SCHEME"
 
-          xcodebuild -workspace "$WORKSPACE" -list
-
-      - name: Show Xcode version
-        run: xcodebuild -version
-
       - name: Build Metronomy for a physical iPhone without signing
         shell: bash
         run: |
@@ -99,8 +148,6 @@ jobs:
           set -e
 
           if [ "$BUILD_STATUS" -ne 0 ]; then
-            echo
-            echo "===== Compiler errors ====="
             grep -nE '(^|[[:space:]])error:|CompileSwift|SwiftCompile' build/xcodebuild.log | tail -n 200 || true
             exit "$BUILD_STATUS"
           fi
@@ -115,11 +162,8 @@ jobs:
 
           if [ -z "$APP_PATH" ]; then
             echo "No .app bundle was produced."
-            find build/DerivedData/Build/Products -maxdepth 3 -print || true
             exit 1
           fi
-
-          echo "Packaging: $APP_PATH"
 
           rm -rf build/Payload build/Metronomy.ipa
           mkdir -p build/Payload
@@ -127,14 +171,56 @@ jobs:
 
           cd build
           /usr/bin/zip -qry Metronomy.ipa Payload
-
-          echo "Created:"
           ls -lh Metronomy.ipa
+
+      - name: Verify IPA metadata
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+
+          TMP_DIR="$(mktemp -d)"
+          unzip -q build/Metronomy.ipa -d "$TMP_DIR"
+          INFO_PLIST="$(find "$TMP_DIR/Payload" -maxdepth 2 -name Info.plist -print -quit)"
+
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO_PLIST")"
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
+          BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")"
+
+          echo "Bundle ID: $BUNDLE_ID"
+          echo "Version:   $VERSION"
+          echo "Build:     $BUILD"
+
+          test "$BUNDLE_ID" = "com.anonymous.metronomy"
+          test "$VERSION" = "$RELEASE_VERSION"
+          test "$BUILD" = "$BUILD_NUMBER"
+
+      - name: Commit verified version metadata
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add app.json package.json package-lock.json
+
+          if git diff --cached --quiet; then
+            echo "Version metadata already up to date."
+          else
+            git commit -m "chore: prepare iOS $RELEASE_VERSION build $BUILD_NUMBER"
+            git push origin "HEAD:${{ github.ref_name }}"
+          fi
 
       - name: Upload Metronomy IPA
         uses: actions/upload-artifact@v4
         with:
-          name: Metronomy-iOS-unsigned
+          name: Metronomy-${{ inputs.version }}-build-${{ github.run_number }}
           path: build/Metronomy.ipa
           if-no-files-found: error
           retention-days: 14
