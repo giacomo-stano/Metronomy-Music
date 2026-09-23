@@ -49,6 +49,20 @@ const tabs: { name: Tab; icon: SFSymbol; size: number }[] = [
 ];
 
 const message = (e: unknown) => e instanceof Error ? e.message : 'Connessione non riuscita.';
+const isConnectivityError = (e: unknown) => {
+  if (e instanceof TypeError) return true;
+  if (!(e instanceof Error)) return false;
+
+  const value = (e.name + ' ' + e.message).toLowerCase();
+
+  return (
+    value.includes('aborterror') ||
+    value.includes('network request failed') ||
+    value.includes('failed to fetch') ||
+    value.includes('fetch failed') ||
+    value.includes('network error')
+  );
+};
 const clock = (n: number) => { const t = Math.max(0, Math.floor(n || 0)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
 
 export default function App() {
@@ -152,10 +166,10 @@ function AccountGate() {
     }
   }
 
-  async function enterOfflineForCurrentAccount() {
+  async function enterOfflineForCurrentAccount(): Promise<boolean> {
     const active = account;
 
-    if (!active || active.offline) return;
+    if (!active || active.offline) return false;
 
     try {
       const profiles = await offlineProfiles();
@@ -165,20 +179,12 @@ function AccountGate() {
           value.username === active.username
       );
 
-      if (!profile) {
-        Alert.alert(
-          'Modalità offline',
-          'Non ci sono brani scaricati su questo iPhone per questo account.'
-        );
-        return;
-      }
+      if (!profile) return false;
 
       enter(offlineAccount(profile));
+      return true;
     } catch {
-      Alert.alert(
-        'Modalità offline',
-        'Impossibile aprire la libreria offline su questo iPhone.'
-      );
+      return false;
     }
   }
 
@@ -221,7 +227,7 @@ function AccountGate() {
       <MusicApp
         account={account}
         onLogout={() => void logout()}
-        onOffline={() => void enterOfflineForCurrentAccount()}
+        onOffline={enterOfflineForCurrentAccount}
       />
     </OfflineProvider>
   ) : (
@@ -236,7 +242,7 @@ function MusicApp({
 }: {
   account: Account;
   onLogout: () => void;
-  onOffline: () => void;
+  onOffline: () => Promise<boolean>;
 }) {
   const { colors: c, isDark } = useTheme();
   const offlineContext = useOffline('library') as ReturnType<typeof useOffline> & {
@@ -262,7 +268,7 @@ function MusicApp({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [actionSong, setActionSong] = useState<Song | null>(null);
   const [actionAlbum, setActionAlbum] = useState<Album | null>(null);
-  const [tab, setTab] = useState<Tab>(isOffline ? 'Libreria' : 'Home');
+  const [tab, setTab] = useState<Tab>('Home');
   const [home, setHome] = useState<HomeResponse | null>(null);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -865,6 +871,16 @@ function MusicApp({
         }
       } catch (e) {
         if (generation.current === version) {
+          if (!isOffline && isConnectivityError(e)) {
+            const switched = await onOffline();
+
+            if (!switched && generation.current === version) {
+              setError('Nessuna connessione al server.');
+            }
+
+            return;
+          }
+
           setError(message(e));
         }
       } finally {
@@ -1315,6 +1331,26 @@ function MusicApp({
           </Pressable>
         </View>
 
+        {tab === 'Home' && isOffline && (
+          <View style={s.offlineNotice}>
+            <View style={s.offlineNoticeIcon}>
+              <Ionicons
+                name="cloud-offline-outline"
+                size={16}
+                color={c.secondary}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.offlineNoticeTitle}>
+                Sei offline
+              </Text>
+              <Text style={s.offlineNoticeMessage}>
+                Stai ascoltando la musica salvata su questo iPhone.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {!!error && (
           <View style={s.notice}>
             <View style={s.noticeHeader}>
@@ -1334,7 +1370,9 @@ function MusicApp({
                   style={s.noticeMessage}
                   numberOfLines={2}
                 >
-                  {error}
+                  {error === 'Nessuna connessione al server.'
+                    ? 'Impossibile raggiungere il server. Controlla la connessione e riprova.'
+                    : error}
                 </Text>
               </View>
             </View>
@@ -1350,19 +1388,6 @@ function MusicApp({
                   Riprova
                 </Text>
               </Pressable>
-
-              {!isOffline && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Ascolta offline"
-                  onPress={onOffline}
-                  style={s.recoveryPill}
-                >
-                  <Text style={s.recoveryPillText}>
-                    Offline
-                  </Text>
-                </Pressable>
-              )}
 
               <Pressable
                 accessibilityRole="button"
@@ -2463,6 +2488,38 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     lineHeight: 14,
   },
   search: { color: c.text, backgroundColor: c.surface, borderRadius: 26, padding: 16, marginTop: 18, fontSize: 16 },
+  offlineNotice: {
+    paddingVertical: 11,
+    paddingHorizontal: 13,
+    backgroundColor: c.surface,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    marginTop: 12,
+    marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  offlineNoticeIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.background,
+  },
+  offlineNoticeTitle: {
+    color: c.text,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  offlineNoticeMessage: {
+    color: c.secondary,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
+  },
   notice: {
     padding: 14,
     backgroundColor: c.surface,
