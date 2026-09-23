@@ -50,7 +50,6 @@ const tabs: { name: Tab; icon: SFSymbol; size: number }[] = [
 
 const message = (e: unknown) => e instanceof Error ? e.message : 'Connessione non riuscita.';
 const isConnectivityError = (e: unknown) => {
-  if (e instanceof TypeError) return true;
   if (!(e instanceof Error)) return false;
 
   const value = (e.name + ' ' + e.message).toLowerCase();
