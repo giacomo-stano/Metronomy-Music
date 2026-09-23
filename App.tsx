@@ -268,11 +268,12 @@ function MusicApp({
   const status = usePlaybackSignals(player);
   const current = queue[index];
   const playback = useRef({ queue, index });
+  const lastKnownPosition = useRef(0);
   playback.current = { queue, index };
 
   function persistPlayerState(
     song: Song,
-    position = player.currentTime
+    position: number
   ) {
     const safePosition =
       Number.isFinite(position) && position > 0
@@ -287,6 +288,26 @@ function MusicApp({
       } satisfies PersistedPlayerState)
     ).catch(() => {});
   }
+
+  useEffect(() => {
+    const updatePosition = (nextStatus: typeof player.currentStatus) => {
+      if (
+        Number.isFinite(nextStatus.currentTime) &&
+        nextStatus.currentTime >= 0
+      ) {
+        lastKnownPosition.current = nextStatus.currentTime;
+      }
+    };
+
+    const subscription = player.addListener(
+      'playbackStatusUpdate',
+      updatePosition
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, [player]);
 
   // Keep the artwork required by the player already decoded/cached.
   useEffect(() => {
@@ -650,7 +671,10 @@ function MusicApp({
           Number.isFinite(saved.position) &&
           saved.position > 0
         ) {
+          lastKnownPosition.current = saved.position;
           await player.seekTo(saved.position).catch(() => {});
+        } else {
+          lastKnownPosition.current = 0;
         }
 
         player.pause();
@@ -701,7 +725,10 @@ function MusicApp({
       const song = now.queue[now.index];
 
       if (song) {
-        void persistPlayerState(song);
+        void persistPlayerState(
+          song,
+          lastKnownPosition.current
+        );
       }
     };
 
@@ -958,6 +985,7 @@ function MusicApp({
       }
 
       player.replace(source);
+      lastKnownPosition.current = 0;
       player.play();
 
       try {
@@ -982,7 +1010,7 @@ function MusicApp({
         /* Optional in Expo Go. */
       }
 
-      void persistPlayerState(next, 0);
+      void persistPlayerState(next, lastKnownPosition.current);
     } catch (e) {
       if (version === audioGeneration.current) {
         setQueue(previousQueue);
@@ -997,11 +1025,25 @@ function MusicApp({
       );
     }
   }
-  const seek = (seconds: number) => { void player.seekTo(Math.max(0, seconds)).catch(() => Alert.alert('Riproduzione', 'Impossibile spostarsi in questo brano.')); };
+  const seek = (seconds: number) => {
+    const target = Math.max(0, seconds);
+    lastKnownPosition.current = target;
+    void player.seekTo(target).catch(() =>
+      Alert.alert(
+        'Riproduzione',
+        'Impossibile spostarsi in questo brano.'
+      )
+    );
+  };
   const toggle = () => {
     if (status.playing) {
       player.pause();
-      if (current) void persistPlayerState(current);
+      if (current) {
+        void persistPlayerState(
+          current,
+          lastKnownPosition.current
+        );
+      }
     }
     else if (status.didJustFinish) { void player.seekTo(0).then(() => player.play()).catch(() => Alert.alert('Audio', 'Impossibile riavviare il brano.')); }
     else player.play();
