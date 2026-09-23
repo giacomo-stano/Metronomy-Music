@@ -885,21 +885,11 @@ export default function PlayerSheet(p: Props) {
                   />
                 </View>
 
-                <View style={{ flex: 1 }}>
-                  <Text style={playerStyles.connectivityBannerTitle}>
-                    {p.connectivityBanner === 'offline'
-                      ? 'Sei offline'
-                      : 'Di nuovo online'}
-                  </Text>
-                  <Text
-                    style={playerStyles.connectivityBannerMessage}
-                    numberOfLines={1}
-                  >
-                    {p.connectivityBanner === 'offline'
-                      ? 'Continui con la musica disponibile su questo iPhone.'
-                      : 'La libreria online è di nuovo disponibile.'}
-                  </Text>
-                </View>
+                <Text style={playerStyles.connectivityBannerTitle}>
+                  {p.connectivityBanner === 'offline'
+                    ? 'Sei offline'
+                    : 'Di nuovo online'}
+                </Text>
               </Animated.View>
             </View>
           )}
@@ -1829,7 +1819,7 @@ const playerStyles = StyleSheet.create({
   },
   connectivityBannerWrap: {
     position: 'absolute',
-    top: 16,
+    top: 62,
     left: 14,
     right: 14,
     zIndex: 250,
@@ -1837,42 +1827,36 @@ const playerStyles = StyleSheet.create({
     alignItems: 'center',
   },
   connectivityBanner: {
-    width: '100%',
-    maxWidth: 390,
-    minHeight: 54,
-    paddingVertical: 9,
-    paddingHorizontal: 11,
-    borderRadius: 27,
+    minHeight: 40,
+    maxWidth: 220,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
+    gap: 8,
     backgroundColor: 'rgba(32,24,38,0.94)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.16)',
+    borderColor: 'rgba(255,255,255,0.14)',
     shadowColor: '#000',
-    shadowOpacity: 0.24,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
   },
   connectivityBannerIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   connectivityBannerTitle: {
     color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: -0.1,
-  },
-  connectivityBannerMessage: {
-    color: 'rgba(255,255,255,0.66)',
-    fontSize: 11,
-    lineHeight: 14,
-    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: -0.05,
   },
   sheet: {
     flex: 1,
