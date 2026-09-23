@@ -147,7 +147,8 @@ export default function LibraryScreen(p: Props) {
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const [sortMode, setSortMode] = useState<'default' | 'title' | 'artist'>('default');
-  const [topMenu, setTopMenu] = useState<'filter' | 'sort' | 'page' | null>(null);
+  const [dateOrder, setDateOrder] = useState<'newest' | 'oldest'>('newest');
+  const [topMenu, setTopMenu] = useState<'filter' | 'sort' | 'dateOrder' | 'page' | null>(null);
   const topMenuProgress = useRef(new Animated.Value(0)).current;
   const [artistDetail, setArtistDetail] = useState<Entry | null>(null);
   const [artistData, setArtistData] = useState<Data>({});
@@ -164,6 +165,7 @@ export default function LibraryScreen(p: Props) {
 
   useEffect(() => {
     setSortMode('default');
+    setDateOrder('newest');
     setTopMenu(null);
     topMenuProgress.setValue(0);
   }, [page.endpoint, page.type, topMenuProgress]);
@@ -223,20 +225,28 @@ export default function LibraryScreen(p: Props) {
     page.type === 'playlists';
 
   const visibleSongs = songPage
-    ? [...songs].sort((a, b) => {
+    ? (() => {
+        const ordered = [...songs];
+
         if (sortMode === 'title') {
-          return a.title.localeCompare(b.title, 'it', { sensitivity: 'base' });
+          return ordered.sort((a, b) =>
+            a.title.localeCompare(b.title, 'it', { sensitivity: 'base' })
+          );
         }
+
         if (sortMode === 'artist') {
-          const artistOrder = a.artist.localeCompare(b.artist, 'it', {
-            sensitivity: 'base',
-          });
-          return artistOrder || a.title.localeCompare(b.title, 'it', {
-            sensitivity: 'base',
+          return ordered.sort((a, b) => {
+            const artistOrder = a.artist.localeCompare(b.artist, 'it', {
+              sensitivity: 'base',
+            });
+            return artistOrder || a.title.localeCompare(b.title, 'it', {
+              sensitivity: 'base',
+            });
           });
         }
-        return 0;
-      })
+
+        return dateOrder === 'oldest' ? ordered.reverse() : ordered;
+      })()
     : songs;
 
   const visibleAlbums = page.type === 'albums'
@@ -973,6 +983,7 @@ export default function LibraryScreen(p: Props) {
 
   const filterMenu = topMenu === 'filter';
   const sortMenu = topMenu === 'sort';
+  const dateOrderMenu = topMenu === 'dateOrder';
   const pageMenu = topMenu === 'page';
 
   const topPopoverWidth = Math.min(244, Math.max(220, width - 132));
@@ -1020,14 +1031,19 @@ export default function LibraryScreen(p: Props) {
   const sortRow = (
     label: string,
     value: 'default' | 'title' | 'artist',
-    subtitle?: string
+    subtitle?: string,
+    options?: { selected?: boolean; onPress?: () => void }
   ) => {
-    const selected = sortMode === value;
+    const selected = options?.selected ?? sortMode === value;
 
     return (
       <Pressable
         accessibilityRole="button"
         onPress={() => {
+          if (options?.onPress) {
+            options.onPress();
+            return;
+          }
           setSortMode(value);
           closeTopMenu();
         }}
@@ -1862,6 +1878,45 @@ export default function LibraryScreen(p: Props) {
                 </>
               )}
 
+              {dateOrderMenu && (
+                <>
+                  {sortRow(
+                    'Più recenti prima',
+                    'default',
+                    undefined,
+                    {
+                      selected: dateOrder === 'newest',
+                      onPress: () => {
+                        setSortMode('default');
+                        setDateOrder('newest');
+                        closeTopMenu();
+                      },
+                    }
+                  )}
+
+                  <View
+                    style={[
+                      topStyles.menuSeparator,
+                      { backgroundColor: c.border },
+                    ]}
+                  />
+
+                  {sortRow(
+                    'Più vecchi prima',
+                    'default',
+                    undefined,
+                    {
+                      selected: dateOrder === 'oldest',
+                      onPress: () => {
+                        setSortMode('default');
+                        setDateOrder('oldest');
+                        closeTopMenu();
+                      },
+                    }
+                  )}
+                </>
+              )}
+
               {sortMenu && (
                 <>
                   {songPage && (
@@ -1879,8 +1934,15 @@ export default function LibraryScreen(p: Props) {
                         'Data di aggiunta',
                         'default',
                         sortMode === 'default'
-                          ? 'Più recenti prima'
-                          : undefined
+                          ? (dateOrder === 'newest' ? 'Più recenti prima' : 'Più vecchi prima')
+                          : undefined,
+                        {
+                          selected: sortMode === 'default',
+                          onPress: () => {
+                            setSortMode('default');
+                            setTopMenu('dateOrder');
+                          },
+                        }
                       )}
 
                       <View
