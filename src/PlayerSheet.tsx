@@ -476,7 +476,17 @@ export default function PlayerSheet(p: Props) {
   let active = -1;
   if (p.lyrics?.synced) p.lyrics.line.forEach((line, index) => { if (line.start !== undefined && line.start <= status.currentTime * 1000 + (p.lyrics?.offset ?? 0)) active = index; });
   useEffect(() => { if (autoScroll && mode === 'lyrics' && active >= 0) scroll.current?.scrollTo({ y: Math.max(0, (positions.current[active] ?? 0) - 100), animated: true }); }, [active, mode, autoScroll]);
-  const duration = status.duration || p.song.duration;
+  // Navidrome's catalog duration describes the actual track. For remote streams,
+  // the native player can temporarily report a different container/stream duration.
+  const catalogDuration = Number.isFinite(p.song.duration) && p.song.duration > 0
+    ? p.song.duration
+    : 0;
+  const playerDuration = Number.isFinite(status.duration) && status.duration > 0
+    ? status.duration
+    : 0;
+  const duration = catalogDuration || playerDuration;
+  const currentTime = Math.max(0, status.currentTime || 0);
+  const remainingTime = Math.max(0, duration - currentTime);
   const seek = (value: number) => { void p.player.seekTo(Math.min(duration, Math.max(0, value))).catch(() => Alert.alert('Riproduzione', 'Impossibile spostarsi nel brano.')); };
   const openMenu = () => {
     setPlaylists(null);
@@ -1308,7 +1318,7 @@ export default function PlayerSheet(p: Props) {
                 >
                   <View style={playerStyles.progressArea}>
                     <Range
-                      value={status.currentTime / (duration || 1)}
+                      value={Math.min(1, currentTime / (duration || 1))}
                       onChange={v => seek(v * duration)}
                       color="rgba(255,255,255,0.82)"
                       track="rgba(255,255,255,0.25)"
@@ -1317,7 +1327,7 @@ export default function PlayerSheet(p: Props) {
                     />
                     <View style={playerStyles.timeRow}>
                       <Text style={playerStyles.timeText}>
-                        {clock(status.currentTime)}
+                        {clock(currentTime)}
                       </Text>
                       <View style={playerStyles.hapticsChip}>
                         <SymbolView
@@ -1331,7 +1341,7 @@ export default function PlayerSheet(p: Props) {
                         </Text>
                       </View>
                       <Text style={playerStyles.timeText}>
-                        −{clock(duration - status.currentTime)}
+                        −{clock(remainingTime)}
                       </Text>
                     </View>
                   </View>
