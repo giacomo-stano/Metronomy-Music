@@ -48,7 +48,7 @@ const tabs: { name: Tab; icon: SFSymbol; size: number }[] = [
   { name: 'Cerca', icon: 'magnifyingglass', size: 22 },
 ];
 
-const message = (e: unknown) => e instanceof Error ? e.message : 'Connessione non riuscita.';
+const message = (e: unknown) => isConnectivityFailure(e) ? 'Connessione non disponibile.' : e instanceof Error ? e.message : 'Connessione non riuscita.';
 const clock = (n: number) => { const t = Math.max(0, Math.floor(n || 0)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
 
 export default function App() {
