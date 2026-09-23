@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Keyboard, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Image, Keyboard, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Pressable from './SpringPressable';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from 'expo-speech-recognition';
 import { coverURL, request, accountStorageKey, currentAccount, isConnectivityFailure, type Album, type SearchResponse, type Song } from './api';
 import { useTheme } from './theme';
 import GlassBackground from './GlassBackground';
@@ -25,7 +29,9 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   const [destination, setDestination] = useState(targets.length === 1 ? targets[0].id : '');
   const input = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
-  const [dictationHelp, setDictationHelp] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [speechError, setSpeechError] = useState('');
+  const micScale = useRef(new Animated.Value(1)).current;
   const [scope, setScope] = useState<'qobuz' | 'library'>(initialQuery || currentAccount()?.offline ? 'library' : 'qobuz');
   const [kind, setKind] = useState<'track' | 'album'>('track');
   const [catalog, setCatalog] = useState<Catalog | null>(null);
@@ -46,17 +52,159 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   const recentTouched = useRef(false);
   const recentWrites = useRef(Promise.resolve());
   const alive = useRef(true);
-  useEffect(() => { alive.current = true; AsyncStorage.getItem(searchStorageKey).then(value => { if (alive.current && !recentTouched.current) { const parsed = JSON.parse(value || '[]'); if (Array.isArray(parsed)) setRecent(parsed.filter(v => typeof v === 'string').slice(0, 10)); } }).catch(() => {}); return () => { alive.current = false; previewGeneration.current++; }; }, []);
+
+  useSpeechRecognitionEvent('start', () => {
+    setListening(true);
+    setSpeechError('');
+  });
+
+  useSpeechRecognitionEvent('result', event => {
+    const transcript = event.results[0]?.transcript?.trim() ?? '';
+    if (!transcript) return;
+
+    setQuery(transcript);
+
+    if (event.isFinal) {
+      saveRecent([
+        transcript,
+        ...recent.filter(value => value !== transcript),
+      ].slice(0, 10));
+    }
+  });
+
+  useSpeechRecognitionEvent('volumechange', event => {
+    const level = Math.max(0, Math.min(1, (event.value + 2) / 12));
+
+    Animated.spring(micScale, {
+      toValue: 1 + level * 0.18,
+      stiffness: 320,
+      damping: 20,
+      mass: 0.5,
+      useNativeDriver: true,
+    }).start();
+  });
+
+  useSpeechRecognitionEvent('end', () => {
+    setListening(false);
+
+    Animated.spring(micScale, {
+      toValue: 1,
+      stiffness: 340,
+      damping: 22,
+      mass: 0.5,
+      useNativeDriver: true,
+    }).start();
+  });
+
+  useSpeechRecognitionEvent('error', event => {
+    setListening(false);
+
+    if (event.error === 'aborted') return;
+
+    if (event.error === 'no-speech') {
+      setSpeechError('Non ho sentito nulla. Tocca il microfono e riprova.');
+      return;
+    }
+
+    if (
+      event.error === 'not-allowed' ||
+      event.error === 'service-not-allowed'
+    ) {
+      setSpeechError(
+        'Consenti microfono e riconoscimento vocale nelle Impostazioni di iPhone.'
+      );
+      return;
+    }
+
+    if (event.error === 'network') {
+      setSpeechError('La ricerca vocale non è disponibile senza connessione.');
+      return;
+    }
+
+    setSpeechError('Ricerca vocale non disponibile. Riprova.');
+  });
+  useEffect(() => { alive.current = true; AsyncStorage.getItem(searchStorageKey).then(value => { if (alive.current && !recentTouched.current) { const parsed = JSON.parse(value || '[]'); if (Array.isArray(parsed)) setRecent(parsed.filter(v => typeof v === 'string').slice(0, 10)); } }).catch(() => {}); return () => { alive.current = false; previewGeneration.current++; try { ExpoSpeechRecognitionModule.abort(); } catch {} }; }, []);
   function saveRecent(values: string[]) { recentTouched.current = true; setRecent(values); recentWrites.current = recentWrites.current.then(() => AsyncStorage.setItem(searchStorageKey, JSON.stringify(values))).catch(() => {}); }
   function remember() { if (query.trim()) saveRecent([query.trim(), ...recent.filter(q => q !== query.trim())].slice(0, 10)); }
   function stopPreview() { previewGeneration.current++; preview.pause(); setPreviewId(''); setPreviewBusy(''); }
   function closeSearch() {
     generation.current++;
-    stopPreview(); setQuery(''); setCatalog(null); setLocal(null); setError(''); setBusy(false);
-    setDictationHelp(false); setFocused(false); input.current?.blur(); Keyboard.dismiss();
+
+    if (listening) {
+      try {
+        ExpoSpeechRecognitionModule.abort();
+      } catch {}
+    }
+
+    stopPreview();
+    setQuery('');
+    setCatalog(null);
+    setLocal(null);
+    setError('');
+    setSpeechError('');
+    setBusy(false);
+    setFocused(false);
+    input.current?.blur();
+    Keyboard.dismiss();
   }
-  function showDictation() {
-    stopPreview(); beforePreview(); setDictationHelp(true); input.current?.focus();
+
+  async function showDictation() {
+    if (listening) {
+      ExpoSpeechRecognitionModule.stop();
+      return;
+    }
+
+    stopPreview();
+    beforePreview();
+    setSpeechError('');
+    input.current?.blur();
+    Keyboard.dismiss();
+
+    try {
+      if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
+        setSpeechError(
+          'Il riconoscimento vocale non è disponibile su questo iPhone.'
+        );
+        return;
+      }
+
+      const permission =
+        await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+
+      if (!permission.granted) {
+        setSpeechError(
+          'Consenti microfono e riconoscimento vocale per cercare musica con la voce.'
+        );
+        return;
+      }
+
+      const offline = !!currentAccount()?.offline;
+      const onDevice =
+        offline &&
+        ExpoSpeechRecognitionModule.supportsOnDeviceRecognition();
+
+      if (offline && !onDevice) {
+        setSpeechError(
+          'La ricerca vocale offline non è supportata su questo iPhone.'
+        );
+        return;
+      }
+
+      ExpoSpeechRecognitionModule.start({
+        lang: 'it-IT',
+        interimResults: true,
+        continuous: false,
+        maxAlternatives: 1,
+        iosTaskHint: 'search',
+        requiresOnDeviceRecognition: onDevice,
+        volumeChangeEventOptions: {
+          enabled: true,
+          intervalMillis: 120,
+        },
+      });
+    } catch {
+      setSpeechError('Impossibile avviare la ricerca vocale. Riprova.');
+    }
   }
   useEffect(() => { if (localPlaying) stopPreview(); }, [localPlaying]);
   useEffect(() => { if (previewStatus.currentTime >= 30 || previewStatus.didJustFinish) { preview.pause(); setPreviewId(''); } }, [previewStatus.currentTime, previewStatus.didJustFinish]);
@@ -67,9 +215,9 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   }, []);
   useEffect(() => {
     const version = ++generation.current;
-    stopPreview(); setCatalog(null); setLocal(null); setError(''); setBusy(!!query.trim());
+    stopPreview(); setCatalog(null); setLocal(null); setError(''); setBusy(!!query.trim() && !listening);
     const timer = setTimeout(async () => {
-      if (!query.trim()) return;
+      if (!query.trim() || listening) return;
       try {
         if (scope === 'library') { const data = await request<SearchResponse>('search?q=' + encodeURIComponent(query.trim())); if (version === generation.current) setLocal(data); }
         else { const data = await request<Catalog>(`network/search?q=${encodeURIComponent(query.trim())}&kind=${kind}`, 100000); if (version === generation.current) setCatalog(data); }
@@ -77,7 +225,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
       finally { if (version === generation.current) setBusy(false); }
     }, 400);
     return () => { clearTimeout(timer); generation.current++; previewGeneration.current++; };
-  }, [query, scope, kind, reload]);
+  }, [query, scope, kind, reload, listening]);
   async function more() {
     const version = generation.current; setBusy(true);
     try { const data = await request<Catalog>(`network/search?q=${encodeURIComponent(query.trim())}&kind=${kind}&offset=${catalog?.items.length ?? 0}`, 100000); if (version === generation.current) setCatalog(old => ({ ...data, items: [...(old?.items ?? []), ...data.items], libraryChecked: !!old?.libraryChecked && data.libraryChecked })); }
@@ -109,21 +257,22 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   const row = { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, paddingVertical: 14, borderBottomWidth: 0.5, borderColor: c.border };
   const art = (url?: string) => url ? <Image source={{ uri: url }} style={{ width: 54, height: 54, borderRadius: 8 }} /> : <View style={{ width: 54, height: 54, backgroundColor: c.surface, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="musical-note" color={c.secondary} size={24} /></View>;
   return <View style={{ flex: 1 }}><View style={{ padding: 20, paddingBottom: 4 }}>
-    {!focused && <View style={row}><Text style={{ color: c.text, fontSize: 36, fontWeight: '800', flex: 1 }}>Cerca</Text><Pressable onPress={onSettings} accessibilityLabel="Apri impostazioni"><Ionicons name="person-circle-outline" size={38} color={c.accent} /></Pressable></View>}
+    {!focused && !listening && <View style={row}><Text style={{ color: c.text, fontSize: 36, fontWeight: '800', flex: 1 }}>Cerca</Text><Pressable onPress={onSettings} accessibilityLabel="Apri impostazioni"><Ionicons name="person-circle-outline" size={38} color={c.accent} /></Pressable></View>}
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 }}>
       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 28, borderWidth: 0.5, borderColor: c.border, overflow: 'hidden', paddingLeft: 15, minHeight: 54 }}>
-        <GlassBackground /><Ionicons name="search" size={23} color={c.text} />
-        <TextInput ref={input} style={{ ...text, paddingVertical: 14, paddingHorizontal: 10, flex: 1, minWidth: 0 }} placeholder="Artisti, brani e album" placeholderTextColor={c.secondary} value={query} onChangeText={setQuery} onFocus={() => setFocused(true)} onBlur={() => { setFocused(false); setDictationHelp(false); }} onSubmitEditing={() => { remember(); Keyboard.dismiss(); }} returnKeyType="search" autoCorrect={false} autoCapitalize="none" accessibilityLabel="Cerca musica" maxLength={200} selectionColor={c.accent} />
-        <Pressable onPress={showDictation} accessibilityRole="button" accessibilityLabel="Dettatura con la tastiera" accessibilityHint="Apre la tastiera e le istruzioni per usare il suo microfono" style={{ width: 44, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="mic-outline" color={c.text} size={25} /></Pressable>
+        <GlassBackground /><Ionicons name={listening ? "mic-outline" : "search"} size={23} color={listening ? c.accent : c.text} />
+        <TextInput ref={input} style={{ ...text, paddingVertical: 14, paddingHorizontal: 10, flex: 1, minWidth: 0 }} placeholder={listening ? "Ascolto…" : "Artisti, brani e album"} placeholderTextColor={c.secondary} value={query} onChangeText={setQuery} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onSubmitEditing={() => { remember(); Keyboard.dismiss(); }} returnKeyType="search" autoCorrect={false} autoCapitalize="none" accessibilityLabel="Cerca musica" maxLength={200} selectionColor={c.accent} />
+        <Pressable onPress={() => void showDictation()} accessibilityRole="button" accessibilityLabel={listening ? "Termina ricerca vocale" : "Avvia ricerca vocale"} accessibilityHint={listening ? "Termina l’ascolto e usa il testo riconosciuto" : "Ascolta la tua voce e cerca musica"} style={{ width: 44, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}><Animated.View style={{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: listening ? c.accent : 'transparent', transform: [{ scale: micScale }] }}><Ionicons name={listening ? "mic" : "mic-outline"} color={listening ? "#fff" : c.text} size={23} /></Animated.View></Pressable>
       </View>
-      {(focused || !!query || dictationHelp) && <Pressable onPress={closeSearch} accessibilityRole="button" accessibilityLabel="Chiudi e cancella ricerca" style={{ width: 54, height: 54, borderRadius: 27, overflow: 'hidden', borderWidth: 0.5, borderColor: c.border, alignItems: 'center', justifyContent: 'center' }}><GlassBackground /><Ionicons name="close" color={c.text} size={32} /></Pressable>}
+      {(focused || !!query || listening) && <Pressable onPress={closeSearch} accessibilityRole="button" accessibilityLabel="Chiudi e cancella ricerca" style={{ width: 54, height: 54, borderRadius: 27, overflow: 'hidden', borderWidth: 0.5, borderColor: c.border, alignItems: 'center', justifyContent: 'center' }}><GlassBackground /><Ionicons name="close" color={c.text} size={32} /></Pressable>}
     </View>
-    {dictationHelp && <View style={{ backgroundColor: c.surface, padding: 12, borderRadius: 14, marginTop: 10 }}><Text accessibilityLiveRegion="polite" style={{ color: c.text, fontSize: 14 }}>Per dettare, tocca il microfono della tastiera. Il testo verrà cercato in {scope === 'qobuz' ? 'Qobuz' : 'Libreria'}.</Text><Text style={sub}>Su iPhone, se manca: Impostazioni → Generali → Tastiera → Abilita dettatura. Questo pulsante non avvia la registrazione.</Text></View>}
+    {listening && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 9, paddingHorizontal: 8 }}><Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c.accent, transform: [{ scale: micScale }] }} /><Text accessibilityLiveRegion="polite" style={{ color: c.secondary, fontSize: 12 }}>Ascolto… parla ora</Text></View>}
+    {!!speechError && !listening && <Text accessibilityLiveRegion="polite" style={{ color: c.secondary, fontSize: 12, marginTop: 9, paddingHorizontal: 8 }}>{speechError}</Text>}
     <View style={{ flexDirection: 'row', borderRadius: 24, backgroundColor: c.surface, padding: 4, marginTop: 12 }}>{(['qobuz', 'library'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: scope === value }} onPress={() => value === 'qobuz' && currentAccount()?.offline ? Alert.alert('Qobuz richiede internet', 'Accedi online per cercare nel catalogo Qobuz.') : setScope(value)} style={{ flex: 1, padding: 10, alignItems: 'center', borderRadius: 20, backgroundColor: scope === value ? c.background : 'transparent' }}><Text style={text}>{value === 'qobuz' ? 'Qobuz' : 'Libreria'}</Text></Pressable>)}</View>
   </View><ScrollView onScroll={onScroll} scrollEventThrottle={32} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, paddingBottom: 200 }}>
     {scope === 'qobuz' && !!query.trim() && <View style={{ paddingBottom: 16 }}><Text style={sub}>Scarica nella libreria: {targets.length === 1 ? targets[0].label : 'scegli la destinazione'}</Text>{targets.length > 1 && <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>{targets.map(target => <Pressable key={target.id} accessibilityRole="radio" accessibilityState={{ checked: destination === target.id }} onPress={() => setDestination(target.id)} style={{ borderRadius: 18, padding: 12, backgroundColor: c.surface }}><Text style={{ color: destination === target.id ? c.accent : c.secondary }}>{destination === target.id ? '✓ ' : ''}{target.label}</Text></Pressable>)}</View>}</View>}
-    {!query.trim() && focused && <><View style={row}><Text style={{ ...text, flex: 1, fontWeight: '700', fontSize: 22 }}>Ricerche recenti</Text><Pressable onPress={() => saveRecent([])} accessibilityLabel="Cancella ricerche recenti"><Text style={{ color: c.accent }}>Cancella</Text></Pressable></View>{recent.map(value => <Pressable key={value} onPress={() => setQuery(value)} style={row}><Ionicons name="time-outline" size={23} color={c.secondary} /><Text style={{ ...text, flex: 1 }}>{value}</Text><Ionicons name="chevron-forward" color={c.secondary} size={18} /></Pressable>)}{!recent.length && <Text style={sub}>Le ricerche selezionate o confermate appariranno qui.</Text>}</>}
-    {!query.trim() && !focused && <Discover scope={scope} onAlbum={onAlbum} onQuery={value => { setKind('album'); setQuery(value); }} />}
+    {!query.trim() && focused && !listening && <><View style={row}><Text style={{ ...text, flex: 1, fontWeight: '700', fontSize: 22 }}>Ricerche recenti</Text><Pressable onPress={() => saveRecent([])} accessibilityLabel="Cancella ricerche recenti"><Text style={{ color: c.accent }}>Cancella</Text></Pressable></View>{recent.map(value => <Pressable key={value} onPress={() => setQuery(value)} style={row}><Ionicons name="time-outline" size={23} color={c.secondary} /><Text style={{ ...text, flex: 1 }}>{value}</Text><Ionicons name="chevron-forward" color={c.secondary} size={18} /></Pressable>)}{!recent.length && <Text style={sub}>Le ricerche selezionate o confermate appariranno qui.</Text>}</>}
+    {!query.trim() && !focused && !listening && <Discover scope={scope} onAlbum={onAlbum} onQuery={value => { setKind('album'); setQuery(value); }} />}
     {scope === 'qobuz' && !!query.trim() && <View style={{ flexDirection: 'row', gap: 12, marginBottom: 10 }}>{(['track', 'album'] as const).map(value => <Pressable key={value} onPress={() => setKind(value)} style={{ padding: 10, borderRadius: 18, backgroundColor: kind === value ? c.surface : 'transparent' }}><Text style={{ color: kind === value ? c.accent : c.secondary }}>{value === 'track' ? 'Brani' : 'Album'}</Text></Pressable>)}</View>}
     {!!error && <Pressable onPress={() => setReload(v => v + 1)}><Text style={{ color: c.accent }}>{error} · Riprova</Text></Pressable>}
     {catalog && !catalog.libraryChecked && <Text style={{ color: c.accent }}>Verifica libreria non disponibile: download temporaneamente bloccati.</Text>}
