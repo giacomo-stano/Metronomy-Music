@@ -1193,6 +1193,7 @@ function MusicApp({
     const version = ++audioGeneration.current;
     const previousQueue = queue;
     const previousIndex = index;
+    const previousArtworkUri = currentArtworkUri;
 
     // Metadata first: title/artist/cover must react to the tap immediately.
     setQueue(list);
@@ -1260,6 +1261,7 @@ function MusicApp({
       if (version === audioGeneration.current) {
         setQueue(previousQueue);
         setIndex(previousIndex);
+        setCurrentArtworkUri(previousArtworkUri);
       }
 
       Alert.alert(
