@@ -10,7 +10,20 @@ export function configureLocal(value?: LocalAccess) { local = value; }
 let account: Account | null = null;
 let expired: (() => void) | undefined;
 export const currentAccount = () => account;
-export function configureAccount(value: Account | null) { account = value; local = undefined; }
+export function configureAccount(value: Account | null) {
+  const previous = account;
+  const sameOwner =
+    !!previous &&
+    !!value &&
+    previous.baseURL === value.baseURL &&
+    previous.username === value.username;
+
+  account = value;
+
+  if (!sameOwner) {
+    local = undefined;
+  }
+}
 export function onSessionExpired(callback?: () => void) { expired = callback; }
 export function accountStorageKey(name: string) { const a = configuration(); return 'metronomy.' + name + ':' + encodeURIComponent(a.baseURL) + ':' + encodeURIComponent(a.username); }
 
@@ -36,6 +49,31 @@ export async function login(base: string, username: string, password: string): P
     if (!data?.token || !data?.username || !Array.isArray(data.destinations) || !Number.isFinite(data.expires)) throw new Error('Risposta login non valida. Usa l’URL del bridge, porta 8180.');
     return { ...data, baseURL };
   } finally { clearTimeout(timer); }
+}
+
+export async function probeAccount(value: Account, timeoutMs = 5000): Promise<boolean> {
+  if (value.offline) return false;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(value.baseURL + '/home', {
+      method: 'GET',
+      headers: {
+        Authorization: 'Bearer ' + value.token,
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+      redirect: 'error',
+    });
+
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function request<T>(path: string, timeoutMs = 15000, body?: unknown): Promise<T> {
