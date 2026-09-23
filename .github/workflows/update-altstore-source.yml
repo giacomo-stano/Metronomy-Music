@@ -1,0 +1,165 @@
+name: Update AltStore Source
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-altstore-source:
+    name: Publish release to AltStore source
+    if: ${{ endsWith(github.event.release.tag_name, '-stable') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate stable tag
+        id: tag
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-stable$ ]]; then
+            echo "Stable releases must use a tag such as v0.2.3-stable."
+            exit 1
+          fi
+
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+
+      - name: Download released IPA
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-asset
+
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "Metronomy.ipa" \
+            --dir release-asset
+
+          test -f release-asset/Metronomy.ipa
+
+      - name: Read and validate IPA metadata
+        id: ipa
+        shell: bash
+        env:
+          TAG_VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          rm -rf extracted-ipa
+          mkdir extracted-ipa
+          unzip -q release-asset/Metronomy.ipa -d extracted-ipa
+
+          INFO_PLIST="$(find extracted-ipa/Payload -maxdepth 2 -name Info.plist -print -quit)"
+          if [ -z "$INFO_PLIST" ]; then
+            echo "Info.plist not found inside the IPA."
+            exit 1
+          fi
+
+          python3 - "$INFO_PLIST" "$GITHUB_OUTPUT" "$TAG_VERSION" <<'PY'
+          import plistlib
+          import sys
+
+          plist_path, output_path, tag_version = sys.argv[1:4]
+
+          with open(plist_path, "rb") as f:
+              info = plistlib.load(f)
+
+          bundle_id = str(info.get("CFBundleIdentifier", ""))
+          version = str(info.get("CFBundleShortVersionString", ""))
+          build = str(info.get("CFBundleVersion", ""))
+
+          print(f"Bundle ID: {bundle_id}")
+          print(f"Version:   {version}")
+          print(f"Build:     {build}")
+
+          if bundle_id != "com.anonymous.metronomy":
+              raise SystemExit(f"Unexpected bundle ID: {bundle_id}")
+          if version != tag_version:
+              raise SystemExit(f"IPA version {version} does not match tag version {tag_version}")
+          if not build:
+              raise SystemExit("CFBundleVersion is empty")
+
+          with open(output_path, "a", encoding="utf-8") as out:
+              out.write(f"bundle_id={bundle_id}\n")
+              out.write(f"version={version}\n")
+              out.write(f"build={build}\n")
+          PY
+
+      - name: Update AltStore source
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.ipa.outputs.version }}
+          RELEASE_BUILD: ${{ steps.ipa.outputs.build }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_DATE: ${{ github.event.release.published_at }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+        run: |
+          set -euo pipefail
+
+          export IPA_SIZE="$(stat -c%s release-asset/Metronomy.ipa)"
+          export DOWNLOAD_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/Metronomy.ipa"
+
+          node <<'NODE'
+          const fs = require('fs');
+
+          const sourcePath = 'altstore-source.json';
+          const source = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+
+          if (!Array.isArray(source.apps) || source.apps.length === 0) {
+            throw new Error('No app found in altstore-source.json');
+          }
+
+          const app = source.apps[0];
+          app.bundleIdentifier = 'com.anonymous.metronomy';
+          app.versions = Array.isArray(app.versions) ? app.versions : [];
+
+          const release = {
+            version: process.env.RELEASE_VERSION,
+            buildVersion: process.env.RELEASE_BUILD,
+            date: process.env.RELEASE_DATE,
+            localizedDescription:
+              (process.env.RELEASE_BODY || '').trim() ||
+              `Metronomy ${process.env.RELEASE_VERSION}`,
+            downloadURL: process.env.DOWNLOAD_URL,
+            size: Number(process.env.IPA_SIZE),
+          };
+
+          app.versions = app.versions.filter(v => v.version !== release.version);
+          app.versions.unshift(release);
+
+          fs.writeFileSync(sourcePath, JSON.stringify(source, null, 2) + '\n');
+          NODE
+
+      - name: Commit AltStore source
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.ipa.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add altstore-source.json
+
+          if git diff --cached --quiet; then
+            echo "AltStore source already contains this release."
+            exit 0
+          fi
+
+          git commit -m "chore: publish Metronomy $RELEASE_VERSION to AltStore source"
+          git push origin main
