@@ -21,6 +21,7 @@ import SettingsScreen from './src/SettingsScreen';
 import LoginScreen from './src/LoginScreen';
 import { accountStorageKey, configureAccount, onSessionExpired, endSession, type Account } from './src/api';
 import { rememberAlbum } from './src/listeningHistory';
+import { offlineAccount, offlineProfiles } from './src/offlineProfiles';
 import { OfflineProvider, useOffline, DownloadBadge } from './src/OfflineDownloads';
 import { clearAlbumSongsCache, peekAlbumSongs, preloadAlbumSongs } from './src/albumPrefetch';
 import NowPlayingWaves from './src/NowPlayingWaves';
@@ -151,6 +152,36 @@ function AccountGate() {
     }
   }
 
+  async function enterOfflineForCurrentAccount() {
+    const active = account;
+
+    if (!active || active.offline) return;
+
+    try {
+      const profiles = await offlineProfiles();
+      const profile = profiles.find(
+        value =>
+          value.baseURL === active.baseURL &&
+          value.username === active.username
+      );
+
+      if (!profile) {
+        Alert.alert(
+          'Modalità offline',
+          'Non ci sono brani scaricati su questo iPhone per questo account.'
+        );
+        return;
+      }
+
+      enter(offlineAccount(profile));
+    } catch {
+      Alert.alert(
+        'Modalità offline',
+        'Impossibile aprire la libreria offline su questo iPhone.'
+      );
+    }
+  }
+
   function logout() {
     /*
      * endSession() chiude la sessione API senza dover passare null
@@ -190,6 +221,7 @@ function AccountGate() {
       <MusicApp
         account={account}
         onLogout={() => void logout()}
+        onOffline={() => void enterOfflineForCurrentAccount()}
       />
     </OfflineProvider>
   ) : (
@@ -200,9 +232,11 @@ function AccountGate() {
 function MusicApp({
   account,
   onLogout,
+  onOffline,
 }: {
   account: Account;
   onLogout: () => void;
+  onOffline: () => void;
 }) {
   const { colors: c, isDark } = useTheme();
   const offlineContext = useOffline('library') as ReturnType<typeof useOffline> & {
@@ -1284,10 +1318,22 @@ function MusicApp({
         {!!error && (
           <View style={s.notice}>
             <Text style={s.text}>{error}</Text>
-            <Button
-              label="Riprova"
-              onPress={() => setReload(n => n + 1)}
-            />
+            <View style={s.recoveryActions}>
+              <Button
+                label="Riprova"
+                onPress={() => setReload(n => n + 1)}
+              />
+              {!isOffline && (
+                <Button
+                  label="Ascolta offline"
+                  onPress={onOffline}
+                />
+              )}
+              <Button
+                label="Disconnetti"
+                onPress={onLogout}
+              />
+            </View>
           </View>
         )}
 
@@ -2377,6 +2423,13 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   search: { color: c.text, backgroundColor: c.surface, borderRadius: 26, padding: 16, marginTop: 18, fontSize: 16 },
   notice: { padding: 15, backgroundColor: c.surface, borderRadius: 12, marginVertical: 16 },
+  recoveryActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+  },
   mini: {
     height: 54,
     flexDirection: 'row',
