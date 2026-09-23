@@ -25,6 +25,7 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   song: Song;
+  artworkUri?: string;
   player: AudioPlayer;
   queue: Song[];
   index: number;
@@ -362,7 +363,7 @@ export default function PlayerSheet(p: Props) {
     position: number;
   } | null>(null);
   const mounted = useRef(true);
-  const uri = coverURL(p.song.coverArt);
+  const uri = coverURL(p.song.coverArt) ?? p.artworkUri;
   // Apple Music-style player uses light foreground controls over a darkened
   // artwork-derived background. Keeping these independent from the app theme
   // avoids black controls on bright/colourful covers.
@@ -794,7 +795,7 @@ export default function PlayerSheet(p: Props) {
     </Pressable>
   );
 
-  const currentCover = coverURL(p.song.coverArt);
+  const currentCover = coverURL(p.song.coverArt) ?? p.artworkUri;
   const upNext = queueMounted ? p.queue.slice(Math.max(0, p.index + 1)) : [];
 
   // Proportions measured from the supplied Apple Music reference screenshot
