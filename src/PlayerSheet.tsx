@@ -26,6 +26,10 @@ type Props = {
   onClose: () => void;
   song: Song;
   artworkUri?: string;
+  connectivityBanner?: 'offline' | 'online' | null;
+  connectivityBannerOpacity?: Animated.Value;
+  connectivityBannerScale?: Animated.Value;
+  connectivityBannerY?: Animated.Value;
   player: AudioPlayer;
   queue: Song[];
   index: number;
@@ -845,6 +849,61 @@ export default function PlayerSheet(p: Props) {
       onRequestClose={() => dismissPlayer()}
     >
       <View style={playerStyles.modalRoot}>
+        {p.connectivityBanner &&
+          p.connectivityBannerOpacity &&
+          p.connectivityBannerScale &&
+          p.connectivityBannerY && (
+            <View
+              pointerEvents="none"
+              style={playerStyles.connectivityBannerWrap}
+            >
+              <Animated.View
+                style={[
+                  playerStyles.connectivityBanner,
+                  {
+                    opacity: p.connectivityBannerOpacity,
+                    transform: [
+                      { translateY: p.connectivityBannerY },
+                      { scale: p.connectivityBannerScale },
+                    ],
+                  },
+                ]}
+              >
+                <View style={playerStyles.connectivityBannerIcon}>
+                  <Ionicons
+                    name={
+                      p.connectivityBanner === 'offline'
+                        ? 'cloud-offline-outline'
+                        : 'checkmark-circle'
+                    }
+                    size={17}
+                    color={
+                      p.connectivityBanner === 'offline'
+                        ? 'rgba(255,255,255,0.72)'
+                        : '#ff375f'
+                    }
+                  />
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <Text style={playerStyles.connectivityBannerTitle}>
+                    {p.connectivityBanner === 'offline'
+                      ? 'Sei offline'
+                      : 'Di nuovo online'}
+                  </Text>
+                  <Text
+                    style={playerStyles.connectivityBannerMessage}
+                    numberOfLines={1}
+                  >
+                    {p.connectivityBanner === 'offline'
+                      ? 'Continui con la musica disponibile su questo iPhone.'
+                      : 'La libreria online è di nuovo disponibile.'}
+                  </Text>
+                </View>
+              </Animated.View>
+            </View>
+          )}
+
         <Reanimated.View
           pointerEvents="none"
           style={[
@@ -1767,6 +1826,53 @@ const playerStyles = StyleSheet.create({
   modalRoot: {
     flex: 1,
     backgroundColor: 'transparent',
+  },
+  connectivityBannerWrap: {
+    position: 'absolute',
+    top: 16,
+    left: 14,
+    right: 14,
+    zIndex: 250,
+    elevation: 250,
+    alignItems: 'center',
+  },
+  connectivityBanner: {
+    width: '100%',
+    maxWidth: 390,
+    minHeight: 54,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    borderRadius: 27,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(32,24,38,0.94)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.16)',
+    shadowColor: '#000',
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  connectivityBannerIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  connectivityBannerTitle: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  connectivityBannerMessage: {
+    color: 'rgba(255,255,255,0.66)',
+    fontSize: 11,
+    lineHeight: 14,
+    marginTop: 2,
   },
   sheet: {
     flex: 1,
