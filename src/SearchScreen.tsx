@@ -10,6 +10,7 @@ import { useTheme } from './theme';
 import GlassBackground from './GlassBackground';
 import Discover from './Discover';
 import { DownloadBadge } from './OfflineDownloads';
+import { hapticSelection } from './haptics';
 
 type Item = { id: string; kind: 'track' | 'album'; title: string; artist: string; album: string; cover?: string; available: boolean; libraryMatch?: string };
 type Job = { id: string; target: string; title: string; status: string; message: string };
@@ -327,7 +328,12 @@ export default function SearchScreen({ isActive, onSettings, onPlay, onAlbum, on
     </View>
     {listening && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 9, paddingHorizontal: 8 }}><Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c.accent, transform: [{ scale: micScale }] }} /><Text accessibilityLiveRegion="polite" style={{ color: c.secondary, fontSize: 12 }}>Ascolto… parla ora</Text></View>}
     {!!speechError && !listening && <Text accessibilityLiveRegion="polite" style={{ color: c.secondary, fontSize: 12, marginTop: 9, paddingHorizontal: 8 }}>{speechError}</Text>}
-    <View style={{ flexDirection: 'row', borderRadius: 24, backgroundColor: c.surface, padding: 4, marginTop: 12 }}>{(['qobuz', 'library'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: scope === value }} onPress={() => value === 'qobuz' && currentAccount()?.offline ? Alert.alert('Qobuz richiede internet', 'Accedi online per cercare nel catalogo Qobuz.') : setScope(value)} style={{ flex: 1, padding: 10, alignItems: 'center', borderRadius: 20, backgroundColor: scope === value ? c.background : 'transparent' }}><Text style={text}>{value === 'qobuz' ? 'Qobuz' : 'Libreria'}</Text></Pressable>)}</View>
+    <View style={{ flexDirection: 'row', borderRadius: 24, backgroundColor: c.surface, padding: 4, marginTop: 12 }}>{(['qobuz', 'library'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: scope === value }} onPress={() => {
+          hapticSelection();
+          value === 'qobuz' && currentAccount()?.offline
+            ? Alert.alert('Qobuz richiede internet', 'Accedi online per cercare nel catalogo Qobuz.')
+            : setScope(value);
+        }} style={{ flex: 1, padding: 10, alignItems: 'center', borderRadius: 20, backgroundColor: scope === value ? c.background : 'transparent' }}><Text style={text}>{value === 'qobuz' ? 'Qobuz' : 'Libreria'}</Text></Pressable>)}</View>
   </View><ScrollView onScroll={onScroll} scrollEventThrottle={32} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, paddingBottom: 200 }}>
     {scope === 'qobuz' && !!query.trim() && <View style={{ paddingBottom: 16 }}><Text style={sub}>Scarica nella libreria: {targets.length === 1 ? targets[0].label : 'scegli la destinazione'}</Text>{targets.length > 1 && <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>{targets.map(target => <Pressable key={target.id} accessibilityRole="radio" accessibilityState={{ checked: destination === target.id }} onPress={() => setDestination(target.id)} style={{ borderRadius: 18, padding: 12, backgroundColor: c.surface }}><Text style={{ color: destination === target.id ? c.accent : c.secondary }}>{destination === target.id ? '✓ ' : ''}{target.label}</Text></Pressable>)}</View>}</View>}
     {!query.trim() && focused && !listening && <><View style={row}><Text style={{ ...text, flex: 1, fontWeight: '700', fontSize: 22 }}>Ricerche recenti</Text><Pressable onPress={() => saveRecent([])} accessibilityLabel="Cancella ricerche recenti"><Text style={{ color: c.accent }}>Cancella</Text></Pressable></View>{recent.map(value => <Pressable key={value} onPress={() => setQuery(value)} style={row}><Ionicons name="time-outline" size={23} color={c.secondary} /><Text style={{ ...text, flex: 1 }}>{value}</Text><Ionicons name="chevron-forward" color={c.secondary} size={18} /></Pressable>)}{!recent.length && <Text style={sub}>Le ricerche selezionate o confermate appariranno qui.</Text>}</>}
