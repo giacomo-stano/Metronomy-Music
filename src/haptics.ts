@@ -1,16 +1,39 @@
-import * as Haptics from 'expo-haptics';
+import {
+  nativeAppleMusicHapticsActive,
+  nativeAppleMusicHapticsTrackAvailable,
+  nativeMusicHapticsAvailable,
+  playNativeMusicHaptic,
+  setNativeMusicHapticsISRC,
+  stopNativeMusicHaptics,
+} from '../modules/metronomy-audio-controls';
 
-export type MusicHapticStrength = 'light' | 'medium';
+export { nativeMusicHapticsAvailable };
 
 export function musicBeatHaptic(
-  strength: MusicHapticStrength = 'light'
+  intensity = 0.55,
+  sharpness = 0.42
 ) {
-  const style =
-    strength === 'medium'
-      ? Haptics.ImpactFeedbackStyle.Medium
-      : Haptics.ImpactFeedbackStyle.Light;
+  playNativeMusicHaptic(intensity, sharpness);
+}
 
-  void Haptics.impactAsync(style).catch(() => {
-    // Music haptics are best-effort and must never affect playback.
-  });
+export function stopMusicHaptics() {
+  stopNativeMusicHaptics();
+}
+
+export function configureAppleMusicHapticsISRC(
+  isrc?: string | null
+) {
+  setNativeMusicHapticsISRC(isrc);
+}
+
+export async function appleMusicHapticsWillHandleTrack(
+  isrc?: string | null
+) {
+  const code = isrc?.trim();
+
+  if (!code || !nativeAppleMusicHapticsActive()) {
+    return false;
+  }
+
+  return nativeAppleMusicHapticsTrackAvailable(code);
 }
