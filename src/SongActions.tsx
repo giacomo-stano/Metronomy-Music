@@ -5,7 +5,7 @@ import { SymbolView, type SFSymbol } from 'expo-symbols';
 import { request, type Song } from './api';
 import { useTheme } from './theme';
 import { LocalDownloadAction } from './OfflineDownloads';
-import { hapticSelection, hapticSuccess } from './haptics';
+import { hapticSelection } from './haptics';
 
 type Props = { onRemoveLocal?: () => void; song: Song; onClose: () => void; onPlay: () => void; onQueue: () => void; onBrowse: (type: 'album' | 'artist') => void; onDeleted: (id: string) => void; onFavorite: (id: string, value: boolean) => void };
 
@@ -64,7 +64,6 @@ export default function SongActions(p: Props) {
 
     setStar(result.starred);
     p.onFavorite(p.song.id, result.starred);
-    hapticSuccess();
   });
 
   const choosePlaylist = () => void perform(async () => {
@@ -79,7 +78,6 @@ export default function SongActions(p: Props) {
       {}
     );
 
-    hapticSuccess();
     Alert.alert('Playlist', 'Brano aggiunto.');
     close();
   });
