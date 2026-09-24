@@ -29,6 +29,7 @@ import ElasticPlayPauseButton from './src/ElasticPlayPauseButton';
 import { migrateBrandData } from './src/brandMigration';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addRemoteNextListener, addRemotePreviousListener, setRemoteControlsEnabled } from './modules/metronomy-audio-controls';
+import { hapticLight, hapticSelection } from './src/haptics';
 
 type Tab = 'Home' | 'Novità' | 'Libreria' | 'Cerca';
 
@@ -2265,7 +2266,10 @@ function MusicApp({
 
         <Pressable
           style={s.miniMain}
-          onPressIn={() => setExpanded(true)}
+          onPressIn={() => {
+            hapticLight();
+            setExpanded(true);
+          }}
           onPress={() => setExpanded(true)}
           accessibilityRole="button"
           accessibilityLabel="Apri player"
@@ -2300,7 +2304,10 @@ function MusicApp({
           style={s.miniButton}
           accessibilityLabel="Brano successivo"
           disabled={index + 1 >= queue.length && repeat !== 'all' && !shuffle}
-          onPress={next}
+          onPress={() => {
+            hapticLight();
+            next();
+          }}
         >
           <Ionicons
             name="play-forward"
@@ -2440,6 +2447,10 @@ function LiquidTabBar({
 
   const animateHoveredItem = (index: number, active: boolean) => {
     if (!active || hoveredIndex.current !== index) {
+      if (active && hoveredIndex.current !== index) {
+        hapticSelection();
+      }
+
       hoveredIndex.current = index;
       Animated.parallel(
         itemScales.map((scale, i) =>
@@ -2503,7 +2514,13 @@ function LiquidTabBar({
       onPanResponderGrant: event => {
         dragging.current = true;
         const x = event.nativeEvent.locationX;
-        hoveredIndex.current = indexForX(x);
+        const index = indexForX(x);
+
+        if (index !== selectedIndex.current) {
+          hapticSelection();
+        }
+
+        hoveredIndex.current = index;
         moveLensToFinger(x);
         setPressed(true);
       },
