@@ -45,6 +45,8 @@ type Props = {
   onRepeat: () => void;
   shuffle: boolean;
   onShuffle: () => void;
+  musicHapticsEnabled: boolean;
+  onToggleMusicHaptics: () => void;
   onBrowse: (type: 'album' | 'artist') => void;
   onFavorite: (starred: boolean) => void;
   onSleep: (minutes: number) => void;
@@ -1381,6 +1383,46 @@ export default function PlayerSheet(p: Props) {
                       <Text style={playerStyles.timeText}>
                         {clock(currentTime)}
                       </Text>
+
+                      <Pressable
+                        accessibilityRole="switch"
+                        accessibilityState={{ checked: p.musicHapticsEnabled }}
+                        accessibilityLabel={
+                          p.musicHapticsEnabled
+                            ? 'Disattiva feedback aptico musicale'
+                            : 'Attiva feedback aptico musicale'
+                        }
+                        onPress={p.onToggleMusicHaptics}
+                        style={[
+                          playerStyles.hapticsChip,
+                          p.musicHapticsEnabled &&
+                            playerStyles.hapticsChipActive,
+                        ]}
+                      >
+                        <SymbolView
+                          name={'hand.tap' as SFSymbol}
+                          size={9}
+                          weight="regular"
+                          tintColor={
+                            p.musicHapticsEnabled
+                              ? '#ffffff'
+                              : 'rgba(255,255,255,0.48)'
+                          }
+                        />
+                        <Text
+                          style={[
+                            playerStyles.hapticsText,
+                            p.musicHapticsEnabled && {
+                              color: '#ffffff',
+                            },
+                          ]}
+                        >
+                          {p.musicHapticsEnabled
+                            ? 'Feedback aptici attivi'
+                            : 'Feedback aptici'}
+                        </Text>
+                      </Pressable>
+
                       <Text style={playerStyles.timeText}>
                         −{clock(remainingTime)}
                       </Text>
@@ -2123,6 +2165,10 @@ const playerStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
+  },
+  hapticsChipActive: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderColor: 'rgba(255,255,255,0.22)',
   },
   hapticsText: {
     color: 'rgba(255,255,255,0.40)',
