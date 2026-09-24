@@ -20,6 +20,12 @@ import { useTheme } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
 import ElasticPlayPauseButton from './ElasticPlayPauseButton';
 import { AirPlayButton, SystemVolumeSlider, nativeAirPlayAvailable, nativeSystemVolumeAvailable } from '../modules/metronomy-audio-controls';
+import {
+  hapticLight,
+  hapticRigid,
+  hapticSelection,
+  hapticSuccess,
+} from './haptics';
 
 type Props = {
   visible: boolean;
@@ -139,6 +145,7 @@ function QueueDragRow({
     const targetRealIndex = minIndex + targetLocalIndex;
 
     if (onMove && targetRealIndex !== realIndex) {
+      hapticLight();
       onMove(realIndex, targetRealIndex);
     }
 
@@ -153,6 +160,7 @@ function QueueDragRow({
       hoverIndex.value = localIndex;
       dragY.value = 0;
       dragging.value = withTiming(1, { duration: 85 });
+      runOnJS(hapticRigid)();
     })
     .onUpdate(event => {
       const minY = -localIndex * QUEUE_ROW_HEIGHT;
@@ -189,6 +197,7 @@ function QueueDragRow({
 
       if (hoverIndex.value !== target) {
         hoverIndex.value = target;
+        runOnJS(hapticSelection)();
       }
     })
     .onEnd(() => {
@@ -272,7 +281,10 @@ function QueueDragRow({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={'Riproduci ' + song.title}
-        onPress={() => onSelect(realIndex)}
+        onPress={() => {
+          hapticLight();
+          onSelect(realIndex);
+        }}
         style={playerStyles.queueRowMain}
       >
         {artwork ? (
@@ -494,6 +506,7 @@ export default function PlayerSheet(p: Props) {
   const remainingTime = Math.max(0, duration - currentTime);
   const seek = (value: number) => { void p.player.seekTo(Math.min(duration, Math.max(0, value))).catch(() => Alert.alert('Riproduzione', 'Impossibile spostarsi nel brano.')); };
   const openMenu = () => {
+    hapticLight();
     setPlaylists(null);
     setMenu(true);
   };
@@ -694,7 +707,7 @@ export default function PlayerSheet(p: Props) {
 
   async function favorite() {
     const songId = p.song.id; setFavoriteBusy(true);
-    try { const result = await request<{ starred: boolean }>('songs/' + encodeURIComponent(songId) + '/favorite', 15000, { enabled: !starred }); if (mounted.current && activeSong.current === songId) { setStarred(result.starred); p.onFavorite(result.starred); } }
+    try { const result = await request<{ starred: boolean }>('songs/' + encodeURIComponent(songId) + '/favorite', 15000, { enabled: !starred }); if (mounted.current && activeSong.current === songId) { setStarred(result.starred); p.onFavorite(result.starred); hapticSuccess(); } }
     catch (e) { Alert.alert('Preferiti', e instanceof Error ? e.message : 'Operazione non riuscita'); }
     finally { if (mounted.current) setFavoriteBusy(false); }
   }
@@ -837,8 +850,14 @@ export default function PlayerSheet(p: Props) {
     outputRange: [18, 0],
   });
 
-  const toggleQueue = () => setMode(v => (v === 'queue' ? 'cover' : 'queue'));
-  const toggleLyrics = () => setMode(v => (v === 'lyrics' ? 'cover' : 'lyrics'));
+  const toggleQueue = () => {
+    hapticSelection();
+    setMode(v => (v === 'queue' ? 'cover' : 'queue'));
+  };
+  const toggleLyrics = () => {
+    hapticSelection();
+    setMode(v => (v === 'lyrics' ? 'cover' : 'lyrics'));
+  };
 
   return (
     <Modal
@@ -1208,7 +1227,10 @@ export default function PlayerSheet(p: Props) {
 
                     <View style={playerStyles.queuePills}>
                       <Pressable
-                        onPress={p.onShuffle}
+                        onPress={() => {
+                          hapticSelection();
+                          p.onShuffle();
+                        }}
                         style={[
                           playerStyles.queuePill,
                           p.shuffle && playerStyles.queuePillSelected,
@@ -1223,7 +1245,10 @@ export default function PlayerSheet(p: Props) {
                       </Pressable>
 
                       <Pressable
-                        onPress={p.onRepeat}
+                        onPress={() => {
+                          hapticSelection();
+                          p.onRepeat();
+                        }}
                         style={[
                           playerStyles.queuePill,
                           p.repeat !== 'off' && playerStyles.queuePillSelected,
@@ -1243,7 +1268,10 @@ export default function PlayerSheet(p: Props) {
                       </Pressable>
 
                       <Pressable
-                        onPress={() => setAutoplay(v => !v)}
+                        onPress={() => {
+                          hapticSelection();
+                          setAutoplay(v => !v);
+                        }}
                         style={[
                           playerStyles.queuePill,
                           autoplay && playerStyles.queuePillSelected,
@@ -1258,7 +1286,10 @@ export default function PlayerSheet(p: Props) {
                       </Pressable>
 
                       <Pressable
-                        onPress={() => setAutomix(v => !v)}
+                        onPress={() => {
+                          hapticSelection();
+                          setAutomix(v => !v);
+                        }}
                         style={[
                           playerStyles.queuePill,
                           automix && playerStyles.queuePillSelected,
@@ -1374,22 +1405,12 @@ export default function PlayerSheet(p: Props) {
                       track="rgba(255,255,255,0.25)"
                       label="Posizione del brano"
                       height={4}
+                      haptics
                     />
                     <View style={playerStyles.timeRow}>
                       <Text style={playerStyles.timeText}>
                         {clock(currentTime)}
                       </Text>
-                      <View style={playerStyles.hapticsChip}>
-                        <SymbolView
-                          name={'hand.tap' as SFSymbol}
-                          size={9}
-                          weight="regular"
-                          tintColor="rgba(255,255,255,0.48)"
-                        />
-                        <Text style={playerStyles.hapticsText}>
-                          Feedback aptici in pausa
-                        </Text>
-                      </View>
                       <Text style={playerStyles.timeText}>
                         −{clock(remainingTime)}
                       </Text>
@@ -1399,7 +1420,10 @@ export default function PlayerSheet(p: Props) {
                   <View style={playerStyles.transportRow}>
                     <Pressable
                       accessibilityLabel="Brano precedente"
-                      onPress={p.onPrevious}
+                      onPress={() => {
+                        hapticLight();
+                        p.onPrevious();
+                      }}
                       style={playerStyles.transportButton}
                     >
                       <SymbolView
@@ -1429,7 +1453,10 @@ export default function PlayerSheet(p: Props) {
                         p.repeat !== 'all' &&
                         !p.shuffle
                       }
-                      onPress={p.onNext}
+                      onPress={() => {
+                        hapticLight();
+                        p.onNext();
+                      }}
                       style={[
                         playerStyles.transportButton,
                         p.index + 1 >= p.queue.length &&
@@ -2343,6 +2370,7 @@ function Range({
   track,
   label,
   height = 5,
+  haptics = false,
 }: {
   value: number;
   onChange: (value: number) => void;
@@ -2350,8 +2378,10 @@ function Range({
   track: string;
   label: string;
   height?: number;
+  haptics?: boolean;
 }) {
   const width = useRef(1);
+  const lastHapticStep = useRef(-1);
   const [drag, setDrag] = useState<number | null>(null);
   const position = (x: number) =>
     Math.min(1, Math.max(0, x / width.current));
@@ -2379,13 +2409,32 @@ function Range({
         width.current = e.nativeEvent.layout.width;
       }}
       onStartShouldSetResponder={() => true}
-      onResponderGrant={e => setDrag(position(e.nativeEvent.locationX))}
-      onResponderMove={e => setDrag(position(e.nativeEvent.locationX))}
+      onResponderGrant={e => {
+        const next = position(e.nativeEvent.locationX);
+        lastHapticStep.current = Math.round(next * 20);
+        if (haptics) hapticSelection();
+        setDrag(next);
+      }}
+      onResponderMove={e => {
+        const next = position(e.nativeEvent.locationX);
+        const step = Math.round(next * 20);
+
+        if (haptics && step !== lastHapticStep.current) {
+          lastHapticStep.current = step;
+          hapticSelection();
+        }
+
+        setDrag(next);
+      }}
       onResponderRelease={e => {
         onChange(position(e.nativeEvent.locationX));
+        lastHapticStep.current = -1;
         setDrag(null);
       }}
-      onResponderTerminate={() => setDrag(null)}
+      onResponderTerminate={() => {
+        lastHapticStep.current = -1;
+        setDrag(null);
+      }}
       style={{ height: 28, justifyContent: 'center' }}
     >
       <View
