@@ -1,5 +1,5 @@
 export type Album = { id: string; name: string; artist?: string; coverArt?: string; year?: number };
-export type Song = { id: string; title: string; artist: string; album?: string; albumId?: string; artistId?: string; starred?: boolean; duration: number; coverArt?: string };
+export type Song = { id: string; title: string; artist: string; album?: string; albumId?: string; artistId?: string; starred?: boolean; duration: number; coverArt?: string; isrc?: string };
 export type HomeResponse = { recentAlbums: Album[]; madeForYou: Song[] };
 export type SearchResponse = { artists: Array<{ id: string; name: string }>; albums: Album[]; songs: Song[] };
 export type Lyrics = { synced: boolean; offset?: number; line: { start?: number; value: string }[] };
