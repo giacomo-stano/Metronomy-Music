@@ -367,6 +367,8 @@ function MusicApp({
   const [actionSong, setActionSong] = useState<Song | null>(null);
   const [actionAlbum, setActionAlbum] = useState<Album | null>(null);
   const [tab, setTab] = useState<Tab>('Home');
+  const mountedTabs = useRef<Set<Tab>>(new Set(['Home']));
+  mountedTabs.current.add(tab);
   const [home, setHome] = useState<HomeResponse | null>(null);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -503,6 +505,10 @@ function MusicApp({
   const [lyricsSource, setLyricsSource] = useState('');
   const [reload, setReload] = useState(0);
   const generation = useRef(0);
+  const catalogLoadKeys = useRef<Record<'Home' | 'Novità', string>>({
+    Home: '',
+    Novità: '',
+  });
   const player = useAudioPlayer(null, { updateInterval: 250 });
   const status = usePlaybackSignals(player);
   const current = queue[index];
@@ -1053,6 +1059,28 @@ function MusicApp({
       };
     }
 
+    const catalogLoadKey = `${reload}:${isOffline ? 'offline' : 'online'}`;
+
+    if (
+      tab === 'Home' &&
+      home &&
+      catalogLoadKeys.current.Home === catalogLoadKey
+    ) {
+      setError('');
+      setBusy(false);
+      return;
+    }
+
+    if (
+      tab === 'Novità' &&
+      albums.length > 0 &&
+      catalogLoadKeys.current.Novità === catalogLoadKey
+    ) {
+      setError('');
+      setBusy(false);
+      return;
+    }
+
     setError('');
 
     const hasVisibleCatalog =
@@ -1115,6 +1143,7 @@ function MusicApp({
           ]);
 
           if (generation.current === version) {
+            catalogLoadKeys.current.Home = catalogLoadKey;
             revealCatalog(() => setHome(data));
           }
         } else if (tab === 'Cerca') {
@@ -1138,6 +1167,7 @@ function MusicApp({
           await warmArtwork(data.albums);
 
           if (generation.current === version) {
+            catalogLoadKeys.current.Novità = catalogLoadKey;
             revealCatalog(() => {
               setAlbums(data.albums);
               setHasMore(data.hasMore);
@@ -1517,114 +1547,7 @@ function MusicApp({
   const featured = (items: Album[]) => <ScrollView horizontal showsHorizontalScrollIndicator={false} decelerationRate="fast" snapToInterval={Math.min(width - 72, 320) + 14} contentContainerStyle={{ gap: 14 }}>{items.slice(0, 6).map(item => <View key={item.id} style={{ width: Math.min(width - 72, 320), borderRadius: 16, overflow: 'hidden', backgroundColor: c.surface }}><Pressable onPress={() => openAlbum(item)} accessibilityLabel={'Apri ' + item.name}><Artwork id={item.coverArt} size={Math.min(width - 72, 320)} /></Pressable><View style={{ padding: 16 }}><Text style={{ color: c.accent, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>NELLA TUA LIBRERIA</Text>{albumCaption(item)}</View></View>)}</ScrollView>;
   const cards = (items: Album[], rail = false) => <View style={rail ? s.rail : s.grid}>{items.map(item => <View key={item.id} style={{ width: rail ? 155 : (width - 54) / 2 }}><Pressable onPress={() => openAlbum(item)} accessibilityRole="button" accessibilityLabel={'Apri album ' + item.name}><Artwork id={item.coverArt} size={rail ? 155 : (width - 54) / 2} /></Pressable>{albumCaption(item)}</View>)}</View>;
 
-  return (
-    <SafeAreaView
-      ref={safeAreaRef}
-      style={s.safe}
-      onLayout={event => {
-        const { width: layoutWidth, height: layoutHeight } = event.nativeEvent.layout;
-        updateSafeAreaMetrics(layoutWidth, layoutHeight);
-      }}
-    >
-    <StatusBar style={album ? 'light' : isDark ? 'light' : 'dark'} />
-    {connectivityBanner && (
-      <View pointerEvents="none" style={s.connectivityBannerWrap}>
-        <Animated.View
-          style={[
-            s.connectivityBanner,
-            {
-              opacity: connectivityBannerOpacity,
-              transform: [
-                { translateY: connectivityBannerY },
-                { scale: connectivityBannerScale },
-              ],
-            },
-          ]}
-        >
-          <View
-            style={[
-              s.connectivityBannerIcon,
-              connectivityBanner === 'online' && {
-                backgroundColor: c.background,
-              },
-            ]}
-          >
-            <Ionicons
-              name={
-                connectivityBanner === 'offline'
-                  ? 'cloud-offline-outline'
-                  : 'checkmark-circle'
-              }
-              size={15}
-              color={
-                connectivityBanner === 'offline'
-                  ? c.secondary
-                  : c.accent
-              }
-            />
-          </View>
-
-          <Text style={s.connectivityBannerTitle}>
-            {connectivityBanner === 'offline'
-              ? 'Sei offline'
-              : 'Di nuovo online'}
-          </Text>
-        </Animated.View>
-      </View>
-    )}
-    {settingsOpen && (
-      <SettingsScreen
-        onClose={() => setSettingsOpen(false)}
-        onLogout={() => {
-          audioGeneration.current++;
-
-          try {
-            player.pause();
-          } catch {}
-
-          setQueue([]);
-          setIndex(-1);
-          setExpanded(false);
-          setSettingsOpen(false);
-
-          onLogout();
-        }}
-      />
-    )}
-    {actionAlbum && <AlbumActions key={actionAlbum.id} album={actionAlbum} onClose={() => setActionAlbum(null)} onOpen={() => openAlbum(actionAlbum)} onPlay={songs => start(songs, 0, false)} onQueue={songs => { if (!current) start(songs, 0, false); else setQueue(old => [...old, ...songs]); }} onDeleted={(ids, complete) => { deletedSongs(ids); if (complete && album?.id === actionAlbum.id) setAlbum(null); }} />}
-    {actionSong && <SongActions key={actionSong.id} song={actionSong} onClose={() => setActionSong(null)} onPlay={() => start([actionSong], 0, false)} onQueue={() => { if (!current) start([actionSong], 0, false); else setQueue(old => [...old, actionSong]); }} onBrowse={type => browseSong(actionSong, type)} onDeleted={deleted} onFavorite={(id, starred) => { setQueue(old => old.map(song => song.id === id ? { ...song, starred } : song)); setReload(v => v + 1); }} />}
-    {tab === 'Libreria' && (
-      <View style={s.flex}>
-        <LibraryScreen
-          revision={reload}
-          onSettings={() => setSettingsOpen(true)}
-          onPlay={start}
-          onAlbum={openAlbum}
-          onAlbumActions={setActionAlbum}
-          onActions={setActionSong}
-          onScroll={mini.onScroll}
-          currentId={current?.id}
-          isPlaying={!!status.playing}
-        />
-      </View>
-    )}
-
-    {tab === 'Cerca' && (
-      <SearchScreen
-        key={query + ':' + (isOffline ? 'offline' : 'online')}
-        initialQuery={query}
-        onSettings={() => setSettingsOpen(true)}
-        onPlay={song => start([song], 0, false)}
-        onAlbum={openAlbum}
-        onAlbumActions={setActionAlbum}
-        beforePreview={() => player.pause()}
-        localPlaying={status.playing}
-        onActions={setActionSong}
-        onScroll={mini.onScroll}
-      />
-    )}
-
-    {tab !== 'Libreria' && tab !== 'Cerca' && (
+  const renderCatalogPage = (targetTab: 'Home' | 'Novità') => (
       <ScrollView
         style={s.flex}
         contentContainerStyle={s.page}
@@ -1633,7 +1556,7 @@ function MusicApp({
         scrollEventThrottle={32}
       >
         <View style={s.headingRow}>
-          <Text style={[s.title, { flex: 1 }]}>{tab}</Text>
+          <Text style={[s.title, { flex: 1 }]}>{targetTab}</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Apri impostazioni"
@@ -1648,7 +1571,7 @@ function MusicApp({
           </Pressable>
         </View>
 
-        {tab === 'Home' && isOffline && (
+        {targetTab === 'Home' && isOffline && (
           <View style={s.offlineNotice}>
             <View style={s.offlineNoticeIcon}>
               <Ionicons
@@ -1728,7 +1651,7 @@ function MusicApp({
         )}
 
         <Animated.View style={{ opacity: catalogOpacity }}>
-        {tab === 'Home' ? (
+        {targetTab === 'Home' ? (
           <>
             {home && (
               <>
@@ -1782,6 +1705,136 @@ function MusicApp({
         )}
         </Animated.View>
       </ScrollView>
+  );
+
+  return (
+    <SafeAreaView
+      ref={safeAreaRef}
+      style={s.safe}
+      onLayout={event => {
+        const { width: layoutWidth, height: layoutHeight } = event.nativeEvent.layout;
+        updateSafeAreaMetrics(layoutWidth, layoutHeight);
+      }}
+    >
+    <StatusBar style={album ? 'light' : isDark ? 'light' : 'dark'} />
+    {connectivityBanner && (
+      <View pointerEvents="none" style={s.connectivityBannerWrap}>
+        <Animated.View
+          style={[
+            s.connectivityBanner,
+            {
+              opacity: connectivityBannerOpacity,
+              transform: [
+                { translateY: connectivityBannerY },
+                { scale: connectivityBannerScale },
+              ],
+            },
+          ]}
+        >
+          <View
+            style={[
+              s.connectivityBannerIcon,
+              connectivityBanner === 'online' && {
+                backgroundColor: c.background,
+              },
+            ]}
+          >
+            <Ionicons
+              name={
+                connectivityBanner === 'offline'
+                  ? 'cloud-offline-outline'
+                  : 'checkmark-circle'
+              }
+              size={15}
+              color={
+                connectivityBanner === 'offline'
+                  ? c.secondary
+                  : c.accent
+              }
+            />
+          </View>
+
+          <Text style={s.connectivityBannerTitle}>
+            {connectivityBanner === 'offline'
+              ? 'Sei offline'
+              : 'Di nuovo online'}
+          </Text>
+        </Animated.View>
+      </View>
+    )}
+    {settingsOpen && (
+      <SettingsScreen
+        onClose={() => setSettingsOpen(false)}
+        onLogout={() => {
+          audioGeneration.current++;
+
+          try {
+            player.pause();
+          } catch {}
+
+          setQueue([]);
+          setIndex(-1);
+          setExpanded(false);
+          setSettingsOpen(false);
+
+          onLogout();
+        }}
+      />
+    )}
+    {actionAlbum && <AlbumActions key={actionAlbum.id} album={actionAlbum} onClose={() => setActionAlbum(null)} onOpen={() => openAlbum(actionAlbum)} onPlay={songs => start(songs, 0, false)} onQueue={songs => { if (!current) start(songs, 0, false); else setQueue(old => [...old, ...songs]); }} onDeleted={(ids, complete) => { deletedSongs(ids); if (complete && album?.id === actionAlbum.id) setAlbum(null); }} />}
+    {actionSong && <SongActions key={actionSong.id} song={actionSong} onClose={() => setActionSong(null)} onPlay={() => start([actionSong], 0, false)} onQueue={() => { if (!current) start([actionSong], 0, false); else setQueue(old => [...old, actionSong]); }} onBrowse={type => browseSong(actionSong, type)} onDeleted={deleted} onFavorite={(id, starred) => { setQueue(old => old.map(song => song.id === id ? { ...song, starred } : song)); setReload(v => v + 1); }} />}
+    {mountedTabs.current.has('Libreria') && (
+      <View
+        pointerEvents={tab === 'Libreria' ? 'auto' : 'none'}
+        style={[s.flex, tab !== 'Libreria' && { display: 'none' }]}
+      >
+        <LibraryScreen
+          revision={reload}
+          onSettings={() => setSettingsOpen(true)}
+          onPlay={start}
+          onAlbum={openAlbum}
+          onAlbumActions={setActionAlbum}
+          onActions={setActionSong}
+          onScroll={mini.onScroll}
+          currentId={current?.id}
+          isPlaying={!!status.playing}
+        />
+      </View>
+    )}
+
+    {mountedTabs.current.has('Cerca') && (
+      <View
+        pointerEvents={tab === 'Cerca' ? 'auto' : 'none'}
+        style={[s.flex, tab !== 'Cerca' && { display: 'none' }]}
+      >
+      <SearchScreen
+        key={query + ':' + (isOffline ? 'offline' : 'online')}
+        initialQuery={query}
+        onSettings={() => setSettingsOpen(true)}
+        onPlay={song => start([song], 0, false)}
+        onAlbum={openAlbum}
+        onAlbumActions={setActionAlbum}
+        beforePreview={() => player.pause()}
+        localPlaying={status.playing}
+        onActions={setActionSong}
+        onScroll={mini.onScroll}
+      />
+      </View>
+    )}
+
+    {(['Home', 'Novità'] as const).map(targetTab =>
+      mountedTabs.current.has(targetTab) ? (
+        <View
+          key={targetTab}
+          pointerEvents={tab === targetTab ? 'auto' : 'none'}
+          style={[
+            s.flex,
+            tab !== targetTab && { display: 'none' },
+          ]}
+        >
+          {renderCatalogPage(targetTab)}
+        </View>
+      ) : null
     )}
 
     {album && (() => {
