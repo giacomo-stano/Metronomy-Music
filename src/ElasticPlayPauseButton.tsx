@@ -9,7 +9,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { SymbolView } from 'expo-symbols';
 
 import Pressable from './SpringPressable';
-import { hapticMedium } from './haptics';
 
 type Props = {
   playing: boolean;
@@ -195,7 +194,6 @@ export default function ElasticPlayPauseButton({
   }
 
   function handlePress() {
-    hapticMedium();
     animateTo(!playingRef.current, true);
     onPress();
   }
