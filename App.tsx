@@ -26,6 +26,7 @@ import { OfflineProvider, useOffline, DownloadBadge } from './src/OfflineDownloa
 import { clearAlbumSongsCache, peekAlbumSongs, preloadAlbumSongs } from './src/albumPrefetch';
 import NowPlayingWaves from './src/NowPlayingWaves';
 import ElasticPlayPauseButton from './src/ElasticPlayPauseButton';
+import { useMusicHaptics } from './src/useMusicHaptics';
 import { migrateBrandData } from './src/brandMigration';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addRemoteNextListener, addRemotePreviousListener, setRemoteControlsEnabled } from './modules/metronomy-audio-controls';
@@ -512,6 +513,12 @@ function MusicApp({
   const player = useAudioPlayer(null, { updateInterval: 250 });
   const status = usePlaybackSignals(player);
   const current = queue[index];
+
+  useMusicHaptics(
+    player,
+    !!status.playing && !status.isBuffering,
+    current?.id
+  );
 
   useEffect(() => {
     if (!current?.coverArt || isOffline) return;
