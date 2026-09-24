@@ -24,7 +24,6 @@ import {
   hapticLight,
   hapticRigid,
   hapticSelection,
-  hapticSuccess,
 } from './haptics';
 
 type Props = {
@@ -706,8 +705,9 @@ export default function PlayerSheet(p: Props) {
   }
 
   async function favorite() {
+    hapticSelection();
     const songId = p.song.id; setFavoriteBusy(true);
-    try { const result = await request<{ starred: boolean }>('songs/' + encodeURIComponent(songId) + '/favorite', 15000, { enabled: !starred }); if (mounted.current && activeSong.current === songId) { setStarred(result.starred); p.onFavorite(result.starred); hapticSuccess(); } }
+    try { const result = await request<{ starred: boolean }>('songs/' + encodeURIComponent(songId) + '/favorite', 15000, { enabled: !starred }); if (mounted.current && activeSong.current === songId) { setStarred(result.starred); p.onFavorite(result.starred); } }
     catch (e) { Alert.alert('Preferiti', e instanceof Error ? e.message : 'Operazione non riuscita'); }
     finally { if (mounted.current) setFavoriteBusy(false); }
   }
