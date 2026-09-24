@@ -104,8 +104,14 @@ export function useMusicHaptics(
     if (strongTransient && sinceLastPulse >= 0.22) {
       current.lastPulse = timestamp;
 
+      const strength = Math.min(
+        1,
+        Math.max(0, (energy / Math.max(baseline, 0.008) - 1.3) / 1.8)
+      );
+
       musicBeatHaptic(
-        energy > baseline * 2.35 ? 'medium' : 'light'
+        0.42 + strength * 0.46,
+        0.30 + strength * 0.34
       );
     }
 
