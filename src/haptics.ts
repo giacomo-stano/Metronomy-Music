@@ -1,27 +1,16 @@
 import * as Haptics from 'expo-haptics';
 
-const fire = (action: Promise<void>) => {
-  void action.catch(() => {
-    // Haptics are best-effort: unsupported/disabled devices must never
-    // interrupt a music interaction.
+export type MusicHapticStrength = 'light' | 'medium';
+
+export function musicBeatHaptic(
+  strength: MusicHapticStrength = 'light'
+) {
+  const style =
+    strength === 'medium'
+      ? Haptics.ImpactFeedbackStyle.Medium
+      : Haptics.ImpactFeedbackStyle.Light;
+
+  void Haptics.impactAsync(style).catch(() => {
+    // Music haptics are best-effort and must never affect playback.
   });
-};
-
-export const hapticSelection = () =>
-  fire(Haptics.selectionAsync());
-
-export const hapticLight = () =>
-  fire(Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
-
-export const hapticMedium = () =>
-  fire(Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
-
-export const hapticRigid = () =>
-  fire(Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid));
-
-export const hapticSuccess = () =>
-  fire(
-    Haptics.notificationAsync(
-      Haptics.NotificationFeedbackType.Success
-    )
-  );
+}
