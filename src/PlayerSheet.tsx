@@ -1418,8 +1418,8 @@ export default function PlayerSheet(p: Props) {
                           ]}
                         >
                           {p.musicHapticsEnabled
-                            ? 'Feedback aptici attivi'
-                            : 'Feedback aptici'}
+                            ? 'Music Haptics attivi'
+                            : 'Music Haptics'}
                         </Text>
                       </Pressable>
 
