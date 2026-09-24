@@ -499,6 +499,7 @@ function MusicApp({
   const remembered = useRef('');
   const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off');
   const [shuffle, setShuffle] = useState(false);
+  const [musicHapticsEnabled, setMusicHapticsEnabled] = useState(false);
   const [sleepMinutes, setSleepMinutes] = useState(0);
   const sleepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lyrics, setLyrics] = useState<Lyrics | null>(null);
@@ -516,7 +517,7 @@ function MusicApp({
 
   useMusicHaptics(
     player,
-    !!status.playing,
+    musicHapticsEnabled && !!status.playing,
     current?.id
   );
 
@@ -2333,7 +2334,7 @@ function MusicApp({
     />
     </View>
 
-    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} connectivityBanner={connectivityBanner} connectivityBannerOpacity={connectivityBannerOpacity} connectivityBannerScale={connectivityBannerScale} connectivityBannerY={connectivityBannerY} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => lastKnownPosition.current > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
+    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} connectivityBanner={connectivityBanner} connectivityBannerOpacity={connectivityBannerOpacity} connectivityBannerScale={connectivityBannerScale} connectivityBannerY={connectivityBannerY} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => lastKnownPosition.current > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} musicHapticsEnabled={musicHapticsEnabled} onToggleMusicHaptics={() => setMusicHapticsEnabled(v => !v)} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
     </SafeAreaView>
   );
 }
