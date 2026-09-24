@@ -10,7 +10,6 @@ import { useTheme } from './theme';
 import GlassBackground from './GlassBackground';
 import Discover from './Discover';
 import { DownloadBadge } from './OfflineDownloads';
-import { hapticSelection } from './haptics';
 
 type Item = { id: string; kind: 'track' | 'album'; title: string; artist: string; album: string; cover?: string; available: boolean; libraryMatch?: string };
 type Job = { id: string; target: string; title: string; status: string; message: string };
@@ -329,7 +328,6 @@ export default function SearchScreen({ isActive, onSettings, onPlay, onAlbum, on
     {listening && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 9, paddingHorizontal: 8 }}><Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c.accent, transform: [{ scale: micScale }] }} /><Text accessibilityLiveRegion="polite" style={{ color: c.secondary, fontSize: 12 }}>Ascolto… parla ora</Text></View>}
     {!!speechError && !listening && <Text accessibilityLiveRegion="polite" style={{ color: c.secondary, fontSize: 12, marginTop: 9, paddingHorizontal: 8 }}>{speechError}</Text>}
     <View style={{ flexDirection: 'row', borderRadius: 24, backgroundColor: c.surface, padding: 4, marginTop: 12 }}>{(['qobuz', 'library'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: scope === value }} onPress={() => {
-          hapticSelection();
           value === 'qobuz' && currentAccount()?.offline
             ? Alert.alert('Qobuz richiede internet', 'Accedi online per cercare nel catalogo Qobuz.')
             : setScope(value);
