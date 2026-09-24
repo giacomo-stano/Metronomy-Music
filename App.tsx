@@ -1809,6 +1809,7 @@ function MusicApp({
       >
       <SearchScreen
         key={query + ':' + (isOffline ? 'offline' : 'online')}
+        isActive={tab === 'Cerca'}
         initialQuery={query}
         onSettings={() => setSettingsOpen(true)}
         onPlay={song => start([song], 0, false)}
