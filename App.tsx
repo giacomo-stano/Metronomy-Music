@@ -516,7 +516,7 @@ function MusicApp({
 
   useMusicHaptics(
     player,
-    !!status.playing && !status.isBuffering,
+    !!status.playing,
     current?.id
   );
 
