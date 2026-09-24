@@ -5,7 +5,7 @@ import { SymbolView, type SFSymbol } from 'expo-symbols';
 import { request, type Album, type Song } from './api';
 import { useTheme } from './theme';
 import { useOffline } from './OfflineDownloads';
-import { hapticSelection, hapticSuccess } from './haptics';
+import { hapticSelection } from './haptics';
 
 type Props = { album: Album; onClose: () => void; onOpen: () => void; onPlay: (songs: Song[]) => void; onQueue: (songs: Song[]) => void; onDeleted: (ids: string[], complete: boolean) => void };
 type Check = { title: string; artist: string; count: number; bytes: number; token: string; expires: number; warning?: string };
@@ -157,8 +157,6 @@ export default function AlbumActions(p: Props) {
           // attraverso DownloadBadge / stato del singolo brano.
         });
       }
-
-      hapticSuccess();
 
       Alert.alert(
         'Download album',
