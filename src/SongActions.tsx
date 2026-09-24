@@ -5,7 +5,6 @@ import { SymbolView, type SFSymbol } from 'expo-symbols';
 import { request, type Song } from './api';
 import { useTheme } from './theme';
 import { LocalDownloadAction } from './OfflineDownloads';
-import { hapticSelection } from './haptics';
 
 type Props = { onRemoveLocal?: () => void; song: Song; onClose: () => void; onPlay: () => void; onQueue: () => void; onBrowse: (type: 'album' | 'artist') => void; onDeleted: (id: string) => void; onFavorite: (id: string, value: boolean) => void };
 
@@ -148,10 +147,7 @@ export default function SongActions(p: Props) {
     <Pressable
       disabled={busy}
       accessibilityRole="button"
-      onPress={() => {
-        hapticSelection();
-        action();
-      }}
+      onPress={action}
       style={styles.row}
     >
       <View style={styles.iconBox}>
@@ -183,10 +179,7 @@ export default function SongActions(p: Props) {
   const action = (icon: SFSymbol, label: string, onPress: () => void) => (
     <Pressable
       disabled={busy}
-      onPress={() => {
-        hapticSelection();
-        onPress();
-      }}
+      onPress={onPress}
       style={styles.action}
     >
       <View style={[styles.actionCircle, { backgroundColor: isDark ? '#ffffff14' : '#0000000b' }]}>
