@@ -24,6 +24,7 @@ import { useTheme } from './theme';
 import { DownloadBadge, useOffline } from './OfflineDownloads';
 import { preloadAlbumSongs } from './albumPrefetch';
 import NowPlayingWaves from './NowPlayingWaves';
+import { hapticMedium, hapticSelection } from './haptics';
 
 type Page = {
   title: string;
@@ -288,11 +289,14 @@ export default function LibraryScreen(p: Props) {
     : entries;
 
   function playAll() {
-    if (visibleSongs.length) p.onPlay(visibleSongs, 0);
+    if (!visibleSongs.length) return;
+    hapticMedium();
+    p.onPlay(visibleSongs, 0);
   }
 
   function shuffleAll() {
     if (!visibleSongs.length) return;
+    hapticSelection();
     const shuffled = [...visibleSongs];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -446,6 +450,8 @@ export default function LibraryScreen(p: Props) {
   }
 
   function openTopMenu(kind: 'filter' | 'sort' | 'page') {
+    hapticSelection();
+
     if (topMenu === kind) {
       closeTopMenu();
       return;
