@@ -14,11 +14,11 @@ import { DownloadBadge } from './OfflineDownloads';
 type Item = { id: string; kind: 'track' | 'album'; title: string; artist: string; album: string; cover?: string; available: boolean; libraryMatch?: string };
 type Job = { id: string; target: string; title: string; status: string; message: string };
 type Catalog = { items: Item[]; hasMore: boolean; libraryChecked: boolean };
-type Props = { onSettings: () => void; onPlay: (song: Song) => void; onAlbum: (album: Album) => void; onAlbumActions: (album: Album) => void; beforePreview: () => void; localPlaying: boolean; initialQuery: string; onActions: (song: Song) => void; onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void };
+type Props = { isActive: boolean; onSettings: () => void; onPlay: (song: Song) => void; onAlbum: (album: Album) => void; onAlbumActions: (album: Album) => void; beforePreview: () => void; localPlaying: boolean; initialQuery: string; onActions: (song: Song) => void; onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void };
 const label: Record<string, string> = { queued: 'In coda', downloading: 'Download in corso', completed: 'Già scaricato', failed: 'Non completato' };
 const msg = (e: unknown) => isConnectivityFailure(e) ? 'Connessione non disponibile.' : e instanceof Error ? e.message : 'Connessione non riuscita';
 
-export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActions, beforePreview, localPlaying, initialQuery, onActions, onScroll }: Props) {
+export default function SearchScreen({ isActive, onSettings, onPlay, onAlbum, onAlbumActions, beforePreview, localPlaying, initialQuery, onActions, onScroll }: Props) {
   const { colors: c } = useTheme();
   const [query, setQuery] = useState(initialQuery);
   const [searchStorageKey] = useState(() => accountStorageKey('searches'));
@@ -153,6 +153,23 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   function saveRecent(values: string[]) { recentTouched.current = true; setRecent(values); recentWrites.current = recentWrites.current.then(() => AsyncStorage.setItem(searchStorageKey, JSON.stringify(values))).catch(() => {}); }
   function remember() { if (query.trim()) saveRecent([query.trim(), ...recent.filter(q => q !== query.trim())].slice(0, 10)); }
   function stopPreview() { previewGeneration.current++; preview.pause(); setPreviewId(''); setPreviewBusy(''); }
+
+  useEffect(() => {
+    if (isActive) return;
+
+    generation.current++;
+    stopPreview();
+
+    if (listening) {
+      try {
+        optionalSpeechRecognition?.abort();
+      } catch {}
+    }
+
+    input.current?.blur();
+    Keyboard.dismiss();
+  }, [isActive]);
+
   function closeSearch() {
     generation.current++;
 
@@ -247,11 +264,15 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   useEffect(() => { if (localPlaying) stopPreview(); }, [localPlaying]);
   useEffect(() => { if (previewStatus.currentTime >= 30 || previewStatus.didJustFinish) { preview.pause(); setPreviewId(''); } }, [previewStatus.currentTime, previewStatus.didJustFinish]);
   useEffect(() => {
+    if (!isActive) return;
+
     let active = true; let timer: ReturnType<typeof setTimeout>;
     async function poll() { try { const data = await request<{ jobs: Job[] }>('network/downloads'); if (active) { setJobs(data.jobs); setJobError(''); } } catch (e) { if (active) setJobError(isConnectivityFailure(e) ? '' : msg(e)); } if (active) timer = setTimeout(poll, 5000); }
     void poll(); return () => { active = false; clearTimeout(timer); };
-  }, []);
+  }, [isActive]);
   useEffect(() => {
+    if (!isActive) return;
+
     const version = ++generation.current;
     stopPreview(); setCatalog(null); setLocal(null); setError(''); setBusy(!!query.trim() && !listening);
     const timer = setTimeout(async () => {
@@ -263,7 +284,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
       finally { if (version === generation.current) setBusy(false); }
     }, 400);
     return () => { clearTimeout(timer); generation.current++; previewGeneration.current++; };
-  }, [query, scope, kind, reload, listening]);
+  }, [isActive, query, scope, kind, reload, listening]);
   async function more() {
     const version = generation.current; setBusy(true);
     try { const data = await request<Catalog>(`network/search?q=${encodeURIComponent(query.trim())}&kind=${kind}&offset=${catalog?.items.length ?? 0}`, 100000); if (version === generation.current) setCatalog(old => ({ ...data, items: [...(old?.items ?? []), ...data.items], libraryChecked: !!old?.libraryChecked && data.libraryChecked })); }
