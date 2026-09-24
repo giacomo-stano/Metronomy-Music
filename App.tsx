@@ -27,6 +27,12 @@ import { clearAlbumSongsCache, peekAlbumSongs, preloadAlbumSongs } from './src/a
 import NowPlayingWaves from './src/NowPlayingWaves';
 import ElasticPlayPauseButton from './src/ElasticPlayPauseButton';
 import { useMusicHaptics } from './src/useMusicHaptics';
+import {
+  appleMusicHapticsWillHandleTrack,
+  configureAppleMusicHapticsISRC,
+  nativeMusicHapticsAvailable,
+  stopMusicHaptics,
+} from './src/haptics';
 import { migrateBrandData } from './src/brandMigration';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addRemoteNextListener, addRemotePreviousListener, setRemoteControlsEnabled } from './modules/metronomy-audio-controls';
@@ -500,6 +506,8 @@ function MusicApp({
   const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off');
   const [shuffle, setShuffle] = useState(false);
   const [musicHapticsEnabled, setMusicHapticsEnabled] = useState(false);
+  const [appleMusicHapticsHandlesTrack, setAppleMusicHapticsHandlesTrack] =
+    useState(false);
   const [sleepMinutes, setSleepMinutes] = useState(0);
   const sleepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lyrics, setLyrics] = useState<Lyrics | null>(null);
@@ -517,9 +525,77 @@ function MusicApp({
 
   useMusicHaptics(
     player,
-    musicHapticsEnabled && !!status.playing,
+    musicHapticsEnabled &&
+      !!status.playing &&
+      !appleMusicHapticsHandlesTrack &&
+      nativeMusicHapticsAvailable,
     current?.id
   );
+
+  useEffect(() => {
+    let active = true;
+
+    setAppleMusicHapticsHandlesTrack(false);
+
+    if (!musicHapticsEnabled || !current) {
+      configureAppleMusicHapticsISRC(null);
+      stopMusicHaptics();
+      return () => {
+        active = false;
+      };
+    }
+
+    const apply = async () => {
+      let isrc = current.isrc?.trim() ?? '';
+
+      if (!isrc) {
+        try {
+          const detail = await request<{
+            info?: Record<string, unknown>;
+            isrc?: string;
+          }>(
+            'songs/' + encodeURIComponent(current.id),
+            15000
+          );
+
+          const value = detail.isrc ?? detail.info?.isrc;
+          if (typeof value === 'string') {
+            isrc = value.trim();
+          }
+        } catch {
+          // ISRC is optional. Core Haptics remains available as fallback.
+        }
+      }
+
+      if (!active) return;
+
+      configureAppleMusicHapticsISRC(isrc || null);
+
+      if (!isrc) {
+        setAppleMusicHapticsHandlesTrack(false);
+        return;
+      }
+
+      try {
+        const handled =
+          await appleMusicHapticsWillHandleTrack(isrc);
+
+        if (active) {
+          setAppleMusicHapticsHandlesTrack(handled);
+        }
+      } catch {
+        if (active) {
+          setAppleMusicHapticsHandlesTrack(false);
+        }
+      }
+    };
+
+    void apply();
+
+    return () => {
+      active = false;
+    };
+  }, [current?.id, current?.isrc, musicHapticsEnabled]);
 
   useEffect(() => {
     if (!current?.coverArt || isOffline) return;
