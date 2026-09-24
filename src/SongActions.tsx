@@ -5,6 +5,7 @@ import { SymbolView, type SFSymbol } from 'expo-symbols';
 import { request, type Song } from './api';
 import { useTheme } from './theme';
 import { LocalDownloadAction } from './OfflineDownloads';
+import { hapticSelection, hapticSuccess } from './haptics';
 
 type Props = { onRemoveLocal?: () => void; song: Song; onClose: () => void; onPlay: () => void; onQueue: () => void; onBrowse: (type: 'album' | 'artist') => void; onDeleted: (id: string) => void; onFavorite: (id: string, value: boolean) => void };
 
@@ -63,6 +64,7 @@ export default function SongActions(p: Props) {
 
     setStar(result.starred);
     p.onFavorite(p.song.id, result.starred);
+    hapticSuccess();
   });
 
   const choosePlaylist = () => void perform(async () => {
@@ -77,6 +79,7 @@ export default function SongActions(p: Props) {
       {}
     );
 
+    hapticSuccess();
     Alert.alert('Playlist', 'Brano aggiunto.');
     close();
   });
@@ -144,7 +147,15 @@ export default function SongActions(p: Props) {
   });
 
   const row = (icon: SFSymbol, label: string, action: () => void, destructive = false, subtitle?: string) => (
-    <Pressable disabled={busy} accessibilityRole="button" onPress={action} style={styles.row}>
+    <Pressable
+      disabled={busy}
+      accessibilityRole="button"
+      onPress={() => {
+        hapticSelection();
+        action();
+      }}
+      style={styles.row}
+    >
       <View style={styles.iconBox}>
         <SymbolView
           name={icon}
@@ -172,7 +183,14 @@ export default function SongActions(p: Props) {
   );
 
   const action = (icon: SFSymbol, label: string, onPress: () => void) => (
-    <Pressable disabled={busy} onPress={onPress} style={styles.action}>
+    <Pressable
+      disabled={busy}
+      onPress={() => {
+        hapticSelection();
+        onPress();
+      }}
+      style={styles.action}
+    >
       <View style={[styles.actionCircle, { backgroundColor: isDark ? '#ffffff14' : '#0000000b' }]}>
         <SymbolView name={icon} size={23} weight="medium" tintColor={c.text} />
       </View>
