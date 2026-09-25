@@ -1,10 +1,44 @@
-# Metronomy – Expo
+# Metronomy
 
-## Prima esecuzione su Windows
+Metronomy è un client musicale iOS per una libreria personale ospitata sul proprio server.
 
-1. Copia `.env.example` in `.env`.
-2. Imposta `EXPO_PUBLIC_METRONOMY_BASE_URL` con l'indirizzo del bridge (ad esempio `http://192.168.1.24:8180`). Non inserire password o chiavi private nelle variabili Expo pubbliche.
-3. Accedi allo stesso account Expo nel terminale e nell'app Expo Go dell'iPhone.
-4. Avvia `npx expo start` e scansiona il QR code con Expo Go.
+## Requisiti
 
-Accedi nell'app con le tue credenziali Navidrome. L'iPhone deve poter raggiungere il server tramite Wi-Fi domestico o VPN. Per aggiornare un'installazione precedente senza perdere i dati, leggi `../RINOMINA-METRONOMY.md`.
+Per usare l'app servono:
+
+- un iPhone;
+- AltStore installato sul dispositivo;
+- accesso a un server Metronomy/Navidrome già configurato;
+- connessione al server tramite rete locale o VPN.
+
+## Installazione con AltStore
+
+Aggiungi questa source personalizzata ad AltStore:
+
+```text
+https://raw.githubusercontent.com/giacomo-stano/Metronomy-Music/main/altstore-source.json
+```
+
+Dopo aver aggiunto la source:
+
+1. apri la source **Metronomy** in AltStore;
+2. seleziona **Metronomy**;
+3. installa l'ultima versione disponibile;
+4. completa normalmente la procedura di firma richiesta da AltStore.
+
+Gli aggiornamenti successivi compariranno direttamente in AltStore quando viene pubblicata una nuova versione.
+
+## Primo avvio
+
+Al primo avvio inserisci:
+
+- l'indirizzo del server/bridge Metronomy;
+- username e password del tuo account Navidrome.
+
+L'iPhone deve riuscire a raggiungere il server. Fuori dalla rete di casa è quindi necessario utilizzare una VPN o un'altra modalità di accesso remoto configurata sul server.
+
+## Download diretto
+
+Le versioni pubblicate dell'app sono disponibili anche nella sezione **Releases** di questo repository come file `Metronomy.ipa`.
+
+> Metronomy non è distribuita tramite App Store. L'installazione avviene tramite sideloading e richiede quindi una firma valida gestita da AltStore.
