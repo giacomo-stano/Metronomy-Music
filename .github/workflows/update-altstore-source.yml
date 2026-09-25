@@ -173,7 +173,7 @@ jobs:
               if (
                 !version.version ||
                 !version.buildVersion ||
-                !/^\d{4}-\d{2}-\d{2}$/.test(version.date) ||
+                !/^\d{4}-\d{2}-\d{2}(?:T.*Z)?$/.test(version.date) ||
                 !version.downloadURL ||
                 !Number.isFinite(version.size)
               ) {
