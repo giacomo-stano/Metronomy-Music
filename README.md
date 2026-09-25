@@ -29,14 +29,6 @@ Dopo aver aggiunto la source:
 
 Gli aggiornamenti successivi compariranno direttamente in AltStore quando viene pubblicata una nuova versione.
 
-## Primo avvio
-
-Al primo avvio inserisci:
-
-- l'URL completo del bridge Metronomy, inclusa la porta (ad esempio `http://192.168.1.24:8180`);
-- username e password del tuo account Navidrome.
-
-Metronomy non si collega direttamente a Navidrome: il bridge è obbligatorio e deve essere raggiungibile dall'iPhone. Fuori dalla rete di casa è quindi necessario utilizzare una VPN o un'altra modalità di accesso remoto configurata sul server.
 
 ## Download diretto
 
