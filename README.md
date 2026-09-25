@@ -8,8 +8,9 @@ Per usare l'app servono:
 
 - un iPhone;
 - AltStore installato sul dispositivo;
-- accesso a un server Metronomy/Navidrome già configurato;
-- connessione al server tramite rete locale o VPN.
+- un server Navidrome già configurato;
+- il bridge Metronomy attivo sul server;
+- connessione al bridge tramite rete locale o VPN.
 
 ## Installazione con AltStore
 
@@ -32,10 +33,10 @@ Gli aggiornamenti successivi compariranno direttamente in AltStore quando viene 
 
 Al primo avvio inserisci:
 
-- l'indirizzo del server/bridge Metronomy;
+- l'URL completo del bridge Metronomy, inclusa la porta (ad esempio `http://192.168.1.24:8180`);
 - username e password del tuo account Navidrome.
 
-L'iPhone deve riuscire a raggiungere il server. Fuori dalla rete di casa è quindi necessario utilizzare una VPN o un'altra modalità di accesso remoto configurata sul server.
+Metronomy non si collega direttamente a Navidrome: il bridge è obbligatorio e deve essere raggiungibile dall'iPhone. Fuori dalla rete di casa è quindi necessario utilizzare una VPN o un'altra modalità di accesso remoto configurata sul server.
 
 ## Download diretto
 
