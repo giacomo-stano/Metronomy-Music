@@ -1490,7 +1490,11 @@ export default function PlayerSheet(p: Props) {
                       {nativeSystemVolumeAvailable ? (
                         <SystemVolumeSlider
                           accessibilityLabel="Volume di sistema"
-                          style={{ width: '100%', height: 34 }}
+                          style={{
+                            width: '100%',
+                            height: 34,
+                            transform: [{ translateY: 8 }],
+                          }}
                         />
                       ) : (
                         <Range
