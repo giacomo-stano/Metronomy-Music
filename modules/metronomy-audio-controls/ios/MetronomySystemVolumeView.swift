@@ -57,6 +57,18 @@ public final class MetronomySystemVolumeView: ExpoView {
       return
     }
 
+    /*
+     * MPVolumeView applies its own internal vertical layout to UISlider.
+     * In the React Native wrapper that can leave the visible volume track a
+     * few points above/below the speaker symbols even though the outer views
+     * themselves are centered. Keep the native slider width/insets chosen by
+     * MPVolumeView, but pin its vertical centre to the centre of our view.
+     */
+    slider.center = CGPoint(
+      x: slider.center.x,
+      y: volumeView.bounds.midY
+    )
+
     slider.minimumTrackTintColor = UIColor.white.withAlphaComponent(0.82)
     slider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.22)
     slider.thumbTintColor = UIColor.white
