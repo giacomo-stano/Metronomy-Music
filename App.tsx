@@ -28,9 +28,12 @@ import NowPlayingWaves from './src/NowPlayingWaves';
 import ElasticPlayPauseButton from './src/ElasticPlayPauseButton';
 import { useMusicHaptics } from './src/useMusicHaptics';
 import {
-  appleMusicHapticsWillHandleTrack,
   configureAppleMusicHapticsISRC,
   nativeMusicHapticsAvailable,
+  onAppleMusicHapticsActiveChanged,
+  onAppleMusicHapticsPlaybackChanged,
+  startAppleMusicHapticsStatusObservers,
+  stopAppleMusicHapticsStatusObservers,
   stopMusicHaptics,
 } from './src/haptics';
 import { migrateBrandData } from './src/brandMigration';
@@ -506,7 +509,9 @@ function MusicApp({
   const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off');
   const [shuffle, setShuffle] = useState(false);
   const [musicHapticsEnabled, setMusicHapticsEnabled] = useState(false);
-  const [appleMusicHapticsHandlesTrack, setAppleMusicHapticsHandlesTrack] =
+  const [appleMusicHapticsActive, setAppleMusicHapticsActive] =
+    useState(false);
+  const [appleMusicHapticsPlaying, setAppleMusicHapticsPlaying] =
     useState(false);
   const [sleepMinutes, setSleepMinutes] = useState(0);
   const sleepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -527,19 +532,46 @@ function MusicApp({
     player,
     musicHapticsEnabled &&
       !!status.playing &&
-      !appleMusicHapticsHandlesTrack &&
+      !appleMusicHapticsPlaying &&
       nativeMusicHapticsAvailable,
     current?.id
   );
 
   useEffect(() => {
+    if (!nativeMusicHapticsAvailable) return;
+
+    startAppleMusicHapticsStatusObservers();
+
+    const activeSubscription =
+      onAppleMusicHapticsActiveChanged(active => {
+        setAppleMusicHapticsActive(active);
+      });
+
+    const playbackSubscription =
+      onAppleMusicHapticsPlaybackChanged(event => {
+        setAppleMusicHapticsPlaying(event.playing);
+      });
+
+    return () => {
+      activeSubscription?.remove();
+      playbackSubscription?.remove();
+      stopAppleMusicHapticsStatusObservers();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!musicHapticsEnabled) {
+      stopMusicHaptics();
+    }
+  }, [musicHapticsEnabled]);
+
+  useEffect(() => {
     let active = true;
 
-    setAppleMusicHapticsHandlesTrack(false);
+    setAppleMusicHapticsPlaying(false);
 
-    if (!musicHapticsEnabled || !current) {
+    if (!current) {
       configureAppleMusicHapticsISRC(null);
-      stopMusicHaptics();
       return () => {
         active = false;
       };
@@ -548,7 +580,7 @@ function MusicApp({
     const apply = async () => {
       let isrc = current.isrc?.trim() ?? '';
 
-      if (!isrc) {
+      if (!isrc && !isOffline) {
         try {
           const detail = await request<{
             info?: Record<string, unknown>;
@@ -563,30 +595,12 @@ function MusicApp({
             isrc = value.trim();
           }
         } catch {
-          // ISRC is optional. Core Haptics remains available as fallback.
+          // ISRC is optional; custom Core Haptics remains the fallback.
         }
       }
 
-      if (!active) return;
-
-      configureAppleMusicHapticsISRC(isrc || null);
-
-      if (!isrc) {
-        setAppleMusicHapticsHandlesTrack(false);
-        return;
-      }
-
-      try {
-        const handled =
-          await appleMusicHapticsWillHandleTrack(isrc);
-
-        if (active) {
-          setAppleMusicHapticsHandlesTrack(handled);
-        }
-      } catch {
-        if (active) {
-          setAppleMusicHapticsHandlesTrack(false);
-        }
+      if (active) {
+        configureAppleMusicHapticsISRC(isrc || null);
       }
     };
 
@@ -595,7 +609,7 @@ function MusicApp({
     return () => {
       active = false;
     };
-  }, [current?.id, current?.isrc, musicHapticsEnabled]);
+  }, [current?.id, current?.isrc, isOffline]);
 
   useEffect(() => {
     if (!current?.coverArt || isOffline) return;
