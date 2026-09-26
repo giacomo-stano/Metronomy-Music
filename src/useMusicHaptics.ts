@@ -8,6 +8,7 @@ import { musicBeatHaptic } from './haptics';
 
 type State = {
   baseline: number;
+  fastEnvelope: number;
   previousEnergy: number;
   lastPulse: number;
   lastTimestamp: number;
@@ -15,6 +16,7 @@ type State = {
 
 const INITIAL_STATE: State = {
   baseline: 0.018,
+  fastEnvelope: 0,
   previousEnergy: 0,
   lastPulse: -10,
   lastTimestamp: -1,
@@ -115,39 +117,61 @@ export function useMusicHaptics(
 
     const energy = Math.sqrt(sumSquares / count);
 
-    // Slow envelope: describes the local loudness of the current passage.
+    /*
+     * Two envelopes with different time constants:
+     * - baseline follows the overall loudness slowly;
+     * - fastEnvelope follows attacks quickly.
+     *
+     * The old detector compared consecutive PCM blocks. With Expo's small
+     * sampling blocks the difference between two adjacent blocks is usually
+     * tiny, so it detected almost no beats even on rhythmic music.
+     */
     const baseline =
-      current.baseline * 0.965 + energy * 0.035;
+      current.baseline * 0.992 + energy * 0.008;
+    const fastEnvelope =
+      current.fastEnvelope * 0.72 + energy * 0.28;
 
-    const rise = energy - current.previousEnergy;
+    const envelopeLift = fastEnvelope - baseline;
+    const instantRise = energy - current.previousEnergy;
     const sinceLastPulse = timestamp - current.lastPulse;
 
     const strongTransient =
-      energy > Math.max(0.025, baseline * 1.62) &&
-      rise > Math.max(0.006, baseline * 0.24);
+      energy > Math.max(0.010, baseline * 1.08) &&
+      (
+        envelopeLift > Math.max(0.0018, baseline * 0.055) ||
+        instantRise > Math.max(0.0025, baseline * 0.075)
+      );
 
     /*
-     * 220 ms caps the detector below ~4.5 pulses/s. At ordinary musical
-     * tempos this lets kicks/snares through while suppressing rapid waveform
-     * fluctuations inside a single hit.
+     * 140 ms allows rhythmic material up to about 7 pulses/s while still
+     * preventing a single drum hit from producing several haptic events.
      */
-    if (strongTransient && sinceLastPulse >= 0.22) {
+    if (strongTransient && sinceLastPulse >= 0.14) {
       current.lastPulse = timestamp;
       counters.current.transients += 1;
 
+      const relativeLift =
+        envelopeLift / Math.max(baseline, 0.006);
+      const relativeEnergy =
+        energy / Math.max(baseline, 0.006) - 1;
+
       const strength = Math.min(
         1,
-        Math.max(0, (energy / Math.max(baseline, 0.008) - 1.3) / 1.8)
+        Math.max(
+          0,
+          relativeLift * 2.2 + relativeEnergy * 0.75
+        )
       );
 
       musicBeatHaptic(
-        0.42 + strength * 0.46,
-        0.30 + strength * 0.34
+        0.34 + strength * 0.52,
+        0.24 + strength * 0.46
       );
       counters.current.pulses += 1;
     }
 
-    current.baseline = Math.max(0.008, baseline);
+    current.baseline = Math.max(0.006, baseline);
+    current.fastEnvelope = fastEnvelope;
     current.previousEnergy = energy;
   });
 
