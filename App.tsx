@@ -1061,7 +1061,7 @@ function MusicApp({
 
           // expo-audio rewrites MPNowPlayingInfoCenter here; restore the ISRC
           // afterwards so iOS can associate the correct Music Haptics track.
-          void configureISRCForSong(next);
+          void configureISRCForSong(song);
         } catch {
           /* Optional in Expo Go. */
         }
@@ -1460,6 +1460,10 @@ function MusicApp({
         // expo-audio can update MPRemoteCommandCenter when activating
         // lock-screen controls. Re-enable our track commands afterwards.
         setRemoteControlsEnabled(true);
+
+        // setActiveForLockScreen also rewrites Now Playing metadata.
+        // Restore the ISRC after it so Apple Music Haptics keeps the match.
+        void configureISRCForSong(next);
       } catch {
         /* Optional in Expo Go. */
       }
