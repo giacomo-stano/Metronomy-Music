@@ -28,8 +28,10 @@ import NowPlayingWaves from './src/NowPlayingWaves';
 import ElasticPlayPauseButton from './src/ElasticPlayPauseButton';
 import { useMusicHaptics } from './src/useMusicHaptics';
 import {
+  appleMusicHapticsWillHandleTrack,
   configureAppleMusicHapticsISRC,
   nativeMusicHapticsAvailable,
+  nativeNowPlayingMusicHapticsISRC,
   onAppleMusicHapticsActiveChanged,
   onAppleMusicHapticsPlaybackChanged,
   startAppleMusicHapticsStatusObservers,
@@ -515,6 +517,9 @@ function MusicApp({
   const [appleMusicHapticsPlaying, setAppleMusicHapticsPlaying] =
     useState(false);
   const [musicHapticsISRC, setMusicHapticsISRC] = useState('');
+  const [nativeNowPlayingISRC, setNativeNowPlayingISRC] = useState('');
+  const [appleTrackAvailable, setAppleTrackAvailable] =
+    useState<boolean | null>(null);
   const [sleepMinutes, setSleepMinutes] = useState(0);
   const sleepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lyrics, setLyrics] = useState<Lyrics | null>(null);
@@ -581,6 +586,26 @@ function MusicApp({
     if (currentSongIdRef.current === song.id) {
       setMusicHapticsISRC(isrc);
       configureAppleMusicHapticsISRC(isrc || null);
+
+      const nativeISRC =
+        nativeNowPlayingMusicHapticsISRC()?.trim() ?? '';
+      setNativeNowPlayingISRC(nativeISRC);
+
+      if (isrc) {
+        try {
+          const available =
+            await appleMusicHapticsWillHandleTrack(isrc);
+          if (currentSongIdRef.current === song.id) {
+            setAppleTrackAvailable(available);
+          }
+        } catch {
+          if (currentSongIdRef.current === song.id) {
+            setAppleTrackAvailable(null);
+          }
+        }
+      } else {
+        setAppleTrackAvailable(null);
+      }
     }
 
     return isrc;
@@ -628,6 +653,8 @@ function MusicApp({
 
     if (!current) {
       setMusicHapticsISRC('');
+      setNativeNowPlayingISRC('');
+      setAppleTrackAvailable(null);
       configureAppleMusicHapticsISRC(null);
       return;
     }
@@ -2456,7 +2483,7 @@ function MusicApp({
     />
     </View>
 
-    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} connectivityBanner={connectivityBanner} connectivityBannerOpacity={connectivityBannerOpacity} connectivityBannerScale={connectivityBannerScale} connectivityBannerY={connectivityBannerY} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => lastKnownPosition.current > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} musicHapticsEnabled={musicHapticsEnabled} onToggleMusicHaptics={() => setMusicHapticsEnabled(v => !v)} musicHapticsDiagnostics={{ coreSupported: nativeMusicHapticsAvailable, appleActive: appleMusicHapticsActive, applePlaying: appleMusicHapticsPlaying, isrc: musicHapticsISRC, ...musicHapticsDiagnostics }} onTestMusicHaptics={testCoreMusicHaptic} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
+    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} connectivityBanner={connectivityBanner} connectivityBannerOpacity={connectivityBannerOpacity} connectivityBannerScale={connectivityBannerScale} connectivityBannerY={connectivityBannerY} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => lastKnownPosition.current > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} musicHapticsEnabled={musicHapticsEnabled} onToggleMusicHaptics={() => setMusicHapticsEnabled(v => !v)} musicHapticsDiagnostics={{ coreSupported: nativeMusicHapticsAvailable, appleActive: appleMusicHapticsActive, applePlaying: appleMusicHapticsPlaying, isrc: musicHapticsISRC, nativeIsrc: nativeNowPlayingISRC, appleAvailable: appleTrackAvailable, ...musicHapticsDiagnostics }} onTestMusicHaptics={testCoreMusicHaptic} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
     </SafeAreaView>
   );
 }
