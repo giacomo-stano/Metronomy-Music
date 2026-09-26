@@ -55,6 +55,16 @@ public final class MetronomyMusicHapticsModule: Module {
       }
     }
 
+    Function("getNowPlayingISRC") { () -> String? in
+      guard #available(iOS 18.0, *) else {
+        return nil
+      }
+
+      return MPNowPlayingInfoCenter.default().nowPlayingInfo?[
+        MPNowPlayingInfoPropertyInternationalStandardRecordingCode
+      ] as? String
+    }
+
     Function("setNowPlayingISRC") { (isrc: String?) in
       guard #available(iOS 18.0, *) else {
         return
