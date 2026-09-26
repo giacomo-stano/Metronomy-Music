@@ -2176,7 +2176,7 @@ const playerStyles = StyleSheet.create({
     right: 0,
   },
   progressArea: {
-    height: 47,
+    height: 105,
   },
   timeRow: {
     minHeight: 16,
