@@ -5,9 +5,16 @@ import MediaPlayer
 
 public final class MetronomyMusicHapticsModule: Module {
   private var engine: CHHapticEngine?
+  private var activeStatusObserver: NSObjectProtocol?
+  private var playbackStatusObserver: (any NSCopying)?
 
   public func definition() -> ModuleDefinition {
     Name("MetronomyMusicHaptics")
+
+    Events(
+      "onAppleMusicHapticsActiveChanged",
+      "onAppleMusicHapticsPlaybackChanged"
+    )
 
     Function("isCoreHapticsSupported") {
       CHHapticEngine.capabilitiesForHardware().supportsHaptics
@@ -19,6 +26,14 @@ public final class MetronomyMusicHapticsModule: Module {
       }
 
       return false
+    }
+
+    Function("startAppleMusicHapticsObservers") {
+      self.startAppleObservers()
+    }
+
+    Function("stopAppleMusicHapticsObservers") {
+      self.stopAppleObservers()
     }
 
     AsyncFunction("checkAppleTrackAvailability") { (isrc: String, promise: Promise) in
@@ -72,6 +87,62 @@ public final class MetronomyMusicHapticsModule: Module {
     Function("stop") {
       self.engine?.stop(completionHandler: nil)
       self.engine = nil
+    }
+  }
+
+  private func startAppleObservers() {
+    guard #available(iOS 18.0, *) else {
+      return
+    }
+
+    stopAppleObservers()
+
+    let manager = MAMusicHapticsManager.shared
+
+    sendEvent(
+      "onAppleMusicHapticsActiveChanged",
+      ["active": manager.isActive]
+    )
+
+    activeStatusObserver = NotificationCenter.default.addObserver(
+      forName: MAMusicHapticsManager.activeStatusDidChangeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      guard let self else { return }
+
+      self.sendEvent(
+        "onAppleMusicHapticsActiveChanged",
+        ["active": MAMusicHapticsManager.shared.isActive]
+      )
+    }
+
+    playbackStatusObserver = manager.addStatusObserver {
+      [weak self] code, playing in
+      guard let self else { return }
+
+      self.sendEvent(
+        "onAppleMusicHapticsPlaybackChanged",
+        [
+          "isrc": code,
+          "playing": playing,
+        ]
+      )
+    }
+  }
+
+  private func stopAppleObservers() {
+    if let activeStatusObserver {
+      NotificationCenter.default.removeObserver(activeStatusObserver)
+      self.activeStatusObserver = nil
+    }
+
+    if #available(iOS 18.0, *),
+       let playbackStatusObserver {
+      MAMusicHapticsManager.shared.removeStatusObserver(
+        playbackStatusObserver
+      )
+      self.playbackStatusObserver = nil
     }
   }
 
