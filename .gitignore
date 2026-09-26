@@ -35,6 +35,14 @@ yarn-error.*
 .env.*
 !.env.example
 
+# Metronomy Server private/generated files
+/server/.env
+/server/backend/accounts.json
+/server/docker-compose.override.yml
+/server/data/
+/server/*.bak
+/server/backend/*.bak
+
 # typescript
 *.tsbuildinfo
 
