@@ -24,7 +24,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.metronomy",
-      "buildNumber": "23",
+      "buildNumber": "24",
       "infoPlist": {
         "MusicHapticsSupported": true
       }
