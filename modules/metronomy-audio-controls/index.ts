@@ -7,6 +7,7 @@ type MusicHapticsNativeModule = {
   isAppleMusicHapticsActive: () => boolean;
   checkAppleTrackAvailability: (isrc: string) => Promise<boolean>;
   setNowPlayingISRC: (isrc?: string | null) => void;
+  getNowPlayingISRC: () => string | null;
   startAppleMusicHapticsObservers: () => void;
   stopAppleMusicHapticsObservers: () => void;
   addListener: (
@@ -64,6 +65,10 @@ export async function nativeAppleMusicHapticsTrackAvailable(isrc: string) {
 
 export function setNativeMusicHapticsISRC(isrc?: string | null) {
   MusicHaptics?.setNowPlayingISRC(isrc ?? null);
+}
+
+export function getNativeMusicHapticsISRC() {
+  return MusicHaptics?.getNowPlayingISRC() ?? null;
 }
 
 export function startNativeAppleMusicHapticsObservers() {
