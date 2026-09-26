@@ -1,6 +1,7 @@
 import {
   addNativeAppleMusicHapticsActiveListener,
   addNativeAppleMusicHapticsPlaybackListener,
+  getNativeMusicHapticsISRC,
   nativeAppleMusicHapticsActive,
   nativeAppleMusicHapticsTrackAvailable,
   nativeMusicHapticsAvailable,
@@ -64,4 +65,8 @@ export function onAppleMusicHapticsPlaybackChanged(
 
 export function testCoreMusicHaptic() {
   musicBeatHaptic(1, 0.65);
+}
+
+export function nativeNowPlayingMusicHapticsISRC() {
+  return getNativeMusicHapticsISRC();
 }
