@@ -535,22 +535,46 @@ function MusicApp({
   async function configureISRCForSong(song: Song) {
     let isrc = song.isrc?.trim() ?? '';
 
-    if (!isrc && !isOffline) {
+    if (!isrc) {
       try {
         const detail = await request<{
           info?: Record<string, unknown>;
-          isrc?: string;
+          isrc?: unknown;
         }>(
           'songs/' + encodeURIComponent(song.id),
           15000
         );
 
-        const value = detail.isrc ?? detail.info?.isrc;
-        if (typeof value === 'string') {
-          isrc = value.trim();
+        const raw =
+          detail.isrc ??
+          detail.info?.isrc ??
+          detail.info?.ISRC;
+
+        if (typeof raw === 'string') {
+          isrc = raw.trim();
+        } else if (Array.isArray(raw)) {
+          const first = raw.find(
+            value => typeof value === 'string' && value.trim()
+          );
+          if (typeof first === 'string') {
+            isrc = first.trim();
+          }
         }
-      } catch {
-        // ISRC is optional; custom Core Haptics remains the fallback.
+
+        if (isrc) {
+          setQueue(previous =>
+            previous.map(item =>
+              item.id === song.id
+                ? { ...item, isrc }
+                : item
+            )
+          );
+        }
+      } catch (error) {
+        console.warn(
+          '[MusicHaptics] Impossibile leggere ISRC:',
+          error
+        );
       }
     }
 
@@ -558,6 +582,8 @@ function MusicApp({
       setMusicHapticsISRC(isrc);
       configureAppleMusicHapticsISRC(isrc || null);
     }
+
+    return isrc;
   }
 
   const musicHapticsDiagnostics = useMusicHaptics(
