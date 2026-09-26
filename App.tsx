@@ -28,7 +28,7 @@ import NowPlayingWaves from './src/NowPlayingWaves';
 import ElasticPlayPauseButton from './src/ElasticPlayPauseButton';
 import { useMusicHaptics } from './src/useMusicHaptics';
 import {
-  appleMusicHapticsWillHandleTrack,
+  appleMusicHapticsTrackAvailable,
   configureAppleMusicHapticsISRC,
   nativeMusicHapticsAvailable,
   nativeNowPlayingMusicHapticsISRC,
@@ -594,7 +594,7 @@ function MusicApp({
       if (isrc) {
         try {
           const available =
-            await appleMusicHapticsWillHandleTrack(isrc);
+            await appleMusicHapticsTrackAvailable(isrc);
           if (currentSongIdRef.current === song.id) {
             setAppleTrackAvailable(available);
           }
