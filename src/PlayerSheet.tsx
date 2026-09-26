@@ -52,6 +52,8 @@ type Props = {
     appleActive: boolean;
     applePlaying: boolean;
     isrc: string;
+    nativeIsrc: string;
+    appleAvailable: boolean | null;
     pcmSamples: number;
     transients: number;
     pulses: number;
@@ -1443,7 +1445,10 @@ export default function PlayerSheet(p: Props) {
                         Core: {p.musicHapticsDiagnostics.coreSupported ? 'YES' : 'NO'} · Apple active: {p.musicHapticsDiagnostics.appleActive ? 'YES' : 'NO'} · Apple playing: {p.musicHapticsDiagnostics.applePlaying ? 'YES' : 'NO'}
                       </Text>
                       <Text style={playerStyles.hapticsDiagnosticsText}>
-                        ISRC: {p.musicHapticsDiagnostics.isrc || 'assente'}
+                        ISRC app: {p.musicHapticsDiagnostics.isrc || 'assente'}
+                      </Text>
+                      <Text style={playerStyles.hapticsDiagnosticsText}>
+                        ISRC iOS: {p.musicHapticsDiagnostics.nativeIsrc || 'assente'} · Apple track: {p.musicHapticsDiagnostics.appleAvailable == null ? '?' : p.musicHapticsDiagnostics.appleAvailable ? 'YES' : 'NO'}
                       </Text>
                       <Text style={playerStyles.hapticsDiagnosticsText}>
                         PCM: {p.musicHapticsDiagnostics.pcmSamples} · Transienti: {p.musicHapticsDiagnostics.transients} · Pulse: {p.musicHapticsDiagnostics.pulses}
