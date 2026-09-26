@@ -70,3 +70,11 @@ export function testCoreMusicHaptic() {
 export function nativeNowPlayingMusicHapticsISRC() {
   return getNativeMusicHapticsISRC();
 }
+
+export async function appleMusicHapticsTrackAvailable(
+  isrc?: string | null
+) {
+  const code = isrc?.trim();
+  if (!code) return false;
+  return nativeAppleMusicHapticsTrackAvailable(code);
+}
