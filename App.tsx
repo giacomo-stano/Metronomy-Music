@@ -527,6 +527,35 @@ function MusicApp({
   const player = useAudioPlayer(null, { updateInterval: 250 });
   const status = usePlaybackSignals(player);
   const current = queue[index];
+  const currentSongIdRef = useRef<string | undefined>(current?.id);
+  currentSongIdRef.current = current?.id;
+
+  async function configureISRCForSong(song: Song) {
+    let isrc = song.isrc?.trim() ?? '';
+
+    if (!isrc && !isOffline) {
+      try {
+        const detail = await request<{
+          info?: Record<string, unknown>;
+          isrc?: string;
+        }>(
+          'songs/' + encodeURIComponent(song.id),
+          15000
+        );
+
+        const value = detail.isrc ?? detail.info?.isrc;
+        if (typeof value === 'string') {
+          isrc = value.trim();
+        }
+      } catch {
+        // ISRC is optional; custom Core Haptics remains the fallback.
+      }
+    }
+
+    if (currentSongIdRef.current === song.id) {
+      configureAppleMusicHapticsISRC(isrc || null);
+    }
+  }
 
   useMusicHaptics(
     player,
@@ -566,49 +595,14 @@ function MusicApp({
   }, [musicHapticsEnabled]);
 
   useEffect(() => {
-    let active = true;
-
     setAppleMusicHapticsPlaying(false);
 
     if (!current) {
       configureAppleMusicHapticsISRC(null);
-      return () => {
-        active = false;
-      };
+      return;
     }
 
-    const apply = async () => {
-      let isrc = current.isrc?.trim() ?? '';
-
-      if (!isrc && !isOffline) {
-        try {
-          const detail = await request<{
-            info?: Record<string, unknown>;
-            isrc?: string;
-          }>(
-            'songs/' + encodeURIComponent(current.id),
-            15000
-          );
-
-          const value = detail.isrc ?? detail.info?.isrc;
-          if (typeof value === 'string') {
-            isrc = value.trim();
-          }
-        } catch {
-          // ISRC is optional; custom Core Haptics remains the fallback.
-        }
-      }
-
-      if (active) {
-        configureAppleMusicHapticsISRC(isrc || null);
-      }
-    };
-
-    void apply();
-
-    return () => {
-      active = false;
-    };
+    void configureISRCForSong(current);
   }, [current?.id, current?.isrc, isOffline]);
 
   useEffect(() => {
@@ -1064,6 +1058,10 @@ function MusicApp({
           );
 
           setRemoteControlsEnabled(true);
+
+          // expo-audio rewrites MPNowPlayingInfoCenter here; restore the ISRC
+          // afterwards so iOS can associate the correct Music Haptics track.
+          void configureISRCForSong(next);
         } catch {
           /* Optional in Expo Go. */
         }
