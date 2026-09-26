@@ -61,3 +61,7 @@ export function onAppleMusicHapticsPlaybackChanged(
 ) {
   return addNativeAppleMusicHapticsPlaybackListener(listener);
 }
+
+export function testCoreMusicHaptic() {
+  musicBeatHaptic(1, 0.65);
+}
