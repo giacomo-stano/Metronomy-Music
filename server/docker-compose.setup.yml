@@ -1,0 +1,20 @@
+services:
+  setup:
+    build: ./backend
+    image: metronomy-bridge
+    working_dir: /workspace
+    command: ["python", "/workspace/setup/setup.py"]
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      XDG_CONFIG_HOME: /data/config
+      QOGET_CONFIG: /data/config/qoget/config.json
+    volumes:
+      - ./:/workspace
+      - metronomy-data:/data
+
+volumes:
+  metronomy-data:
+    name: metronomy-data
