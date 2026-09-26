@@ -7,6 +7,14 @@ type MusicHapticsNativeModule = {
   isAppleMusicHapticsActive: () => boolean;
   checkAppleTrackAvailability: (isrc: string) => Promise<boolean>;
   setNowPlayingISRC: (isrc?: string | null) => void;
+  startAppleMusicHapticsObservers: () => void;
+  stopAppleMusicHapticsObservers: () => void;
+  addListener: (
+    eventName:
+      | 'onAppleMusicHapticsActiveChanged'
+      | 'onAppleMusicHapticsPlaybackChanged',
+    listener: (event: any) => void
+  ) => Subscription;
   pulse: (intensity: number, sharpness: number) => void;
   stop: () => void;
 };
@@ -56,6 +64,39 @@ export async function nativeAppleMusicHapticsTrackAvailable(isrc: string) {
 
 export function setNativeMusicHapticsISRC(isrc?: string | null) {
   MusicHaptics?.setNowPlayingISRC(isrc ?? null);
+}
+
+export function startNativeAppleMusicHapticsObservers() {
+  MusicHaptics?.startAppleMusicHapticsObservers();
+}
+
+export function stopNativeAppleMusicHapticsObservers() {
+  MusicHaptics?.stopAppleMusicHapticsObservers();
+}
+
+export function addNativeAppleMusicHapticsActiveListener(
+  listener: (active: boolean) => void
+) {
+  return MusicHaptics?.addListener(
+    'onAppleMusicHapticsActiveChanged',
+    event => listener(!!event?.active)
+  );
+}
+
+export function addNativeAppleMusicHapticsPlaybackListener(
+  listener: (event: { isrc?: string; playing: boolean }) => void
+) {
+  return MusicHaptics?.addListener(
+    'onAppleMusicHapticsPlaybackChanged',
+    event =>
+      listener({
+        isrc:
+          typeof event?.isrc === 'string'
+            ? event.isrc
+            : undefined,
+        playing: !!event?.playing,
+      })
+  );
 }
 
 export function playNativeMusicHaptic(
