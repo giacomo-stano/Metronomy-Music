@@ -47,6 +47,16 @@ type Props = {
   onShuffle: () => void;
   musicHapticsEnabled: boolean;
   onToggleMusicHaptics: () => void;
+  musicHapticsDiagnostics: {
+    coreSupported: boolean;
+    appleActive: boolean;
+    applePlaying: boolean;
+    isrc: string;
+    pcmSamples: number;
+    transients: number;
+    pulses: number;
+  };
+  onTestMusicHaptics: () => void;
   onBrowse: (type: 'album' | 'artist') => void;
   onFavorite: (starred: boolean) => void;
   onSleep: (minutes: number) => void;
@@ -1427,6 +1437,27 @@ export default function PlayerSheet(p: Props) {
                         −{clock(remainingTime)}
                       </Text>
                     </View>
+
+                    <View style={playerStyles.hapticsDiagnostics}>
+                      <Text style={playerStyles.hapticsDiagnosticsText}>
+                        Core: {p.musicHapticsDiagnostics.coreSupported ? 'YES' : 'NO'} · Apple active: {p.musicHapticsDiagnostics.appleActive ? 'YES' : 'NO'} · Apple playing: {p.musicHapticsDiagnostics.applePlaying ? 'YES' : 'NO'}
+                      </Text>
+                      <Text style={playerStyles.hapticsDiagnosticsText}>
+                        ISRC: {p.musicHapticsDiagnostics.isrc || 'assente'}
+                      </Text>
+                      <Text style={playerStyles.hapticsDiagnosticsText}>
+                        PCM: {p.musicHapticsDiagnostics.pcmSamples} · Transienti: {p.musicHapticsDiagnostics.transients} · Pulse: {p.musicHapticsDiagnostics.pulses}
+                      </Text>
+                      <Pressable
+                        accessibilityLabel="Test Core Haptics"
+                        onPress={p.onTestMusicHaptics}
+                        style={playerStyles.hapticsTestButton}
+                      >
+                        <Text style={playerStyles.hapticsTestButtonText}>
+                          Test Core Haptics
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
 
                   <View style={playerStyles.transportRow}>
@@ -2178,6 +2209,35 @@ const playerStyles = StyleSheet.create({
     color: 'rgba(255,255,255,0.40)',
     fontSize: 8.5,
     lineHeight: 11,
+  },
+  hapticsDiagnostics: {
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    gap: 2,
+  },
+  hapticsDiagnosticsText: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 8.5,
+    lineHeight: 11,
+    fontVariant: ['tabular-nums'],
+  },
+  hapticsTestButton: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    paddingHorizontal: 8,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  hapticsTestButtonText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '600',
   },
   transportRow: {
     height: 120,
