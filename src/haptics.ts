@@ -1,9 +1,13 @@
 import {
+  addNativeAppleMusicHapticsActiveListener,
+  addNativeAppleMusicHapticsPlaybackListener,
   nativeAppleMusicHapticsActive,
   nativeAppleMusicHapticsTrackAvailable,
   nativeMusicHapticsAvailable,
   playNativeMusicHaptic,
   setNativeMusicHapticsISRC,
+  startNativeAppleMusicHapticsObservers,
+  stopNativeAppleMusicHapticsObservers,
   stopNativeMusicHaptics,
 } from '../modules/metronomy-audio-controls';
 
@@ -36,4 +40,24 @@ export async function appleMusicHapticsWillHandleTrack(
   }
 
   return nativeAppleMusicHapticsTrackAvailable(code);
+}
+
+export function startAppleMusicHapticsStatusObservers() {
+  startNativeAppleMusicHapticsObservers();
+}
+
+export function stopAppleMusicHapticsStatusObservers() {
+  stopNativeAppleMusicHapticsObservers();
+}
+
+export function onAppleMusicHapticsActiveChanged(
+  listener: (active: boolean) => void
+) {
+  return addNativeAppleMusicHapticsActiveListener(listener);
+}
+
+export function onAppleMusicHapticsPlaybackChanged(
+  listener: (event: { isrc?: string; playing: boolean }) => void
+) {
+  return addNativeAppleMusicHapticsPlaybackListener(listener);
 }
