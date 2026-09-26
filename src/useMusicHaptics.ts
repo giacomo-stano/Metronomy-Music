@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   useAudioSampleListener,
   type AudioPlayer,
@@ -28,22 +28,52 @@ const INITIAL_STATE: State = {
  * The adaptive energy floor keeps the detector usable across quiet/loud tracks,
  * while the refractory interval prevents a "buzz" on dense material.
  */
+export type MusicHapticsDiagnostics = {
+  pcmSamples: number;
+  transients: number;
+  pulses: number;
+};
+
 export function useMusicHaptics(
   player: AudioPlayer,
   enabled: boolean,
   trackId?: string
-) {
+): MusicHapticsDiagnostics {
   const state = useRef<State>({ ...INITIAL_STATE });
   const enabledRef = useRef(enabled);
+  const counters = useRef<MusicHapticsDiagnostics>({
+    pcmSamples: 0,
+    transients: 0,
+    pulses: 0,
+  });
+  const lastPublish = useRef(0);
+  const [diagnostics, setDiagnostics] =
+    useState<MusicHapticsDiagnostics>(counters.current);
 
   enabledRef.current = enabled;
 
   useEffect(() => {
     state.current = { ...INITIAL_STATE };
+    counters.current = {
+      pcmSamples: 0,
+      transients: 0,
+      pulses: 0,
+    };
+    setDiagnostics(counters.current);
   }, [trackId]);
 
   useAudioSampleListener(player, sample => {
-    if (!enabledRef.current || !sample.channels.length) return;
+    if (!sample.channels.length) return;
+
+    counters.current.pcmSamples += 1;
+
+    const now = Date.now();
+    if (now - lastPublish.current >= 500) {
+      lastPublish.current = now;
+      setDiagnostics({ ...counters.current });
+    }
+
+    if (!enabledRef.current) return;
 
     const timestamp = Number.isFinite(sample.timestamp)
       ? sample.timestamp
@@ -103,6 +133,7 @@ export function useMusicHaptics(
      */
     if (strongTransient && sinceLastPulse >= 0.22) {
       current.lastPulse = timestamp;
+      counters.current.transients += 1;
 
       const strength = Math.min(
         1,
@@ -113,9 +144,12 @@ export function useMusicHaptics(
         0.42 + strength * 0.46,
         0.30 + strength * 0.34
       );
+      counters.current.pulses += 1;
     }
 
     current.baseline = Math.max(0.008, baseline);
     current.previousEnergy = energy;
   });
+
+  return diagnostics;
 }
