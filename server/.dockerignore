@@ -1,0 +1,7 @@
+.env
+backend/accounts.json
+docker-compose.override.yml
+data/
+.git/
+__pycache__/
+*.py[cod]
