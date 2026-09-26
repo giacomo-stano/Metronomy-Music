@@ -1,0 +1,12 @@
+{
+  "users": {
+    "alice": ["music"]
+  },
+  "destinations": {
+    "music": {
+      "label": "Music",
+      "library_id": 1,
+      "root": "/libraries/music"
+    }
+  }
+}
