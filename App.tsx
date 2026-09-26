@@ -35,6 +35,7 @@ import {
   startAppleMusicHapticsStatusObservers,
   stopAppleMusicHapticsStatusObservers,
   stopMusicHaptics,
+  testCoreMusicHaptic,
 } from './src/haptics';
 import { migrateBrandData } from './src/brandMigration';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -513,6 +514,7 @@ function MusicApp({
     useState(false);
   const [appleMusicHapticsPlaying, setAppleMusicHapticsPlaying] =
     useState(false);
+  const [musicHapticsISRC, setMusicHapticsISRC] = useState('');
   const [sleepMinutes, setSleepMinutes] = useState(0);
   const sleepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lyrics, setLyrics] = useState<Lyrics | null>(null);
@@ -553,11 +555,12 @@ function MusicApp({
     }
 
     if (currentSongIdRef.current === song.id) {
+      setMusicHapticsISRC(isrc);
       configureAppleMusicHapticsISRC(isrc || null);
     }
   }
 
-  useMusicHaptics(
+  const musicHapticsDiagnostics = useMusicHaptics(
     player,
     musicHapticsEnabled &&
       !!status.playing &&
@@ -598,6 +601,7 @@ function MusicApp({
     setAppleMusicHapticsPlaying(false);
 
     if (!current) {
+      setMusicHapticsISRC('');
       configureAppleMusicHapticsISRC(null);
       return;
     }
@@ -2426,7 +2430,7 @@ function MusicApp({
     />
     </View>
 
-    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} connectivityBanner={connectivityBanner} connectivityBannerOpacity={connectivityBannerOpacity} connectivityBannerScale={connectivityBannerScale} connectivityBannerY={connectivityBannerY} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => lastKnownPosition.current > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} musicHapticsEnabled={musicHapticsEnabled} onToggleMusicHaptics={() => setMusicHapticsEnabled(v => !v)} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
+    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} connectivityBanner={connectivityBanner} connectivityBannerOpacity={connectivityBannerOpacity} connectivityBannerScale={connectivityBannerScale} connectivityBannerY={connectivityBannerY} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => lastKnownPosition.current > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} musicHapticsEnabled={musicHapticsEnabled} onToggleMusicHaptics={() => setMusicHapticsEnabled(v => !v)} musicHapticsDiagnostics={{ coreSupported: nativeMusicHapticsAvailable, appleActive: appleMusicHapticsActive, applePlaying: appleMusicHapticsPlaying, isrc: musicHapticsISRC, ...musicHapticsDiagnostics }} onTestMusicHaptics={testCoreMusicHaptic} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
     </SafeAreaView>
   );
 }
