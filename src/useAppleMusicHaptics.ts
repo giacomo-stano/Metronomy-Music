@@ -33,7 +33,7 @@ function isValidISRC(value: string) {
   return /^[A-Z0-9]{12}$/.test(value);
 }
 
-function firstISRC(value: unknown) {
+function firstISRC(value: unknown): string {
   if (typeof value === 'string') {
     const normalized = normalizeISRC(value);
     return isValidISRC(normalized) ? normalized : '';
