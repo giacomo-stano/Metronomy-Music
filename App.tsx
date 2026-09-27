@@ -27,15 +27,8 @@ import { clearAlbumSongsCache, peekAlbumSongs, preloadAlbumSongs } from './src/a
 import NowPlayingWaves from './src/NowPlayingWaves';
 import ElasticPlayPauseButton from './src/ElasticPlayPauseButton';
 import { useMusicHaptics } from './src/useMusicHaptics';
+import { useAppleMusicHaptics } from './src/useAppleMusicHaptics';
 import {
-  appleMusicHapticsTrackAvailable,
-  configureAppleMusicHapticsISRC,
-  nativeMusicHapticsAvailable,
-  nativeNowPlayingMusicHapticsISRC,
-  onAppleMusicHapticsActiveChanged,
-  onAppleMusicHapticsPlaybackChanged,
-  startAppleMusicHapticsStatusObservers,
-  stopAppleMusicHapticsStatusObservers,
   stopMusicHaptics,
   testCoreMusicHaptic,
 } from './src/haptics';
@@ -512,14 +505,6 @@ function MusicApp({
   const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off');
   const [shuffle, setShuffle] = useState(false);
   const [musicHapticsEnabled, setMusicHapticsEnabled] = useState(false);
-  const [appleMusicHapticsActive, setAppleMusicHapticsActive] =
-    useState(false);
-  const [appleMusicHapticsPlaying, setAppleMusicHapticsPlaying] =
-    useState(false);
-  const [musicHapticsISRC, setMusicHapticsISRC] = useState('');
-  const [nativeNowPlayingISRC, setNativeNowPlayingISRC] = useState('');
-  const [appleTrackAvailable, setAppleTrackAvailable] =
-    useState<boolean | null>(null);
   const [sleepMinutes, setSleepMinutes] = useState(0);
   const sleepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lyrics, setLyrics] = useState<Lyrics | null>(null);
@@ -534,156 +519,22 @@ function MusicApp({
   const player = useAudioPlayer(null, { updateInterval: 250 });
   const status = usePlaybackSignals(player);
   const current = queue[index];
-  const currentSongIdRef = useRef<string | undefined>(current?.id);
-  currentSongIdRef.current = current?.id;
-  const hapticsAvailabilityGeneration = useRef(0);
-
-  const normalizeISRC = (value: string) =>
-    value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-
-  async function configureISRCForSong(song: Song, force = false) {
-    let isrc = normalizeISRC(song.isrc?.trim() ?? '');
-
-    if (!isrc) {
-      try {
-        const detail = await request<{
-          info?: Record<string, unknown>;
-          isrc?: unknown;
-        }>(
-          'songs/' + encodeURIComponent(song.id),
-          15000
-        );
-
-        const raw =
-          detail.isrc ??
-          detail.info?.isrc ??
-          detail.info?.ISRC;
-
-        if (typeof raw === 'string') {
-          isrc = normalizeISRC(raw.trim());
-        } else if (Array.isArray(raw)) {
-          const first = raw.find(
-            value => typeof value === 'string' && value.trim()
-          );
-          if (typeof first === 'string') {
-            isrc = normalizeISRC(first.trim());
-          }
-        }
-
-        if (isrc) {
-          setQueue(previous =>
-            previous.map(item =>
-              item.id === song.id
-                ? { ...item, isrc }
-                : item
-            )
-          );
-        }
-      } catch (error) {
-        console.warn(
-          '[MusicHaptics] Impossibile leggere ISRC:',
-          error
-        );
-      }
-    }
-
-    if (force || currentSongIdRef.current === song.id) {
-      setMusicHapticsISRC(isrc);
-      configureAppleMusicHapticsISRC(isrc || null);
-
-      const nativeISRC =
-        nativeNowPlayingMusicHapticsISRC()?.trim() ?? '';
-      setNativeNowPlayingISRC(nativeISRC);
-
-      setAppleTrackAvailable(null);
-    }
-
-    return isrc;
-  }
-
-  async function checkAppleHapticsAvailability(
-    songId: string,
-    isrc: string
-  ) {
-    const generation = ++hapticsAvailabilityGeneration.current;
-
-    if (!isrc) {
-      setAppleTrackAvailable(null);
-      return;
-    }
-
-    try {
-      const available =
-        await appleMusicHapticsTrackAvailable(isrc);
-
-      if (
-        generation === hapticsAvailabilityGeneration.current &&
-        currentSongIdRef.current === songId
-      ) {
-        setAppleTrackAvailable(available);
-      }
-    } catch {
-      if (
-        generation === hapticsAvailabilityGeneration.current &&
-        currentSongIdRef.current === songId
-      ) {
-        setAppleTrackAvailable(null);
-      }
-    }
-  }
+  const appleMusicHaptics = useAppleMusicHaptics(current);
 
   const musicHapticsDiagnostics = useMusicHaptics(
     player,
     musicHapticsEnabled &&
       !!status.playing &&
-      !appleMusicHapticsPlaying &&
-      nativeMusicHapticsAvailable,
+      appleMusicHaptics.available === false &&
+      appleMusicHaptics.coreSupported,
     current?.id
   );
-
-  useEffect(() => {
-    if (!nativeMusicHapticsAvailable) return;
-
-    startAppleMusicHapticsStatusObservers();
-
-    const activeSubscription =
-      onAppleMusicHapticsActiveChanged(active => {
-        setAppleMusicHapticsActive(active);
-      });
-
-    const playbackSubscription =
-      onAppleMusicHapticsPlaybackChanged(event => {
-        setAppleMusicHapticsPlaying(event.playing);
-      });
-
-    return () => {
-      activeSubscription?.remove();
-      playbackSubscription?.remove();
-      stopAppleMusicHapticsStatusObservers();
-    };
-  }, []);
 
   useEffect(() => {
     if (!musicHapticsEnabled) {
       stopMusicHaptics();
     }
   }, [musicHapticsEnabled]);
-
-  useEffect(() => {
-    setAppleMusicHapticsPlaying(false);
-    hapticsAvailabilityGeneration.current += 1;
-    setAppleTrackAvailable(null);
-
-    if (!current) {
-      setMusicHapticsISRC('');
-      setNativeNowPlayingISRC('');
-      setAppleTrackAvailable(null);
-      configureAppleMusicHapticsISRC(null);
-      return;
-    }
-
-    void configureISRCForSong(current);
-  }, [current?.id, current?.isrc, isOffline]);
 
   useEffect(() => {
     if (!current?.coverArt || isOffline) return;
@@ -1123,13 +974,6 @@ function MusicApp({
         }
 
         try {
-          const hapticsISRC =
-            await configureISRCForSong(song, true);
-
-          if (!active || version !== audioGeneration.current) {
-            return;
-          }
-
           player.setActiveForLockScreen(
             true,
             {
@@ -1145,12 +989,6 @@ function MusicApp({
           );
 
           setRemoteControlsEnabled(true);
-          configureAppleMusicHapticsISRC(hapticsISRC || null);
-
-          void checkAppleHapticsAvailability(
-            song.id,
-            hapticsISRC
-          );
         } catch {
           /* Optional in Expo Go. */
         }
@@ -1530,18 +1368,6 @@ function MusicApp({
       player.replace(source);
       lastKnownPosition.current = 0;
 
-      /*
-       * Resolve and publish the ISRC BEFORE the player becomes the active
-       * Now Playing source. Music Haptics evaluates the current Now Playing
-       * item when it is activated; adding the ISRC afterwards can leave the
-       * system in the "unavailable" state even though the same ISRC has an
-       * Apple haptic track.
-       */
-      const hapticsISRC =
-        await configureISRCForSong(next, true);
-
-      if (version !== audioGeneration.current) return;
-
       try {
         player.setActiveForLockScreen(
           true,
@@ -1558,20 +1384,11 @@ function MusicApp({
         );
 
         setRemoteControlsEnabled(true);
-
-        // Re-publish after activation so the active Now Playing item carries
-        // the same ISRC, then perform one availability check for this track.
-        configureAppleMusicHapticsISRC(hapticsISRC || null);
       } catch {
         /* Optional in Expo Go. */
       }
 
       player.play();
-
-      void checkAppleHapticsAvailability(
-        next.id,
-        hapticsISRC
-      );
 
       void persistPlayerState(next, lastKnownPosition.current);
     } catch (e) {
@@ -2531,7 +2348,7 @@ function MusicApp({
     />
     </View>
 
-    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} connectivityBanner={connectivityBanner} connectivityBannerOpacity={connectivityBannerOpacity} connectivityBannerScale={connectivityBannerScale} connectivityBannerY={connectivityBannerY} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => lastKnownPosition.current > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} musicHapticsEnabled={musicHapticsEnabled} onToggleMusicHaptics={() => setMusicHapticsEnabled(v => !v)} musicHapticsDiagnostics={{ coreSupported: nativeMusicHapticsAvailable, appleActive: appleMusicHapticsActive, applePlaying: appleMusicHapticsPlaying, isrc: musicHapticsISRC, nativeIsrc: nativeNowPlayingISRC, appleAvailable: appleTrackAvailable, ...musicHapticsDiagnostics }} onTestMusicHaptics={testCoreMusicHaptic} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
+    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} connectivityBanner={connectivityBanner} connectivityBannerOpacity={connectivityBannerOpacity} connectivityBannerScale={connectivityBannerScale} connectivityBannerY={connectivityBannerY} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => lastKnownPosition.current > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} musicHapticsEnabled={musicHapticsEnabled} onToggleMusicHaptics={() => setMusicHapticsEnabled(v => !v)} musicHapticsDiagnostics={{ coreSupported: appleMusicHaptics.coreSupported, appleActive: appleMusicHaptics.active, applePlaying: appleMusicHaptics.playing, isrc: appleMusicHaptics.isrc, nativeIsrc: appleMusicHaptics.nativeIsrc, appleAvailable: appleMusicHaptics.available, ...musicHapticsDiagnostics }} onTestMusicHaptics={testCoreMusicHaptic} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
     </SafeAreaView>
   );
 }
