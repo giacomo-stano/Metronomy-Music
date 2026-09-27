@@ -531,10 +531,13 @@ function MusicApp({
   );
 
   useEffect(() => {
-    if (!musicHapticsEnabled) {
+    if (
+      !musicHapticsEnabled ||
+      appleMusicHaptics.available !== false
+    ) {
       stopMusicHaptics();
     }
-  }, [musicHapticsEnabled]);
+  }, [musicHapticsEnabled, appleMusicHaptics.available]);
 
   useEffect(() => {
     if (!current?.coverArt || isOffline) return;
