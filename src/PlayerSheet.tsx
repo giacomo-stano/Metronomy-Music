@@ -1398,17 +1398,29 @@ export default function PlayerSheet(p: Props) {
 
                       <Pressable
                         accessibilityRole="switch"
-                        accessibilityState={{ checked: p.musicHapticsEnabled }}
+                        accessibilityState={{
+                          checked: p.musicHapticsEnabled,
+                          disabled:
+                            p.musicHapticsDiagnostics.appleAvailable !== false,
+                        }}
                         accessibilityLabel={
-                          p.musicHapticsEnabled
-                            ? 'Disattiva feedback aptico musicale'
-                            : 'Attiva feedback aptico musicale'
+                          p.musicHapticsDiagnostics.appleAvailable === true
+                            ? 'Music Haptics Apple disponibile'
+                            : p.musicHapticsEnabled
+                              ? 'Disattiva fallback aptico Metronomy'
+                              : 'Attiva fallback aptico Metronomy'
+                        }
+                        disabled={
+                          p.musicHapticsDiagnostics.appleAvailable !== false
                         }
                         onPress={p.onToggleMusicHaptics}
                         style={[
                           playerStyles.hapticsChip,
                           p.musicHapticsEnabled &&
                             playerStyles.hapticsChipActive,
+                          p.musicHapticsDiagnostics.appleAvailable !== false && {
+                            opacity: 0.55,
+                          },
                         ]}
                       >
                         <SymbolView
@@ -1429,9 +1441,13 @@ export default function PlayerSheet(p: Props) {
                             },
                           ]}
                         >
-                          {p.musicHapticsEnabled
-                            ? 'Music Haptics attivi'
-                            : 'Music Haptics'}
+                          {p.musicHapticsDiagnostics.appleAvailable === true
+                            ? 'Apple Music Haptics'
+                            : p.musicHapticsDiagnostics.appleAvailable == null
+                              ? 'Verifica aptica…'
+                              : p.musicHapticsEnabled
+                                ? 'Fallback aptico attivo'
+                                : 'Fallback aptico'}
                         </Text>
                       </Pressable>
 
