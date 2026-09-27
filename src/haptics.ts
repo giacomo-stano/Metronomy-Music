@@ -31,16 +31,8 @@ export function configureAppleMusicHapticsISRC(
   setNativeMusicHapticsISRC(isrc);
 }
 
-export async function appleMusicHapticsWillHandleTrack(
-  isrc?: string | null
-) {
-  const code = isrc?.trim();
-
-  if (!code || !nativeAppleMusicHapticsActive()) {
-    return false;
-  }
-
-  return nativeAppleMusicHapticsTrackAvailable(code);
+export function appleMusicHapticsActive() {
+  return nativeAppleMusicHapticsActive();
 }
 
 export function startAppleMusicHapticsStatusObservers() {
