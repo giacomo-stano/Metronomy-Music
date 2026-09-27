@@ -2,7 +2,7 @@
   "expo": {
     "name": "Metronomy",
     "slug": "metronomy",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "orientation": "portrait",
     "icon": "./assets/metronomy-icon-v1.png",
     "userInterfaceStyle": "automatic",
@@ -24,7 +24,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.metronomy",
-      "buildNumber": "28",
+      "buildNumber": "29",
       "infoPlist": {
         "MusicHapticsSupported": true
       }
