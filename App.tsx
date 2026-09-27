@@ -536,9 +536,13 @@ function MusicApp({
   const current = queue[index];
   const currentSongIdRef = useRef<string | undefined>(current?.id);
   currentSongIdRef.current = current?.id;
+  const hapticsAvailabilityGeneration = useRef(0);
+
+  const normalizeISRC = (value: string) =>
+    value.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
   async function configureISRCForSong(song: Song, force = false) {
-    let isrc = song.isrc?.trim() ?? '';
+    let isrc = normalizeISRC(song.isrc?.trim() ?? '');
 
     if (!isrc) {
       try {
@@ -556,13 +560,13 @@ function MusicApp({
           detail.info?.ISRC;
 
         if (typeof raw === 'string') {
-          isrc = raw.trim();
+          isrc = normalizeISRC(raw.trim());
         } else if (Array.isArray(raw)) {
           const first = raw.find(
             value => typeof value === 'string' && value.trim()
           );
           if (typeof first === 'string') {
-            isrc = first.trim();
+            isrc = normalizeISRC(first.trim());
           }
         }
 
@@ -591,24 +595,41 @@ function MusicApp({
         nativeNowPlayingMusicHapticsISRC()?.trim() ?? '';
       setNativeNowPlayingISRC(nativeISRC);
 
-      if (isrc) {
-        try {
-          const available =
-            await appleMusicHapticsTrackAvailable(isrc);
-          if (currentSongIdRef.current === song.id) {
-            setAppleTrackAvailable(available);
-          }
-        } catch {
-          if (currentSongIdRef.current === song.id) {
-            setAppleTrackAvailable(null);
-          }
-        }
-      } else {
-        setAppleTrackAvailable(null);
-      }
+      setAppleTrackAvailable(null);
     }
 
     return isrc;
+  }
+
+  async function checkAppleHapticsAvailability(
+    songId: string,
+    isrc: string
+  ) {
+    const generation = ++hapticsAvailabilityGeneration.current;
+
+    if (!isrc) {
+      setAppleTrackAvailable(null);
+      return;
+    }
+
+    try {
+      const available =
+        await appleMusicHapticsTrackAvailable(isrc);
+
+      if (
+        generation === hapticsAvailabilityGeneration.current &&
+        currentSongIdRef.current === songId
+      ) {
+        setAppleTrackAvailable(available);
+      }
+    } catch {
+      if (
+        generation === hapticsAvailabilityGeneration.current &&
+        currentSongIdRef.current === songId
+      ) {
+        setAppleTrackAvailable(null);
+      }
+    }
   }
 
   const musicHapticsDiagnostics = useMusicHaptics(
@@ -650,6 +671,8 @@ function MusicApp({
 
   useEffect(() => {
     setAppleMusicHapticsPlaying(false);
+    hapticsAvailabilityGeneration.current += 1;
+    setAppleTrackAvailable(null);
 
     if (!current) {
       setMusicHapticsISRC('');
@@ -1100,7 +1123,8 @@ function MusicApp({
         }
 
         try {
-          await configureISRCForSong(song, true);
+          const hapticsISRC =
+            await configureISRCForSong(song, true);
 
           if (!active || version !== audioGeneration.current) {
             return;
@@ -1121,7 +1145,12 @@ function MusicApp({
           );
 
           setRemoteControlsEnabled(true);
-          void configureISRCForSong(song, true);
+          configureAppleMusicHapticsISRC(hapticsISRC || null);
+
+          void checkAppleHapticsAvailability(
+            song.id,
+            hapticsISRC
+          );
         } catch {
           /* Optional in Expo Go. */
         }
@@ -1508,7 +1537,8 @@ function MusicApp({
        * system in the "unavailable" state even though the same ISRC has an
        * Apple haptic track.
        */
-      await configureISRCForSong(next, true);
+      const hapticsISRC =
+        await configureISRCForSong(next, true);
 
       if (version !== audioGeneration.current) return;
 
@@ -1529,14 +1559,19 @@ function MusicApp({
 
         setRemoteControlsEnabled(true);
 
-        // SDK 57 preserves existing Now Playing keys, but read/publish once
-        // more after activation so our diagnostics reflect the active item.
-        void configureISRCForSong(next, true);
+        // Re-publish after activation so the active Now Playing item carries
+        // the same ISRC, then perform one availability check for this track.
+        configureAppleMusicHapticsISRC(hapticsISRC || null);
       } catch {
         /* Optional in Expo Go. */
       }
 
       player.play();
+
+      void checkAppleHapticsAvailability(
+        next.id,
+        hapticsISRC
+      );
 
       void persistPlayerState(next, lastKnownPosition.current);
     } catch (e) {
