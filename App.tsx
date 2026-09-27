@@ -537,7 +537,7 @@ function MusicApp({
   const currentSongIdRef = useRef<string | undefined>(current?.id);
   currentSongIdRef.current = current?.id;
 
-  async function configureISRCForSong(song: Song) {
+  async function configureISRCForSong(song: Song, force = false) {
     let isrc = song.isrc?.trim() ?? '';
 
     if (!isrc) {
@@ -583,7 +583,7 @@ function MusicApp({
       }
     }
 
-    if (currentSongIdRef.current === song.id) {
+    if (force || currentSongIdRef.current === song.id) {
       setMusicHapticsISRC(isrc);
       configureAppleMusicHapticsISRC(isrc || null);
 
@@ -1100,6 +1100,12 @@ function MusicApp({
         }
 
         try {
+          await configureISRCForSong(song, true);
+
+          if (!active || version !== audioGeneration.current) {
+            return;
+          }
+
           player.setActiveForLockScreen(
             true,
             {
@@ -1115,10 +1121,7 @@ function MusicApp({
           );
 
           setRemoteControlsEnabled(true);
-
-          // expo-audio rewrites MPNowPlayingInfoCenter here; restore the ISRC
-          // afterwards so iOS can associate the correct Music Haptics track.
-          void configureISRCForSong(song);
+          void configureISRCForSong(song, true);
         } catch {
           /* Optional in Expo Go. */
         }
@@ -1497,7 +1500,17 @@ function MusicApp({
 
       player.replace(source);
       lastKnownPosition.current = 0;
-      player.play();
+
+      /*
+       * Resolve and publish the ISRC BEFORE the player becomes the active
+       * Now Playing source. Music Haptics evaluates the current Now Playing
+       * item when it is activated; adding the ISRC afterwards can leave the
+       * system in the "unavailable" state even though the same ISRC has an
+       * Apple haptic track.
+       */
+      await configureISRCForSong(next, true);
+
+      if (version !== audioGeneration.current) return;
 
       try {
         player.setActiveForLockScreen(
@@ -1514,16 +1527,16 @@ function MusicApp({
           }
         );
 
-        // expo-audio can update MPRemoteCommandCenter when activating
-        // lock-screen controls. Re-enable our track commands afterwards.
         setRemoteControlsEnabled(true);
 
-        // setActiveForLockScreen also rewrites Now Playing metadata.
-        // Restore the ISRC after it so Apple Music Haptics keeps the match.
-        void configureISRCForSong(next);
+        // SDK 57 preserves existing Now Playing keys, but read/publish once
+        // more after activation so our diagnostics reflect the active item.
+        void configureISRCForSong(next, true);
       } catch {
         /* Optional in Expo Go. */
       }
+
+      player.play();
 
       void persistPlayerState(next, lastKnownPosition.current);
     } catch (e) {
