@@ -1,6 +1,6 @@
 {
   "name": "metronomy-expo",
-  "version": "0.2.9",
+  "version": "0.3.0",
   "main": "index.ts",
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
