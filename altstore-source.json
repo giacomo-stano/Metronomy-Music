@@ -13,6 +13,14 @@
       "tintColor": "#111111",
       "versions": [
         {
+          "version": "0.3.0",
+          "buildVersion": "28",
+          "date": "2026-09-27",
+          "localizedDescription": "Metronomy 0.3.0",
+          "downloadURL": "https://github.com/giacomo-stano/Metronomy-Music/releases/download/v0.3.0-stable/Metronomy.ipa",
+          "size": 16821820
+        },
+        {
           "version": "0.2.9",
           "buildVersion": "27",
           "date": "2026-09-27",
