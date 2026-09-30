@@ -25,6 +25,9 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
+      - name: Test Apple Music Haptics state management
+        run: node tests/apple-music-haptics.cjs
+
       - name: Generate iOS project
         env:
           CI: "1"
@@ -34,6 +37,14 @@ jobs:
         run: |
           cd ios
           pod install
+
+      - name: Verify Music Haptics plist configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          PLIST="$(find ios -mindepth 2 -maxdepth 2 -name Info.plist -not -path '*/Pods/*' -print -quit)"
+          test -n "$PLIST"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :MusicHapticsSupported' "$PLIST")" = "true"
 
       - name: Verify Metronomy native audio controls are linked
         shell: bash
