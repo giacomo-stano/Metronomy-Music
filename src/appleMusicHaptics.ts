@@ -1,6 +1,7 @@
 // Pure orchestration: testable without an iPhone. Availability is never playback.
 export type NativeHapticsState = {
   key: string; supported: boolean; active: boolean; playing: boolean; nativeIsrc: string;
+  nowPlayingReady: boolean; audioPlaying: boolean; observerRegistered: boolean;
 };
 export type AppleHapticsState = NativeHapticsState & {
   phase: 'idle' | 'native-missing' | 'checking' | 'missing-isrc' | 'ready' | 'error';
@@ -16,6 +17,7 @@ export type AppleHapticsNative = {
 };
 export const emptyHapticsState: AppleHapticsState = {
   key: '', supported: false, active: false, playing: false, nativeIsrc: '',
+  nowPlayingReady: false, audioPlaying: false, observerRegistered: false,
   phase: 'idle', isrc: '', available: null, error: '',
 };
 
@@ -110,7 +112,7 @@ export class AppleHapticsSession {
   }
 }
 
-export function hapticsLabel(state: AppleHapticsState, audioPlaying: boolean): string {
+export function hapticsLabel(state: AppleHapticsState): string {
   if (state.phase === 'idle') return 'Music Haptics';
   if (state.phase === 'native-missing') return 'Richiede build iOS';
   if (state.phase === 'checking') return 'Verifica Music Haptics…';
@@ -119,7 +121,9 @@ export function hapticsLabel(state: AppleHapticsState, audioPlaying: boolean): s
   if (state.phase === 'missing-isrc') return 'ISRC non disponibile';
   if (!state.active) return 'Music Haptics disattivato';
   if (state.available === false) return 'Brano aptico non disponibile';
-  if (state.nativeIsrc !== state.isrc) return 'Sincronizzazione aptica…';
-  if (!audioPlaying) return 'Music Haptics in pausa';
-  return state.playing ? 'Music Haptics in riproduzione' : 'In attesa di Music Haptics';
+  if (!state.nowPlayingReady || state.nativeIsrc !== state.isrc || !state.observerRegistered) {
+    return 'Sincronizzazione aptica…';
+  }
+  if (state.playing) return 'Music Haptics in riproduzione';
+  return 'Music Haptics attivo';
 }

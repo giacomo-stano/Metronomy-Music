@@ -26,15 +26,27 @@ public final class MetronomyMusicHapticsModule: Module {
       self.artist = artist
       self.isrc = ""
       self.playing = false
-      self.observe()
+      self.stopPlaybackObserver()
+      self.observeActiveStatus()
       return self.snapshot()
     }.runOnQueue(.main)
 
     AsyncFunction("setISRC") { (key: String, code: String) -> [String: Any] in
-      if self.key == key,
-         code.range(of: "^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$", options: .regularExpression) != nil {
-        self.isrc = code
+      guard self.key == key,
+            code.range(of: "^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$", options: .regularExpression) != nil else {
+        return self.snapshot()
       }
+      self.isrc = code
+
+      // Publish the ISRC first, then register the Music Haptics playback
+      // observer so an initial callback cannot arrive while the media code is empty.
+      _ = self.snapshot()
+      self.restartPlaybackObserver()
+
+      // expo-audio can finish publishing Now Playing metadata shortly after
+      // setActiveForLockScreen(). Re-read and reattach after it settles.
+      self.scheduleAttachmentRetry(key: key, code: code, after: 0.35)
+      self.scheduleAttachmentRetry(key: key, code: code, after: 0.90)
       return self.snapshot()
     }.runOnQueue(.main)
 
@@ -81,9 +93,11 @@ public final class MetronomyMusicHapticsModule: Module {
     var active = false
     var nativeISRC = ""
     var audioPlaying = false
+    var nowPlayingReady = false
     if #available(iOS 18.0, *) {
       active = MAMusicHapticsManager.shared.isActive
       if var info = MPNowPlayingInfoCenter.default().nowPlayingInfo, matches(info) {
+        nowPlayingReady = true
         if !isrc.isEmpty,
            info[MPNowPlayingInfoPropertyInternationalStandardRecordingCode] as? String != isrc {
           info[MPNowPlayingInfoPropertyInternationalStandardRecordingCode] = isrc
@@ -95,10 +109,13 @@ public final class MetronomyMusicHapticsModule: Module {
     }
     return ["key": key, "supported": supported, "active": active,
             "playing": playing && active && audioPlaying && nativeISRC == isrc && !isrc.isEmpty,
-            "nativeIsrc": nativeISRC]
+            "nativeIsrc": nativeISRC,
+            "nowPlayingReady": nowPlayingReady,
+            "audioPlaying": audioPlaying,
+            "observerRegistered": playbackObserver != nil]
   }
 
-  private func observe() {
+  private func observeActiveStatus() {
     guard #available(iOS 18.0, *), activeObserver == nil else { return }
     activeObserver = NotificationCenter.default.addObserver(
       forName: MAMusicHapticsManager.activeStatusDidChangeNotification, object: nil, queue: .main
@@ -107,12 +124,45 @@ public final class MetronomyMusicHapticsModule: Module {
       if !MAMusicHapticsManager.shared.isActive { self.playing = false }
       self.sendEvent("onStateChanged", self.snapshot())
     }
+  }
+
+  private func restartPlaybackObserver() {
+    guard #available(iOS 18.0, *), !key.isEmpty, !isrc.isEmpty else {
+      stopPlaybackObserver()
+      return
+    }
+    stopPlaybackObserver()
+    let expectedKey = key
+    let expectedISRC = isrc
     playbackObserver = MAMusicHapticsManager.shared.addStatusObserver { [weak self] code, playing in
       DispatchQueue.main.async {
-        guard let self, !self.isrc.isEmpty, code.uppercased() == self.isrc else { return }
+        guard let self,
+              self.key == expectedKey,
+              self.isrc == expectedISRC,
+              code.uppercased() == expectedISRC else { return }
         self.playing = playing
         self.sendEvent("onStateChanged", self.snapshot())
       }
+    }
+  }
+
+  private func stopPlaybackObserver() {
+    if #available(iOS 18.0, *), let playbackObserver {
+      MAMusicHapticsManager.shared.removeStatusObserver(playbackObserver)
+    }
+    playbackObserver = nil
+  }
+
+  private func scheduleAttachmentRetry(key: String, code: String, after delay: TimeInterval) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+      guard let self, self.key == key, self.isrc == code else { return }
+      let state = self.snapshot()
+      let ready = (state["nowPlayingReady"] as? Bool ?? false) &&
+        (state["nativeIsrc"] as? String ?? "") == code
+      if ready && !self.playing {
+        self.restartPlaybackObserver()
+      }
+      self.sendEvent("onStateChanged", self.snapshot())
     }
   }
 
@@ -131,9 +181,6 @@ public final class MetronomyMusicHapticsModule: Module {
     playing = false
     if let activeObserver { NotificationCenter.default.removeObserver(activeObserver) }
     activeObserver = nil
-    if #available(iOS 18.0, *), let playbackObserver {
-      MAMusicHapticsManager.shared.removeStatusObserver(playbackObserver)
-    }
-    playbackObserver = nil
+    stopPlaybackObserver()
   }
 }
