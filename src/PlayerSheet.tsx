@@ -19,6 +19,7 @@ import { useVisiblePlaybackStatus } from './usePlaybackSignals';
 import { useTheme } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
 import ElasticPlayPauseButton from './ElasticPlayPauseButton';
+import { hapticsLabel, type AppleHapticsState } from './appleMusicHaptics';
 import { AirPlayButton, SystemVolumeSlider, nativeAirPlayAvailable, nativeSystemVolumeAvailable } from '../modules/metronomy-audio-controls';
 
 type Props = {
@@ -40,6 +41,7 @@ type Props = {
   onRepeat: () => void;
   shuffle: boolean;
   onShuffle: () => void;
+  musicHaptics: { state: AppleHapticsState; retry: () => void };
   onBrowse: (type: 'album' | 'artist') => void;
   onFavorite: (starred: boolean) => void;
   onSleep: (minutes: number) => void;
@@ -1329,17 +1331,34 @@ export default function PlayerSheet(p: Props) {
                       <Text style={playerStyles.timeText}>
                         {clock(currentTime)}
                       </Text>
-                      <View style={playerStyles.hapticsChip}>
+                      <Pressable style={playerStyles.hapticsChip}
+                        accessibilityRole="button"
+                        accessibilityLabel={hapticsLabel(p.musicHaptics.state, !!status.playing)}
+                        onPress={() => {
+                          const h = p.musicHaptics.state;
+                          Alert.alert('Music Haptics di Apple',
+                            hapticsLabel(h, !!status.playing) + '\n\n' +
+                            'Attiva Feedback aptici musicali in Impostazioni iPhone → Accessibilità. Richiede un iPhone compatibile, iOS 18 o successivo e un brano supportato da Apple.\n\n' +
+                            'ISRC brano: ' + (h.isrc || 'assente') + '\nISRC iOS: ' + (h.nativeIsrc || 'assente') +
+                            '\nAbilitato da iOS: ' + (h.active ? 'sì' : 'no') +
+                            '\nTraccia Apple: ' + (h.available === null ? 'non verificata' : h.available ? 'disponibile' : 'non disponibile') +
+                            '\nRiproduzione aptica confermata: ' + (h.playing && status.playing ? 'sì' : 'no') +
+                            (h.error ? '\n\n' + h.error : ''),
+                            [{ text: 'Chiudi', style: 'cancel' }, { text: 'Riprova', onPress: p.musicHaptics.retry }]);
+                        }}>
                         <SymbolView
-                          name={'hand.tap' as SFSymbol}
+                          name={(p.musicHaptics.state.available === false
+                            ? 'apple.haptics.and.exclamationmark.triangle'
+                            : p.musicHaptics.state.active ? 'apple.haptics.and.music.note'
+                            : 'apple.haptics.and.music.note.slash') as SFSymbol}
                           size={9}
                           weight="regular"
                           tintColor="rgba(255,255,255,0.48)"
                         />
                         <Text style={playerStyles.hapticsText}>
-                          Feedback aptici in pausa
+                          {hapticsLabel(p.musicHaptics.state, !!status.playing)}
                         </Text>
-                      </View>
+                      </Pressable>
                       <Text style={playerStyles.timeText}>
                         −{clock(remainingTime)}
                       </Text>

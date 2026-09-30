@@ -4,7 +4,8 @@
     "modules": [
       "MetronomyRemoteControlsModule",
       "MetronomyAirPlayModule",
-      "MetronomySystemVolumeModule"
+      "MetronomySystemVolumeModule",
+      "MetronomyMusicHapticsModule"
     ]
   }
 }

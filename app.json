@@ -8,7 +8,8 @@
     "userInterfaceStyle": "automatic",
     "plugins": [["expo-audio", { "enableBackgroundPlayback": true }]],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": { "MusicHapticsSupported": true }
     },
     "android": {
       "adaptiveIcon": {

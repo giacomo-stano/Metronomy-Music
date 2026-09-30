@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Animated, Easing, Image, PanResponder, SafeAr
 import { coverURL, streamURL, request, type Album, type HomeResponse, type Song, type SearchResponse, type Lyrics } from './src/api';
 import SearchScreen from './src/SearchScreen';
 import PlayerSheet from './src/PlayerSheet';
+import { useAppleMusicHaptics } from './src/useAppleMusicHaptics';
 import { Ionicons } from '@expo/vector-icons';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -258,6 +259,11 @@ function MusicApp({
   const player = useAudioPlayer(null, { updateInterval: 250 });
   const status = usePlaybackSignals(player);
   const current = queue[index];
+  // Only bind haptics after the audio source AND lock-screen metadata are set.
+  const [hapticsTrack, setHapticsTrack] = useState<Song>();
+  const musicHaptics = useAppleMusicHaptics(
+    current?.id === hapticsTrack?.id ? hapticsTrack : undefined, !!status.playing
+  );
   const playback = useRef({ queue, index });
   playback.current = { queue, index };
 
@@ -826,6 +832,7 @@ function MusicApp({
         // expo-audio can update MPRemoteCommandCenter when activating
         // lock-screen controls. Re-enable our track commands afterwards.
         setRemoteControlsEnabled(true);
+        setHapticsTrack(next);
       } catch {
         /* Optional in Expo Go. */
       }
@@ -1638,7 +1645,7 @@ function MusicApp({
     />
     </View>
 
-    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => player.currentTime > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
+    {current && <PlayerSheet musicHaptics={musicHaptics} visible={expanded} onClose={() => setExpanded(false)} song={current} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => player.currentTime > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
     </SafeAreaView>
   );
 }
