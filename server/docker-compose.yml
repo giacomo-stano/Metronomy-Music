@@ -1,0 +1,25 @@
+services:
+  bridge:
+    build: ./backend
+    container_name: metronomy-bridge
+    env_file:
+      - ./.env
+    environment:
+      ACCOUNTS_FILE: /config/accounts.json
+      NETWORK_DB: /data/network.sqlite3
+      XDG_CONFIG_HOME: /data/config
+      MUSIC_TRASH_DIRECTORY: /trash
+      QOGET_CONFIG: /data/config/qoget/config.json
+    ports:
+      - "${METRONOMY_BIND_ADDRESS:-0.0.0.0}:${METRONOMY_PORT:-8180}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./backend/accounts.json:/config/accounts.json:ro
+      - ${METRONOMY_TRASH_PATH:-./data/trash}:/trash
+      - metronomy-data:/data
+    restart: unless-stopped
+
+volumes:
+  metronomy-data:
+    name: ${METRONOMY_DATA_VOLUME:-metronomy-data}

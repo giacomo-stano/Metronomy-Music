@@ -1,0 +1,9 @@
+.env
+backend/.env
+backend/accounts.json
+docker-compose.override.yml
+*.bak
+data/
+__pycache__/
+*.py[cod]
+.DS_Store
