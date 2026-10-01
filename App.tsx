@@ -813,6 +813,8 @@ function MusicApp({
         );
       }
 
+      await musicHaptics.prepare();
+      if (version !== audioGeneration.current) return;
       nowPlayingTrack.current = next;
       player.replace(source);
 

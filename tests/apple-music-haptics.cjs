@@ -148,7 +148,7 @@ function fixture(read = async () => ({ info: { isrc: [A] } }), timeout = 100) {
   assert.equal(order.join(','), 'publish:' + A + ',observe');
 
   const diagnostics = { ...f.session.state, playing: false, active: true, audioPlaying: true,
-    supported: true, integrationVersion: 2, ownerReady: true, timelineValid: true, available: true,
+    supported: true, integrationVersion: 3, ownerReady: true, timelineValid: true, available: true,
     callbackReceived: false, duration: 200, elapsed: 45, rate: 1, isLive: false };
   assert(hapticsDiagnostics(diagnostics).includes('non ancora ricevuta'));
   assert(hapticsDiagnostics({ ...diagnostics, callbackReceived: true }).includes('Apple ha risposto'));
@@ -158,7 +158,13 @@ function fixture(read = async () => ({ info: { isrc: [A] } }), timeout = 100) {
   const swift = fs.readFileSync('modules/metronomy-audio-controls/ios/MetronomyMusicHapticsModule.swift', 'utf8');
   assert(!/import CoreHaptics|CHHapticEngine|hapticTransient/.test(swift));
   assert(swift.includes('.runOnQueue(.main)'));
-  assert(swift.includes('restartPlaybackObserver'));
+  assert(swift.includes('ensurePlaybackObserver'));
+  assert(swift.includes('AsyncFunction("prepareObserver")'));
+  assert.equal((swift.match(/self.stopPlaybackObserver\(\)/g) || []).length, 1, 'only module destruction removes the observer');
+  assert(swift.includes('callbackOwner == owner'), 'an early callback must match the current audio owner');
+  assert(swift.includes('MetronomyNowPlayingPublished'));
+  const app = fs.readFileSync('App.tsx', 'utf8');
+  assert(app.indexOf('await musicHaptics.prepare()') < app.indexOf('player.replace(source)'), 'native observation begins before audio publication');
   assert(!swift.includes('scheduleAttachmentRetry'), 'observer is not a playback trigger');
   assert(!/nowPlayingInfo\s*=/.test(swift), 'haptics observer must not mutate the audio owner metadata');
   assert(swift.includes('callbackReceived'));

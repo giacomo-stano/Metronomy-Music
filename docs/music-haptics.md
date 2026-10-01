@@ -59,7 +59,7 @@ riscaricati automaticamente.
 
 1. Collegare l'iPhone a Internet e abilitare Music Haptics in Accessibilità.
 2. Aprire la nuova build e riprodurre il brano del caso osservato.
-3. Nella diagnostica verificare `Integrazione nativa: 2`, `Metadati player: sì`,
+3. Nella diagnostica verificare `Integrazione nativa: 3`, `Metadati player: sì`,
    ISRC `USAT21300493`, durata positiva, posizione crescente, velocità `1`,
    `Live: no` e timeline valida.
 4. Provare pausa/ripresa, seek, due cambi rapidi di brano e schermo bloccato.
@@ -87,3 +87,44 @@ verifiche distinte. Non dichiariamo risolto il caso hardware prima della prova.
   il campo `isrc` può contenere più codici.
 
 Nessun Core Haptics, analisi PCM o vibrazione sintetica è stato aggiunto.
+
+## Seconda prova su iPhone: nessuna notifica dopo 41,8 secondi
+
+L'integrazione 2, installata sul dispositivo, mostra durata 234,5 s, posizione
+41,8 s, velocità 1, ISRC corretto, traccia disponibile e zero callback anche
+dopo disattivazione/riattivazione da Centro di Controllo. Le correzioni precedenti
+non hanno quindi risolto il feedback fisico in quel caso. Non abbiamo evidenza
+per attribuire il problema a Navidrome, a un ISRC assente o a una durata nulla.
+
+Nel codice restavano due aspetti verificabili, corretti nell'integrazione 3:
+
+- La sottoscrizione aptica veniva creata dopo l'avvio audio e rimossa ad ogni
+  selezione/riprova. Ora `prepareObserver` viene atteso **prima** di replace,
+  pubblicazione dei metadati e play. Un unico observer resta vivo fino alla
+  distruzione del modulo; un callback arrivato prima dell'effetto React viene
+  conservato, ma conta come conferma solo per ISRC e proprietario corrispondenti.
+- expo-audio pubblicava tutto il Now Playing ad ogni tick UI (250 ms). Ora un
+  filtro nativo conserva i tick dell'interfaccia ma sopprime le pubblicazioni
+  identiche in avanzamento normale. Cambi di metadati, item, velocità e salti
+  temporali di almeno 250 ms passano; questo preserva pausa/ripresa, buffering,
+  seek e loop. La posizione iOS avanza dalla posizione base e dalla velocità.
+  Un seek inferiore a 250 ms può essere assorbito nella tolleranza della timeline.
+
+Apple documenta che [il tempo trascorso viene calcolato automaticamente](https://developer.apple.com/documentation/mediaplayer/mpnowplayinginfopropertyelapsedplaybacktime)
+e non richiede aggiornamenti frequenti. **Non è però dimostrato che le scritture
+frequenti fossero la causa delle vibrazioni assenti.** Questa è una correzione
+di integrazione da verificare sul dispositivo, non una conferma di soluzione.
+
+La diagnostica 3 aggiunge numero di registrazioni dell'observer, notifiche del
+toggle di sistema e pubblicazioni del player. Il contatore dei callback è
+cumulativo per l'istanza nativa e non viene azzerato da Riprova. La dicitura
+“Audio rilevato da iOS” è sostituita con “Riproduzione dichiarata nel Now Playing”:
+leggere il nostro dizionario non prova che il servizio aptico lo abbia accettato.
+La posizione corrente mostrata è stimata dalla posizione base pubblicata.
+
+Il filtro è in `plugins/native/MetronomyNowPlayingPolicy.swift`; lo stesso file
+usato da expo-audio viene compilato ed eseguito con test di regressione nel
+workflow macOS prima della build iOS. I test Swift e la vibrazione fisica non
+sono eseguibili dalla postazione Windows; i test Node/TypeScript sono separati.
+Questa seconda modifica riguarda solo l'app: **nessun nuovo aggiornamento del
+bridge è necessario**.

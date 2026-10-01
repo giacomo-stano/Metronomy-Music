@@ -11,16 +11,32 @@ public final class MetronomyMusicHapticsModule: Module {
   private var artist = ""
   private var isrc = ""
   private var playing = false
-  private var callbackReceived = false
   private var callbackCount = 0
   private var callbackCode = ""
+  private var callbackOwner = ""
   private var callbackAt: Double = 0
   private var activeObserver: NSObjectProtocol?
   private var playbackObserver: (any NSCopying)?
+  private var publicationObserver: NSObjectProtocol?
+  private var publicationUptime: Double = 0
+  private var publicationOwner = ""
+  private var publicationCount = 0
+  private var activeChangeCount = 0
+  private var observerGeneration = 0
+  private var observerRegistrations = 0
 
   public func definition() -> ModuleDefinition {
     Name("MetronomyMusicHaptics")
     Events("onStateChanged")
+
+    AsyncFunction("prepareObserver") {
+      // Called before replace/Now Playing/play; never wait for catalog lookup.
+      self.playing = false
+      self.callbackCode = ""
+      self.callbackOwner = ""
+      self.callbackAt = 0
+      self.ensureObservers()
+    }.runOnQueue(.main)
 
     // Passive observer. expo-audio is the sole writer of Now Playing metadata.
     // Availability and observer registration do not start haptic playback.
@@ -29,9 +45,9 @@ public final class MetronomyMusicHapticsModule: Module {
       self.title = title
       self.artist = artist
       self.isrc = ""
-      self.playing = false
-      self.stopPlaybackObserver()
-      self.observeActiveStatus()
+      // Keep a callback delivered between audio start and the React effect.
+      // The owner + ISRC comparison in snapshot rejects unrelated recordings.
+      self.ensureObservers()
       return self.snapshot()
     }.runOnQueue(.main)
 
@@ -42,7 +58,7 @@ public final class MetronomyMusicHapticsModule: Module {
       }
       self.isrc = code
 
-      self.restartPlaybackObserver()
+      self.ensureObservers()
       return self.snapshot()
     }.runOnQueue(.main)
 
@@ -67,7 +83,14 @@ public final class MetronomyMusicHapticsModule: Module {
     }.runOnQueue(.main)
 
     OnDestroy {
-      DispatchQueue.main.async { self.clear() }
+      DispatchQueue.main.async {
+        self.clear()
+        self.stopPlaybackObserver()
+        if let observer = self.activeObserver { NotificationCenter.default.removeObserver(observer) }
+        if let observer = self.publicationObserver { NotificationCenter.default.removeObserver(observer) }
+        self.activeObserver = nil
+        self.publicationObserver = nil
+      }
     }
   }
 
@@ -95,6 +118,8 @@ public final class MetronomyMusicHapticsModule: Module {
     var rate: Double = 0
     var isLive = false
     var ownerReady = false
+    var owner = ""
+    var elapsedAnchor: Double = -1
     if #available(iOS 18.0, *) {
       active = MAMusicHapticsManager.shared.isActive
       if let info = MPNowPlayingInfoCenter.default().nowPlayingInfo, matches(info) {
@@ -103,15 +128,24 @@ public final class MetronomyMusicHapticsModule: Module {
         rate = (info[MPNowPlayingInfoPropertyPlaybackRate] as? NSNumber)?.doubleValue ?? 0
         duration = (info[MPMediaItemPropertyPlaybackDuration] as? NSNumber)?.doubleValue ?? -1
         elapsed = (info[MPNowPlayingInfoPropertyElapsedPlaybackTime] as? NSNumber)?.doubleValue ?? -1
+        elapsedAnchor = elapsed
         isLive = (info[MPNowPlayingInfoPropertyIsLiveStream] as? NSNumber)?.boolValue ?? false
-        ownerReady = (info[MPNowPlayingInfoPropertyExternalContentIdentifier] as? String)?.hasPrefix("metronomy:") == true
+        owner = info[MPNowPlayingInfoPropertyExternalContentIdentifier] as? String ?? ""
+        ownerReady = owner.hasPrefix("metronomy:")
+        // Now Playing retains an anchor, not a clock updated four times/second.
+        // Match iOS extrapolation for diagnostics without writing the dictionary.
+        if owner == publicationOwner, publicationUptime > 0, elapsed >= 0, rate > 0 {
+          elapsed += max(0, ProcessInfo.processInfo.systemUptime - publicationUptime) * rate
+          if duration.isFinite && duration > 0 { elapsed = min(elapsed, duration) }
+        }
         audioPlaying = rate.isFinite && rate > 0
       }
     }
     let timelineValid = duration.isFinite && duration > 0 && elapsed.isFinite && elapsed >= 0 && !isLive
     let audio = AVAudioSession.sharedInstance()
+    let callbackReceived = !isrc.isEmpty && callbackCode == isrc && !owner.isEmpty && callbackOwner == owner
     return ["key": key, "supported": supported, "active": active,
-            "playing": playing && active && audioPlaying && nativeISRC == isrc && !isrc.isEmpty,
+            "playing": playing && callbackReceived && active && audioPlaying && nativeISRC == isrc,
             "nativeIsrc": nativeISRC,
             "nowPlayingReady": nowPlayingReady,
             "audioPlaying": audioPlaying,
@@ -120,12 +154,31 @@ public final class MetronomyMusicHapticsModule: Module {
             "callbackCode": callbackCode, "callbackAt": callbackAt,
             "duration": duration.isFinite ? duration : -1,
             "elapsed": elapsed.isFinite ? elapsed : -1,
+            "elapsedAnchor": elapsedAnchor.isFinite ? elapsedAnchor : -1,
             "rate": rate.isFinite ? rate : 0, "isLive": isLive,
             "timelineValid": timelineValid, "ownerReady": ownerReady,
             "plistEnabled": Bundle.main.object(forInfoDictionaryKey: "MusicHapticsSupported") as? Bool ?? false,
             "audioCategory": audio.category.rawValue, "audioMode": audio.mode.rawValue,
             "audioRoute": audio.currentRoute.outputs.map { $0.portType.rawValue }.joined(separator: ", "),
-            "integrationVersion": 2]
+            "publicationCount": publicationCount, "activeChangeCount": activeChangeCount,
+            "observerRegistrations": observerRegistrations,
+            "integrationVersion": 3]
+  }
+
+  private func ensureObservers() {
+    observeActiveStatus()
+    ensurePlaybackObserver()
+    if publicationObserver == nil {
+      publicationObserver = NotificationCenter.default.addObserver(
+        forName: Notification.Name("MetronomyNowPlayingPublished"), object: nil, queue: .main
+      ) { [weak self] notification in
+        guard let self, let id = notification.userInfo?["trackId"] as? String,
+              let uptime = notification.userInfo?["uptime"] as? Double else { return }
+        self.publicationOwner = "metronomy:" + id
+        self.publicationUptime = uptime
+        self.publicationCount += 1
+      }
+    }
   }
 
   private func observeActiveStatus() {
@@ -134,48 +187,42 @@ public final class MetronomyMusicHapticsModule: Module {
       forName: MAMusicHapticsManager.activeStatusDidChangeNotification, object: nil, queue: .main
     ) { [weak self] _ in
       guard let self else { return }
+      self.activeChangeCount += 1
       if !MAMusicHapticsManager.shared.isActive { self.playing = false }
       self.sendEvent("onStateChanged", self.snapshot())
     }
   }
 
-  private func restartPlaybackObserver() {
-    guard #available(iOS 18.0, *), !key.isEmpty, !isrc.isEmpty else {
-      stopPlaybackObserver()
-      return
-    }
-    stopPlaybackObserver()
-    let expectedKey = key
-    let expectedISRC = isrc
+  private func ensurePlaybackObserver() {
+    guard #available(iOS 18.0, *), playbackObserver == nil else { return }
+    observerGeneration += 1
+    let generation = observerGeneration
     playbackObserver = MAMusicHapticsManager.shared.addStatusObserver { [weak self] code, playing in
       DispatchQueue.main.async {
-        guard let self,
-              self.key == expectedKey,
-              self.isrc == expectedISRC else { return }
+        guard let self, self.observerGeneration == generation else { return }
         self.callbackCode = code.uppercased()
         self.callbackCount += 1
         self.callbackAt = Date().timeIntervalSince1970
-        guard code.uppercased() == expectedISRC else {
-          if code.isEmpty && !playing { self.playing = false }
-          self.sendEvent("onStateChanged", self.snapshot())
-          return
-        }
-        self.callbackReceived = true
+        let info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        let mediaCode = info[MPNowPlayingInfoPropertyInternationalStandardRecordingCode] as? String ?? ""
+        self.callbackOwner = mediaCode == self.callbackCode
+          ? (info[MPNowPlayingInfoPropertyExternalContentIdentifier] as? String ?? "") : ""
         self.playing = playing
         self.sendEvent("onStateChanged", self.snapshot())
       }
     }
+    if playbackObserver != nil { observerRegistrations += 1 }
   }
 
   private func stopPlaybackObserver() {
+    observerGeneration += 1
     if #available(iOS 18.0, *), let playbackObserver {
       MAMusicHapticsManager.shared.removeStatusObserver(playbackObserver)
     }
     playbackObserver = nil
     playing = false
-    callbackReceived = false
-    callbackCount = 0
     callbackCode = ""
+    callbackOwner = ""
     callbackAt = 0
   }
 
@@ -183,8 +230,9 @@ public final class MetronomyMusicHapticsModule: Module {
     key = ""
     isrc = ""
     playing = false
-    if let activeObserver { NotificationCenter.default.removeObserver(activeObserver) }
-    activeObserver = nil
-    stopPlaybackObserver()
+    callbackCode = ""
+    callbackOwner = ""
+    // Keep one observer alive until module destruction, including track changes
+    // and retries. A status subscription is not a per-track playback command.
   }
 }

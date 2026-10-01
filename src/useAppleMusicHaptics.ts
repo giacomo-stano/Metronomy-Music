@@ -4,9 +4,10 @@ import { requireOptionalNativeModule } from 'expo-modules-core';
 import type { AudioPlayer } from 'expo-audio';
 import { coverURL, request, type Song } from './api';
 import { nowPlayingMetadata } from './nowPlayingMetadata';
-import { AppleHapticsSession, emptyHapticsState, type AppleHapticsNative, type NativeHapticsState } from './appleMusicHaptics';
+import { AppleHapticsSession, emptyHapticsState, withTimeout, type AppleHapticsNative, type NativeHapticsState } from './appleMusicHaptics';
 
 type NativeModule = AppleHapticsNative & {
+  prepareObserver?(): Promise<void>;
   addListener(name: 'onStateChanged', listener: (state: NativeHapticsState) => void): { remove(): void };
 };
 const native = Platform.OS === 'ios'
@@ -62,5 +63,11 @@ export function useAppleMusicHaptics(song: Song | undefined, audioPlaying: boole
     return () => { clearInterval(timer); appState.remove(); };
   }, [session, song?.id]);
 
-  return { state, inspect: () => session.state, retry: () => { void session.retry(); } };
+  return { state, inspect: () => session.state, retry: () => { void session.retry(); },
+    prepare: async () => {
+      // Subscribe before the audio owner can publish/play the new recording.
+      // Missing/old native modules must never prevent normal audio playback.
+      try { if (native?.prepareObserver) await withTimeout(native.prepareObserver(), 1000); } catch { /* Audio remains usable. */ }
+    },
+  };
 }

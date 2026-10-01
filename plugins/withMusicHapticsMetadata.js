@@ -53,18 +53,51 @@ function patchController(source) {
 
   private func applyPlaybackInfo(`);
 }
+function patchPublication(source) {
+  const publicationMarker = '// Metronomy event-driven Now Playing v1';
+  if (source.includes(publicationMarker)) return source;
+  source = replaceOnce(source, '    nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo',
+    `    guard shouldPublishMetronomyInfo(nowPlayingInfo, for: player) else { return }
+    nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo
+    if let trackId = player.metadata?.metronomyTrackId {
+      NotificationCenter.default.post(name: Notification.Name("MetronomyNowPlayingPublished"), object: nil,
+        userInfo: ["trackId": trackId, "uptime": ProcessInfo.processInfo.systemUptime])
+    }`);
+  source = replaceOnce(source, '  private func clearNowPlayingInfoOnMain() {',
+    '  private func clearNowPlayingInfoOnMain() {\n    metronomyPublicationPolicy.reset()');
+  return replaceOnce(source, '  private func applyPlaybackInfo(', `  ${publicationMarker}
+  private var metronomyPublicationPolicy = MetronomyNowPlayingPolicy()
+
+  private func shouldPublishMetronomyInfo(_ info: [String: Any], for player: AudioPlayer) -> Bool {
+    guard player.metadata?.metronomyTrackId != nil else { return true }
+    var signature = info
+    signature.removeValue(forKey: MPNowPlayingInfoPropertyElapsedPlaybackTime)
+    let item = player.ref.currentItem.map { ObjectIdentifier($0) }
+    let elapsed = (info[MPNowPlayingInfoPropertyElapsedPlaybackTime] as? NSNumber)?.doubleValue ?? 0
+    let rate = (info[MPNowPlayingInfoPropertyPlaybackRate] as? NSNumber)?.doubleValue ?? 0
+    let now = ProcessInfo.processInfo.systemUptime
+    // iOS extrapolates elapsed time. Keep UI ticks, but publish only metadata,
+    // rate/item changes or a real timeline discontinuity (seek/buffering/loop).
+    return metronomyPublicationPolicy.shouldPublish(signature: signature, item: item,
+      elapsed: elapsed, rate: rate, uptime: now, hasNowPlayingInfo: nowPlayingInfoCenter.nowPlayingInfo != nil)
+  }
+
+  private func applyPlaybackInfo(`);
+}
 function applyPatch(projectRoot) {
   const packagePath = require.resolve('expo-audio/package.json', { paths: [projectRoot] });
   if (JSON.parse(fs.readFileSync(packagePath, 'utf8')).version !== '57.0.5') {
     throw new Error('Music Haptics integration is verified for expo-audio 57.0.5 only. Review before upgrading.');
   }
   const root = path.dirname(packagePath);
-  const patches = [['AudioRecords.swift', patchRecords], ['MediaController.swift', patchController]];
+  const patches = [['AudioRecords.swift', patchRecords], ['MediaController.swift', source => patchPublication(patchController(source))]];
   // Validate both transformations before touching either source.
   const updates = patches.map(([name, transform]) => {
     const file = path.join(root, 'ios', name);
     return [file, transform(fs.readFileSync(file, 'utf8'))];
   });
+  updates.push([path.join(root, 'ios', 'MetronomyNowPlayingPolicy.swift'),
+    fs.readFileSync(path.join(__dirname, 'native', 'MetronomyNowPlayingPolicy.swift'), 'utf8')]);
   for (const [file, content] of updates) fs.writeFileSync(file, content);
 }
 module.exports = config => withDangerousMod(config, ['ios', async config => {
@@ -73,4 +106,5 @@ module.exports = config => withDangerousMod(config, ['ios', async config => {
 }]);
 module.exports.patchRecords = patchRecords;
 module.exports.patchController = patchController;
+module.exports.patchPublication = patchPublication;
 module.exports.applyPatch = applyPatch;

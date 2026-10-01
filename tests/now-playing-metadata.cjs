@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
-const { patchRecords, patchController } = require('../plugins/withMusicHapticsMetadata');
+const { patchRecords, patchController, patchPublication } = require('../plugins/withMusicHapticsMetadata');
 
 const records = fs.readFileSync('node_modules/expo-audio/ios/AudioRecords.swift', 'utf8');
 const controller = fs.readFileSync('node_modules/expo-audio/ios/MediaController.swift', 'utf8');
@@ -13,11 +13,19 @@ assert.throws(() => patchRecords('struct Changed {}'), /source changed/);
 assert.throws(() => patchController('class Changed {}'), /source changed/);
 assert(patchedRecords.includes('@Field var metronomyISRC: String?'));
 assert(patchedRecords.includes('@Field var metronomyDuration: Double?'));
-assert(patchedController.includes('applyMetronomyMetadata(&nowPlayingInfo, for: player)\n    nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo'));
+assert(patchedController.indexOf('applyMetronomyMetadata(&nowPlayingInfo, for: player)') < patchedController.indexOf('nowPlayingInfoCenter.nowPlayingInfo = nowPlayingInfo'));
 assert(patchedController.includes('duration.isFinite && duration > 0'));
 assert(patchedController.includes('info[MPNowPlayingInfoPropertyIsLiveStream] = false'));
 assert(patchedController.includes('removeValue(forKey: MPNowPlayingInfoPropertyInternationalStandardRecordingCode)'));
 assert(patchedController.includes('latestNowPlayingInfo[MPMediaItemPropertyArtwork] = artwork'));
+const eventDriven = patchPublication(patchedController);
+assert.equal(patchPublication(eventDriven), eventDriven);
+assert.throws(() => patchPublication('class Changed {}'), /source changed/);
+assert(eventDriven.includes('signature.removeValue(forKey: MPNowPlayingInfoPropertyElapsedPlaybackTime)'));
+assert(eventDriven.includes('metronomyPublicationPolicy.shouldPublish(signature: signature, item: item,'));
+assert(eventDriven.includes('guard shouldPublishMetronomyInfo(nowPlayingInfo, for: player) else { return }'));
+assert(eventDriven.includes('metronomyPublicationPolicy.reset()'));
+assert(eventDriven.includes('MetronomyNowPlayingPublished'));
 assert(JSON.parse(fs.readFileSync('app.json')).expo.plugins.includes('./plugins/withMusicHapticsMetadata'));
 
 function load(file, requireFn) {

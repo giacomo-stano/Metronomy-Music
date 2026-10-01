@@ -35,6 +35,11 @@ jobs:
           CI: "1"
         run: npx expo prebuild --platform ios --clean
 
+      - name: Test native Now Playing publication policy
+        run: |
+          swiftc plugins/native/MetronomyNowPlayingPolicy.swift tests/now-playing-policy.swift -o "$RUNNER_TEMP/metronomy-now-playing-tests"
+          "$RUNNER_TEMP/metronomy-now-playing-tests"
+
       - name: Ensure CocoaPods are installed
         run: |
           cd ios
@@ -44,6 +49,8 @@ jobs:
         run: |
           grep -q 'metronomyISRC' node_modules/expo-audio/ios/AudioRecords.swift
           grep -q 'applyMetronomyMetadata(&nowPlayingInfo, for: player)' node_modules/expo-audio/ios/MediaController.swift
+          grep -q 'shouldPublishMetronomyInfo' node_modules/expo-audio/ios/MediaController.swift
+          test -f node_modules/expo-audio/ios/MetronomyNowPlayingPolicy.swift
 
       - name: Verify Music Haptics plist configuration
         shell: bash

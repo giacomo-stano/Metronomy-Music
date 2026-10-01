@@ -6,6 +6,7 @@ export type NativeHapticsState = {
   duration?: number; elapsed?: number; rate?: number; isLive?: boolean; timelineValid?: boolean;
   ownerReady?: boolean; plistEnabled?: boolean; integrationVersion?: number;
   audioCategory?: string; audioMode?: string; audioRoute?: string;
+  elapsedAnchor?: number; publicationCount?: number; activeChangeCount?: number; observerRegistrations?: number;
 };
 export type AppleHapticsState = NativeHapticsState & {
   phase: 'idle' | 'native-missing' | 'checking' | 'missing-isrc' | 'ready' | 'error';
@@ -231,7 +232,7 @@ export function hapticsDiagnostics(h: AppleHapticsState): string {
   const guidance = h.playing ? 'iOS conferma la riproduzione della traccia aptica.'
     : h.phase === 'native-missing' ? 'Serve una build iOS nativa: Expo Go non include questo modulo.'
     : !h.supported ? 'API Music Haptics non disponibile su questo dispositivo/build.'
-    : h.integrationVersion !== 2 || !h.ownerReady ? 'Installa una nuova build iOS con il plugin dei metadati Music Haptics. Il solo aggiornamento JavaScript non basta.'
+    : h.integrationVersion !== 3 || !h.ownerReady ? 'Installa una nuova build iOS con il plugin dei metadati Music Haptics. Il solo aggiornamento JavaScript non basta.'
     : h.phase === 'missing-isrc' ? 'I metadati del file non contengono un ISRC valido. Non sostituiamo il codice con quello di una registrazione cercata per titolo.'
     : h.phase === 'error' ? 'La verifica non è stata completata: controlla server e Internet, poi riprova.'
     : h.phase === 'checking' ? 'Verifica degli identificatori della registrazione in corso.'
@@ -253,10 +254,14 @@ export function hapticsDiagnostics(h: AppleHapticsState): string {
     'MusicHapticsSupported: ' + yesNo(h.plistEnabled),
     'Durata: ' + seconds(h.duration), 'Posizione: ' + seconds(h.elapsed),
     'Velocità: ' + (h.rate ?? 'assente') + ' · Live: ' + yesNo(h.isLive),
-    'Timeline valida: ' + yesNo(h.timelineValid), 'Audio rilevato da iOS: ' + yesNo(h.audioPlaying),
+    'Timeline valida: ' + yesNo(h.timelineValid), 'Riproduzione dichiarata nel Now Playing: ' + yesNo(h.audioPlaying),
+    'Posizione base pubblicata: ' + seconds(h.elapsedAnchor),
+    'Pubblicazioni player: ' + (h.publicationCount ?? 'non rilevate'),
     'Observer Apple: ' + (h.observerRegistered ? 'registrato' : 'non registrato'),
+    'Registrazioni observer: ' + (h.observerRegistrations ?? 'non rilevate'),
+    'Notifiche attivazione iOS: ' + (h.activeChangeCount ?? 'non rilevate'),
     'Risposta per questo ISRC: ' + (h.callbackReceived === undefined ? 'non rilevata dalla vecchia build' : h.callbackReceived ? 'ricevuta' : 'non ancora ricevuta'),
-    'Callback: ' + (h.callbackCount ?? 0) + ' · Ultimo ISRC: ' + (h.callbackCode || 'nessuno'),
+    'Callback totali: ' + (h.callbackCount ?? 0) + ' · Ultimo ISRC: ' + (h.callbackCode || 'nessuno'),
     'Riproduzione aptica confermata: ' + yesNo(h.playing),
     'Uscita audio: ' + (h.audioRoute || 'non rilevata'),
     'Sessione: ' + (h.audioCategory || 'non rilevata') + ' / ' + (h.audioMode || 'non rilevata'),
