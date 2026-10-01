@@ -41,7 +41,7 @@ type Props = {
   onRepeat: () => void;
   shuffle: boolean;
   onShuffle: () => void;
-  musicHaptics: { state: AppleHapticsState; inspect: () => AppleHapticsState; retry: () => void };
+  musicHaptics: { state: AppleHapticsState; inspect: () => AppleHapticsState; retry: () => void; runDiagnostic: () => Promise<void> };
   onBrowse: (type: 'album' | 'artist') => void;
   onFavorite: (starred: boolean) => void;
   onSleep: (minutes: number) => void;
@@ -1340,7 +1340,10 @@ export default function PlayerSheet(p: Props) {
                           Alert.alert('Music Haptics di Apple', report,
                             [{ text: 'Chiudi', style: 'cancel' },
                               { text: 'Condividi diagnostica', onPress: () => { void Share.share({ message: report }).catch(() => {}); } },
-                              { text: 'Riprova', onPress: p.musicHaptics.retry }]);
+                              { text: 'Riprova', onPress: p.musicHaptics.retry },
+                              { text: 'Test player nativo', onPress: () => Alert.alert('Confronto Music Haptics',
+                                'Il player normale verrà messo in pausa. Lo stesso audio partirà dall’inizio con AVPlayer nativo per massimo 60 secondi. Resta nell’app: il test si ferma in background. Nessuna diagnostica viene inviata automaticamente.',
+                                [{ text: 'Annulla', style: 'cancel' }, { text: 'Avvia test', onPress: () => { void p.musicHaptics.runDiagnostic(); } }]) }]);
                         }}>
                         <SymbolView
                           name={(p.musicHaptics.state.available === false

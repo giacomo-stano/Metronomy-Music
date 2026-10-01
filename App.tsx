@@ -263,8 +263,9 @@ function MusicApp({
   // Only bind haptics after the audio source AND lock-screen metadata are set.
   const [hapticsTrack, setHapticsTrack] = useState<Song>();
   const nowPlayingTrack = useRef<Song | undefined>(undefined);
+  const nowPlayingSource = useRef<string | undefined>(undefined);
   const musicHaptics = useAppleMusicHaptics(
-    current?.id === hapticsTrack?.id ? hapticsTrack : undefined, !!status.playing, player, nowPlayingTrack
+    current?.id === hapticsTrack?.id ? hapticsTrack : undefined, !!status.playing, player, nowPlayingTrack, nowPlayingSource
   );
   const playback = useRef({ queue, index });
   playback.current = { queue, index };
@@ -773,6 +774,7 @@ function MusicApp({
   }, [current?.id, isOffline, offlineStore]);
 
   async function start(list: Song[], position: number, _open = false) {
+    if (musicHaptics.diagnosticBusy.current) return;
     const next = list[position];
     if (!next) return;
 
@@ -816,6 +818,7 @@ function MusicApp({
       await musicHaptics.prepare();
       if (version !== audioGeneration.current) return;
       nowPlayingTrack.current = next;
+      nowPlayingSource.current = source;
       player.replace(source);
 
       try {

@@ -29,6 +29,7 @@ jobs:
         run: |
           node tests/apple-music-haptics.cjs
           node tests/now-playing-metadata.cjs
+          node tests/native-haptics-diagnostic.cjs
 
       - name: Generate iOS project
         env:

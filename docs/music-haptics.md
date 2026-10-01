@@ -128,3 +128,42 @@ workflow macOS prima della build iOS. I test Swift e la vibrazione fisica non
 sono eseguibili dalla postazione Windows; i test Node/TypeScript sono separati.
 Questa seconda modifica riguarda solo l'app: **nessun nuovo aggiornamento del
 bridge è necessario**.
+# Test A/B con AVPlayer nativo (diagnostica opt-in)
+
+Nel test su iPhone la versione 3 continua a mostrare zero callback, mentre Apple
+Music vibra sullo stesso telefono, brano e connessione. Il controllo aptico è
+visibile nella schermata di blocco di Metronomy. Il sysdiagnose estratto non
+contiene file `.logarchive` o `.tracev3`; non richiedere l'archivio personale completo.
+
+Dal player: Music Haptics → **Test player nativo** → **Avvia test**.
+Il test è una schermata UIKit separata e parte solo dopo conferma. Mette in pausa
+Expo e ne disabilita i controlli/aggiornamenti Now Playing; usa lo stesso URI audio
+già selezionato (file locale o stream), l'ISRC corrente e un AVPlayer diretto.
+Riparte dall'inizio, senza artwork né dipendenze da MusicKit. Per un confronto
+coerente provare anche il player normale dall'inizio dello stesso brano.
+
+Rimanere nell'app per massimo 60 secondi. Il test si ferma automaticamente allo
+scadere del tempo, in background, su interruzione audio, errore, fine brano o
+chiusura. Tornando al player normale la posizione originale è conservata e la
+riproduzione resta in pausa: premere Play per riprenderla. Nessun aggiornamento
+del bridge è necessario. Serve una nuova IPA perché è stato aggiunto un modulo
+nativo; l'integrazione ordinaria resta versione 3 e il report separato è
+**TEST NATIVO MUSIC HAPTICS · 1**.
+
+Il report copiabile/condivisibile soltanto su azione esplicita contiene ISRC,
+versione iOS, tipo di sorgente, stato reale di AVPlayer, contatori, stato Apple,
+tipo di uscita e codici numerici di errore. Omette URI/token, account, titolo,
+artista, identificativi personali, descrizioni libere degli errori e log di altre
+app. La riproduzione effettua le normali richieste audio e di disponibilità Apple:
+"nessun invio diagnostico" non significa "nessuna rete".
+
+Una vibrazione nel test, ma non nel player ordinario, restringe l'indagine alla
+gestione normale della riproduzione/metadata. Un risultato negativo **non prova
+un bug Apple**: i due player condividono processo, firma, sessione audio, file e
+rete. Availability true, icona e registrazione dell'observer non equivalgono a
+vibrazione; annotare sia l'esito fisico sia il report. Il test non impiega Core
+Haptics o impulsi sintetici e non è una correzione confermata del difetto.
+
+Controlli Windows: TypeScript, test JS del passaggio esclusivo (errori,
+concorrenza, ownership obsoleta), contratti nativi e report minimizzato. Questi
+non sostituiscono la compilazione Xcode/macOS né la prova fisica su iPhone.

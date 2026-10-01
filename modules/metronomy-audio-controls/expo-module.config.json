@@ -5,7 +5,8 @@
       "MetronomyRemoteControlsModule",
       "MetronomyAirPlayModule",
       "MetronomySystemVolumeModule",
-      "MetronomyMusicHapticsModule"
+      "MetronomyMusicHapticsModule",
+      "MetronomyHapticsDiagnosticModule"
     ]
   }
 }
