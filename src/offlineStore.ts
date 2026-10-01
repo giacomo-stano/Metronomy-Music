@@ -1,6 +1,6 @@
 import * as FS from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { accountStorageKey, currentAccount, request, type Account, type Song, type Lyrics } from './api';
+import { accountStorageKey, currentAccount, request, type Song, type Lyrics } from './api';
 import { localCatalog } from './localCatalog';
 
 export type LocalTrack = { song: Song; file: string; bytes: number; savedAt: number; cover?: string; lyrics?: { lyrics: Lyrics[]; source?: string; instrumental?: boolean }; info?: Record<string, unknown> };
@@ -14,7 +14,13 @@ const pendingOperations = new Map<string, Promise<void>>();
 
 export class OfflineStore {
   readonly key = accountStorageKey('offline.v1');
-  readonly account: Account = currentAccount()!;
+  private readonly owner = (() => {
+    const active = currentAccount()!;
+    return {
+      baseURL: active.baseURL,
+      username: active.username,
+    };
+  })();
   tracks: Record<string, LocalTrack> = {};
   transfers: Record<string, Transfer> = {};
   error = '';
@@ -35,6 +41,23 @@ export class OfflineStore {
   snapshot = () => this.version;
   librarySnapshot = () => this.libraryVersion;
   private emit(progressOnly = false) { this.version++; if (!progressOnly) { this.libraryVersion++; this.covers = undefined; } this.listeners.forEach(l => l()); }
+  private activeAccount() {
+    const active = currentAccount();
+
+    if (
+      !active ||
+      active.baseURL !== this.owner.baseURL ||
+      active.username !== this.owner.username
+    ) {
+      return null;
+    }
+
+    return active;
+  }
+  private onlineAccount() {
+    const active = this.activeAccount();
+    return active && !active.offline ? active : null;
+  }
   private get root() {
     if (!FS.documentDirectory || !/^[a-z0-9-]+$/.test(this.folder)) throw new Error('Archivio locale non disponibile.');
     return FS.documentDirectory + 'metronomy-offline/' + this.folder + '/';
@@ -90,8 +113,10 @@ export class OfflineStore {
   }
   async download(song: Song) {
     await this.loading;
-    if (this.stopped || currentAccount() !== this.account) return;
-    if (this.account.offline) throw new Error('Accedi online per scaricare altri brani.');
+    const account = this.onlineAccount();
+
+    if (this.stopped) return;
+    if (!account) throw new Error('Accedi online per scaricare altri brani.');
     if (this.error) throw new Error(this.error);
     if (this.jobs.has(song.id) || await this.source(song.id)) return;
     if (this.jobs.has(song.id) || this.stopped) return;
@@ -99,7 +124,16 @@ export class OfflineStore {
     this.jobs.set(song.id, job); this.transfers[song.id] = { state: 'queued', progress: null }; this.emit();
     const work = this.queue.then(async () => {
       let part = ''; let final = '';
-      const alive = () => !job.cancelled && !this.stopped && currentAccount() === this.account;
+      const alive = () => {
+        const active = this.onlineAccount();
+
+        return (
+          !job.cancelled &&
+          !this.stopped &&
+          !!active &&
+          active.token === account.token
+        );
+      };
       try {
         if (!alive()) return;
         const info = await request<{ song: Song; suffix: string; size: number }>('songs/' + encodeURIComponent(song.id) + '/offline-info');
@@ -110,8 +144,8 @@ export class OfflineStore {
         if (info.size > 0 && free < info.size + 20 * 1048576) throw new Error('Spazio insufficiente sull’iPhone.');
         this.transfers[song.id] = { state: 'downloading', progress: null }; this.emit();
         let last = 0;
-        job.task = FS.createDownloadResumable(this.account.baseURL + '/offline/' + encodeURIComponent(song.id), this.file(part), {
-          headers: { Authorization: 'Bearer ' + this.account.token }, sessionType: FS.FileSystemSessionType.FOREGROUND,
+        job.task = FS.createDownloadResumable(account.baseURL + '/offline/' + encodeURIComponent(song.id), this.file(part), {
+          headers: { Authorization: 'Bearer ' + account.token }, sessionType: FS.FileSystemSessionType.FOREGROUND,
         }, progress => {
           if (!alive() || Date.now() - last < 120) return; last = Date.now();
           this.transfers[song.id] = { state: 'downloading', progress: progress.totalBytesExpectedToWrite > 0 ? Math.min(.99, progress.totalBytesWritten / progress.totalBytesExpectedToWrite) : null }; this.emit(true);
@@ -162,7 +196,7 @@ export class OfflineStore {
     await this.loading;
     const cached = this.tracks[id]?.lyrics;
     if (cached) return cached;
-    if (this.account.offline) return { lyrics: [], source: 'Testo non salvato sul dispositivo' };
+    if (!this.onlineAccount()) return { lyrics: [], source: 'Testo non salvato sul dispositivo' };
     const result = await request<{ lyrics: Lyrics[]; source?: string; instrumental?: boolean }>('lyrics/' + encodeURIComponent(id), 35000);
     if (!this.stopped && this.tracks[id] && Array.isArray(result.lyrics)) {
       this.tracks[id] = { ...this.tracks[id], lyrics: result }; await this.save().catch(() => {}); this.emit();
@@ -170,8 +204,21 @@ export class OfflineStore {
     return result;
   }
   async enrich(id: string, job: Job = { cancelled: false }) {
-    const alive = () => !this.stopped && !job.cancelled && currentAccount() === this.account && !!this.tracks[id];
-    if (!alive() || this.account.offline) return;
+    const account = this.onlineAccount();
+    const alive = () => {
+      const active = this.onlineAccount();
+
+      return (
+        !this.stopped &&
+        !job.cancelled &&
+        !!active &&
+        !!account &&
+        active.token === account.token &&
+        !!this.tracks[id]
+      );
+    };
+
+    if (!account || !alive()) return;
     const original = this.tracks[id];
     let cover = original.cover;
     let newCover = '';
@@ -180,7 +227,7 @@ export class OfflineStore {
     try {
       if (!cover && original.song.coverArt) {
         newCover = uid() + '.jpg';
-        job.task = FS.createDownloadResumable(this.account.baseURL + '/cover/' + encodeURIComponent(original.song.coverArt), this.file(newCover), { headers: { Authorization: 'Bearer ' + this.account.token }, sessionType: FS.FileSystemSessionType.FOREGROUND });
+        job.task = FS.createDownloadResumable(account.baseURL + '/cover/' + encodeURIComponent(original.song.coverArt), this.file(newCover), { headers: { Authorization: 'Bearer ' + account.token }, sessionType: FS.FileSystemSessionType.FOREGROUND });
         const result = await job.task.downloadAsync();
         const type = Object.entries(result?.headers ?? {}).find(([key]) => key.toLowerCase() === 'content-type')?.[1] ?? '';
         if (result?.status === 200 && type.startsWith('image/') && alive()) cover = newCover;
@@ -209,11 +256,11 @@ export class OfflineStore {
   }
   async syncExtras() {
     await this.loading;
-    if (this.account.offline || this.syncing || this.stopped) return;
+    if (!this.onlineAccount() || this.syncing || this.stopped) return;
     this.syncing = true; this.syncMessage = 'Salvataggio copertine e testi…'; this.emit();
     const work = this.queue.then(async () => {
       for (const id of Object.keys(this.tracks)) {
-        if (this.stopped || currentAccount() !== this.account) break;
+        if (this.stopped || !this.onlineAccount()) break;
         const job: Job = { cancelled: false }; this.jobs.set('extras:' + id, job);
         try { await this.enrich(id, job); } finally { this.jobs.delete('extras:' + id); }
       }

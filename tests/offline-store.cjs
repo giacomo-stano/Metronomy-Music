@@ -54,7 +54,11 @@ async function until(condition) { for(let i=0;i<100;i++) { if(condition()) retur
   account = { ...account, username: 'lorenza' }; const other = new OfflineStore(); await other.loading;
   assert.equal(Object.keys(other.tracks).length, 0, 'account isolation');
   await other.remove('one'); assert(files.has(uri), 'cannot remove other account file'); other.dispose();
-  account = store.account;
+  account = { ...account, username: 'giacomo' };
+  account = { ...account, offline: true };
+  await assert.rejects(store.download(song('offline')), /Accedi online/);
+  assert.equal(await store.source('one'), uri, 'same store retains downloads offline');
+  account = { ...account, offline: false };
   status = 403; await store.download(song('denied')); assert(!store.tracks.denied); assert.equal(store.transfers.denied.state, 'error'); status = 200;
   size = 2; await store.download(song('partial')); assert(!store.tracks.partial); assert.equal(store.transfers.partial.state, 'error'); size = 4;
   let resume; gate = new Promise(r => resume = r);

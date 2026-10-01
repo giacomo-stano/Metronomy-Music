@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Text, View } from 'react-native';
 import Pressable from './SpringPressable';
-import { request, coverURL, currentAccount, type Album } from './api';
+import { request, coverURL, currentAccount, isConnectivityFailure, type Album } from './api';
 import { useTheme } from './theme';
 import { recentAlbums } from './listeningHistory';
 
@@ -24,7 +24,7 @@ export default function Discover({ scope, onAlbum, onQuery }: { scope: 'qobuz' |
           result = [...own, ...result.filter(a => !own.some(b => b.id === a.id))].slice(0, 24);
         }
         if (active) setItems(result);
-      } catch (e) { if (active) setError(e instanceof Error ? e.message : 'Non disponibile'); }
+      } catch (e) { if (active) setError(isConnectivityFailure(e) ? '' : e instanceof Error ? e.message : 'Non disponibile'); }
       finally { if (active) setBusy(false); }
     })();
     return () => { active = false; };

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import { seekPlayback, invalidatePlaybackSeeks } from './src/playbackTimeline';
 import { playbackSource } from './src/playbackSource';
-import { ActivityIndicator, Alert, Animated, Easing, Image, PanResponder, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Animated, AppState, Easing, Image, PanResponder, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { coverURL, streamURL, request, type Album, type HomeResponse, type Song, type SearchResponse, type Lyrics } from './src/api';
 import SearchScreen from './src/SearchScreen';
 import PlayerSheet from './src/PlayerSheet';
@@ -21,8 +21,9 @@ import { useMiniMotion } from './src/useMiniMotion';
 import { ThemeProvider, useTheme, type Palette } from './src/theme';
 import SettingsScreen from './src/SettingsScreen';
 import LoginScreen from './src/LoginScreen';
-import { configureAccount, onSessionExpired, endSession, type Account } from './src/api';
+import { configureAccount, currentAccount, onSessionExpired, endSession, probeAccount, probeConnectivity, isConnectivityFailure, type Account } from './src/api';
 import { rememberAlbum } from './src/listeningHistory';
+import { offlineAccount, offlineProfiles } from './src/offlineProfiles';
 import { OfflineProvider, useOffline, DownloadBadge } from './src/OfflineDownloads';
 import { clearAlbumSongsCache, peekAlbumSongs, preloadAlbumSongs } from './src/albumPrefetch';
 import NowPlayingWaves from './src/NowPlayingWaves';
@@ -49,7 +50,7 @@ const tabs: { name: Tab; icon: SFSymbol; size: number }[] = [
   { name: 'Cerca', icon: 'magnifyingglass', size: 22 },
 ];
 
-const message = (e: unknown) => e instanceof Error ? e.message : 'Connessione non riuscita.';
+const message = (e: unknown) => isConnectivityFailure(e) ? 'Connessione non disponibile.' : e instanceof Error ? e.message : 'Connessione non riuscita.';
 const clock = (n: number) => { const t = Math.max(0, Math.floor(n || 0)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
 
 export default function App() {
@@ -148,6 +149,135 @@ function AccountGate() {
     }
   }
 
+  async function enterOfflineForCurrentAccount(): Promise<boolean> {
+    const active = account;
+
+    if (!active || active.offline) return false;
+
+    try {
+      const profiles = await offlineProfiles();
+      const profile = profiles.find(
+        value =>
+          value.baseURL === active.baseURL &&
+          value.username === active.username
+      );
+
+      if (!profile || currentAccount() !== active) return false;
+
+      enter(offlineAccount(profile));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function restoreOnlineForCurrentAccount(): Promise<boolean> {
+    const active = account;
+
+    if (!active?.offline) return false;
+
+    try {
+      const raw = await AsyncStorage.getItem(ACCOUNT_STORAGE_KEY);
+      if (!raw) return false;
+
+      const saved = JSON.parse(raw) as Account;
+      const valid =
+        !!saved &&
+        !saved.offline &&
+        saved.baseURL === active.baseURL &&
+        saved.username === active.username &&
+        typeof saved.token === 'string' &&
+        Number.isFinite(saved.expires) &&
+        saved.expires * 1000 > Date.now();
+
+      if (!valid) return false;
+      if (!(await probeAccount(saved, 4500))) return false;
+      if (currentAccount() !== active) return false;
+
+      configureAccount(saved);
+      setAccount(saved);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  useEffect(() => {
+    if (!account) return;
+
+    let active = true;
+    let checking = false;
+
+    const checkOfflineReconnect = async () => {
+      if (!active || checking || !account.offline) return;
+
+      checking = true;
+      try {
+        await restoreOnlineForCurrentAccount();
+      } finally {
+        checking = false;
+      }
+    };
+
+    const checkOnlineReachability = async () => {
+      if (!active || checking || account.offline) return;
+
+      checking = true;
+
+      try {
+        const reachable = await probeConnectivity(account, 1800);
+        if (!active || reachable) return;
+
+        // Repeat once before changing mode so a single transient packet loss
+        // never throws the whole UI into offline mode.
+        await new Promise(resolve => setTimeout(resolve, 250));
+        if (!active) return;
+
+        const confirmed = await probeConnectivity(account, 2200);
+        if (!active || confirmed) return;
+
+        await enterOfflineForCurrentAccount();
+      } finally {
+        checking = false;
+      }
+    };
+
+    const check = account.offline
+      ? checkOfflineReconnect
+      : checkOnlineReachability;
+
+    if (account.offline) {
+      void check();
+    }
+
+    const interval = setInterval(
+      () => {
+        void check();
+      },
+      account.offline ? 15000 : 4000
+    );
+
+    const subscription = AppState.addEventListener(
+      'change',
+      state => {
+        if (state === 'active') {
+          void check();
+        }
+      }
+    );
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, [
+    account?.offline,
+    account?.baseURL,
+    account?.username,
+    account?.token,
+  ]);
+
   function logout() {
     /*
      * endSession() chiude la sessione API senza dover passare null
@@ -176,17 +306,12 @@ function AccountGate() {
 
   return account ? (
     <OfflineProvider
-      key={
-        account.baseURL +
-        ':' +
-        account.username +
-        ':' +
-        (account.offline ? 'offline' : account.token)
-      }
+      key={account.baseURL + ':' + account.username}
     >
       <MusicApp
         account={account}
         onLogout={() => void logout()}
+        onOffline={enterOfflineForCurrentAccount}
       />
     </OfflineProvider>
   ) : (
@@ -197,9 +322,11 @@ function AccountGate() {
 function MusicApp({
   account,
   onLogout,
+  onOffline,
 }: {
   account: Account;
   onLogout: () => void;
+  onOffline: () => Promise<boolean>;
 }) {
   const { colors: c, isDark } = useTheme();
   const offlineContext = useOffline('library') as ReturnType<typeof useOffline> & {
@@ -219,12 +346,27 @@ function MusicApp({
   const isOffline = !!account.offline;
   const s = useMemo(() => makeStyles(c), [c]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const previousOffline = useRef(isOffline);
+  const [connectivityBanner, setConnectivityBanner] = useState<
+    'offline' | 'online' | null
+  >(null);
+  const connectivityBannerScale = useRef(new Animated.Value(0.82)).current;
+  const connectivityBannerOpacity = useRef(new Animated.Value(0)).current;
+  const connectivityBannerY = useRef(new Animated.Value(-8)).current;
+  const connectivityBannerAnimation =
+    useRef<Animated.CompositeAnimation | null>(null);
+  const [currentArtworkUri, setCurrentArtworkUri] = useState<
+    string | undefined
+  >(undefined);
   const [actionSong, setActionSong] = useState<Song | null>(null);
   const [actionAlbum, setActionAlbum] = useState<Album | null>(null);
-  const [tab, setTab] = useState<Tab>(isOffline ? 'Libreria' : 'Home');
+  const [tab, setTab] = useState<Tab>('Home');
   const [home, setHome] = useState<HomeResponse | null>(null);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [hasMore, setHasMore] = useState(false);
+  const catalogOpacity = useRef(new Animated.Value(1)).current;
+  const catalogTransition =
+    useRef<Animated.CompositeAnimation | null>(null);
   const [album, setAlbum] = useState<Album | null>(null);
   const [albumSongs, setAlbumSongs] = useState<Song[]>([]);
   const [albumOrigin, setAlbumOrigin] = useState<AlbumOpenOrigin | null>(null);
@@ -235,6 +377,104 @@ function MusicApp({
   const albumCloseAnimation = useRef<Animated.CompositeAnimation | null>(null);
   const albumOpenFrame = useRef<number | null>(null);
   const [albumMotionDone, setAlbumMotionDone] = useState(false);
+
+  useEffect(() => {
+    const wasOffline = previousOffline.current;
+    previousOffline.current = isOffline;
+
+    if (wasOffline === isOffline) return;
+
+    const kind = isOffline ? 'offline' : 'online';
+
+    setReload(value => value + 1);
+
+    connectivityBannerAnimation.current?.stop();
+    connectivityBannerScale.stopAnimation();
+    connectivityBannerOpacity.stopAnimation();
+    connectivityBannerY.stopAnimation();
+
+    connectivityBannerScale.setValue(0.82);
+    connectivityBannerOpacity.setValue(0);
+    connectivityBannerY.setValue(-8);
+    setConnectivityBanner(kind);
+
+    const animation = Animated.sequence([
+      Animated.parallel([
+        Animated.spring(connectivityBannerScale, {
+          toValue: 1.05,
+          stiffness: 360,
+          damping: 18,
+          mass: 0.62,
+          overshootClamping: false,
+          restDisplacementThreshold: 0.001,
+          restSpeedThreshold: 0.001,
+          useNativeDriver: true,
+        }),
+        Animated.timing(connectivityBannerOpacity, {
+          toValue: 1,
+          duration: 150,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.spring(connectivityBannerY, {
+          toValue: 0,
+          stiffness: 320,
+          damping: 21,
+          mass: 0.62,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.spring(connectivityBannerScale, {
+        toValue: 1,
+        stiffness: 420,
+        damping: 20,
+        mass: 0.48,
+        useNativeDriver: true,
+      }),
+      Animated.delay(2300),
+      Animated.parallel([
+        Animated.timing(connectivityBannerScale, {
+          toValue: 0.88,
+          duration: 180,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(connectivityBannerOpacity, {
+          toValue: 0,
+          duration: 180,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(connectivityBannerY, {
+          toValue: -6,
+          duration: 180,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    ]);
+
+    connectivityBannerAnimation.current = animation;
+
+    animation.start(({ finished }) => {
+      if (connectivityBannerAnimation.current === animation) {
+        connectivityBannerAnimation.current = null;
+      }
+
+      if (finished) {
+        setConnectivityBanner(null);
+      }
+    });
+
+    return () => {
+      animation.stop();
+    };
+  }, [
+    isOffline,
+    connectivityBannerOpacity,
+    connectivityBannerScale,
+    connectivityBannerY,
+  ]);
 
   const safeAreaRef = useRef<any>(null);
   const safeAreaMetrics = useRef({ x: 0, y: 0, width: 0, height: 0 });
@@ -260,6 +500,18 @@ function MusicApp({
   const player = useAudioPlayer(null, { updateInterval: 250 });
   const status = usePlaybackSignals(player);
   const current = queue[index];
+
+  useEffect(() => {
+    if (!current?.coverArt || isOffline) return;
+
+    const uri = coverURL(current.coverArt);
+
+    if (uri) {
+      setCurrentArtworkUri(uri);
+      void Image.prefetch(uri).catch(() => {});
+    }
+  }, [current?.id, current?.coverArt, isOffline]);
+
   const playback = useRef({ queue, index });
   playback.current = { queue, index };
 
@@ -619,16 +871,69 @@ function MusicApp({
     }
 
     setError('');
-    setBusy(true);
+
+    const hasVisibleCatalog =
+      tab === 'Home'
+        ? !!home
+        : albums.length > 0;
+
+    setBusy(!hasVisibleCatalog);
     setResults(null);
-    setAlbums([]);
-    setHasMore(false);
+
+    const warmArtwork = async (items: { coverArt?: string }[]) => {
+      const uris = items
+        .map(item => coverURL(item.coverArt))
+        .filter((uri): uri is string => !!uri)
+        .slice(0, 14);
+
+      if (!uris.length) return;
+
+      await Promise.race([
+        Promise.all(
+          uris.map(uri => Image.prefetch(uri).catch(() => false))
+        ),
+        new Promise(resolve => setTimeout(resolve, 220)),
+      ]);
+    };
+
+    const revealCatalog = (apply: () => void) => {
+      catalogTransition.current?.stop();
+      catalogOpacity.stopAnimation();
+      catalogOpacity.setValue(0.86);
+
+      apply();
+
+      const animation = Animated.timing(catalogOpacity, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      });
+
+      catalogTransition.current = animation;
+
+      requestAnimationFrame(() => {
+        animation.start(() => {
+          if (catalogTransition.current === animation) {
+            catalogTransition.current = null;
+          }
+        });
+      });
+    };
 
     const run = async () => {
       try {
         if (tab === 'Home') {
           const data = await request<HomeResponse>('home');
-          if (generation.current === version) setHome(data);
+
+          await warmArtwork([
+            ...data.recentAlbums,
+            ...data.madeForYou,
+          ]);
+
+          if (generation.current === version) {
+            revealCatalog(() => setHome(data));
+          }
         } else if (tab === 'Cerca') {
           if (query.trim()) {
             const data = await request<SearchResponse>(
@@ -647,13 +952,27 @@ function MusicApp({
                 : 'alphabeticalByName')
           );
 
+          await warmArtwork(data.albums);
+
           if (generation.current === version) {
-            setAlbums(data.albums);
-            setHasMore(data.hasMore);
+            revealCatalog(() => {
+              setAlbums(data.albums);
+              setHasMore(data.hasMore);
+            });
           }
         }
       } catch (e) {
         if (generation.current === version) {
+          if (!isOffline && isConnectivityFailure(e)) {
+            const switched = await onOffline();
+
+            if (!switched && generation.current === version) {
+              setError('Nessuna connessione al server.');
+            }
+
+            return;
+          }
+
           setError(message(e));
         }
       } finally {
@@ -672,7 +991,7 @@ function MusicApp({
       clearTimeout(timer);
       generation.current++;
     };
-  }, [tab, album, albumMotionDone, query, reload]);
+  }, [tab, album, albumMotionDone, query, reload, isOffline]);
 
   useEffect(() => {
     clearAlbumSongsCache();
@@ -773,12 +1092,15 @@ function MusicApp({
     const version = ++audioGeneration.current;
     const previousQueue = queue;
     const previousIndex = index;
+    const previousArtworkUri = currentArtworkUri;
 
     // Metadata first: title/artist/cover must react to the tap immediately.
     setQueue(list);
     setIndex(position);
 
     const artwork = coverURL(next.coverArt);
+    setCurrentArtworkUri(artwork);
+
     if (artwork) {
       void Image.prefetch(artwork).catch(() => {});
     }
@@ -823,6 +1145,7 @@ function MusicApp({
       if (version === audioGeneration.current) {
         setQueue(previousQueue);
         setIndex(previousIndex);
+        setCurrentArtworkUri(previousArtworkUri);
       }
 
       Alert.alert(
@@ -989,11 +1312,49 @@ function MusicApp({
       }}
     >
     <StatusBar style={album ? 'light' : isDark ? 'light' : 'dark'} />
-    {isOffline && (
-      <View style={{ paddingHorizontal: 20, paddingVertical: 5 }}>
-        <Text style={{ color: c.secondary, fontSize: 12 }}>
-          Offline · solo contenuti su questo iPhone
-        </Text>
+    {connectivityBanner && (
+      <View pointerEvents="none" style={s.connectivityBannerWrap}>
+        <Animated.View
+          style={[
+            s.connectivityBanner,
+            {
+              opacity: connectivityBannerOpacity,
+              transform: [
+                { translateY: connectivityBannerY },
+                { scale: connectivityBannerScale },
+              ],
+            },
+          ]}
+        >
+          <View
+            style={[
+              s.connectivityBannerIcon,
+              connectivityBanner === 'online' && {
+                backgroundColor: c.background,
+              },
+            ]}
+          >
+            <Ionicons
+              name={
+                connectivityBanner === 'offline'
+                  ? 'cloud-offline-outline'
+                  : 'checkmark-circle'
+              }
+              size={15}
+              color={
+                connectivityBanner === 'offline'
+                  ? c.secondary
+                  : c.accent
+              }
+            />
+          </View>
+
+          <Text style={s.connectivityBannerTitle}>
+            {connectivityBanner === 'offline'
+              ? 'Sei offline'
+              : 'Di nuovo online'}
+          </Text>
+        </Animated.View>
       </View>
     )}
     {settingsOpen && (
@@ -1035,7 +1396,7 @@ function MusicApp({
 
     {tab === 'Cerca' && (
       <SearchScreen
-        key={query}
+        key={query + ':' + (isOffline ? 'offline' : 'online')}
         initialQuery={query}
         onSettings={() => setSettingsOpen(true)}
         onPlay={song => start([song], 0, false)}
@@ -1072,13 +1433,75 @@ function MusicApp({
           </Pressable>
         </View>
 
+        {tab === 'Home' && isOffline && (
+          <View style={s.offlineNotice}>
+            <View style={s.offlineNoticeIcon}>
+              <Ionicons
+                name="cloud-offline-outline"
+                size={16}
+                color={c.secondary}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.offlineNoticeTitle}>
+                Sei offline
+              </Text>
+              <Text style={s.offlineNoticeMessage}>
+                Stai ascoltando la musica salvata su questo iPhone.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {!!error && (
           <View style={s.notice}>
-            <Text style={s.text}>{error}</Text>
-            <Button
-              label="Riprova"
-              onPress={() => setReload(n => n + 1)}
-            />
+            <View style={s.noticeHeader}>
+              <View style={s.noticeIcon}>
+                <Ionicons
+                  name="wifi-outline"
+                  size={17}
+                  color={c.accent}
+                />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={s.noticeTitle}>
+                  Connessione non disponibile
+                </Text>
+                <Text
+                  style={s.noticeMessage}
+                  numberOfLines={2}
+                >
+                  {error === 'Nessuna connessione al server.'
+                    ? 'Impossibile raggiungere il server. Controlla la connessione e riprova.'
+                    : error}
+                </Text>
+              </View>
+            </View>
+
+            <View style={s.recoveryActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Riprova connessione"
+                onPress={() => setReload(n => n + 1)}
+                style={[s.recoveryPill, s.recoveryPillPrimary]}
+              >
+                <Text style={s.recoveryPillPrimaryText}>
+                  Riprova
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Disconnetti account"
+                onPress={onLogout}
+                style={s.recoveryPill}
+              >
+                <Text style={s.recoveryPillText}>
+                  Disconnetti
+                </Text>
+              </Pressable>
+            </View>
           </View>
         )}
 
@@ -1089,6 +1512,7 @@ function MusicApp({
           />
         )}
 
+        <Animated.View style={{ opacity: catalogOpacity }}>
         {tab === 'Home' ? (
           <>
             {home && (
@@ -1141,6 +1565,7 @@ function MusicApp({
             )}
           </>
         )}
+        </Animated.View>
       </ScrollView>
     )}
 
@@ -1576,7 +2001,11 @@ function MusicApp({
           accessibilityRole="button"
           accessibilityLabel="Apri player"
         >
-          <Artwork id={current.coverArt} size={38} />
+          <Artwork
+            id={current.coverArt}
+            size={38}
+            fallbackUri={currentArtworkUri}
+          />
 
           <View style={s.flex}>
             <Text style={s.miniTitle} numberOfLines={1}>
@@ -1628,7 +2057,7 @@ function MusicApp({
     />
     </View>
 
-    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => player.currentTime > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
+    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} connectivityBanner={connectivityBanner} connectivityBannerOpacity={connectivityBannerOpacity} connectivityBannerScale={connectivityBannerScale} connectivityBannerY={connectivityBannerY} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => player.currentTime > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
     </SafeAreaView>
   );
 }
@@ -1942,12 +2371,46 @@ function LiquidTabBar({
   );
 }
 
-function Artwork({ id, size }: { id?: string; size: number }) {
+function Artwork({
+  id,
+  size,
+  fallbackUri,
+}: {
+  id?: string;
+  size: number;
+  fallbackUri?: string;
+}) {
   const { colors: c } = useTheme();
   const [failed, setFailed] = useState(false);
-  const uri = coverURL(id);
+  const uri = coverURL(id) ?? fallbackUri;
+
   useEffect(() => setFailed(false), [id, uri]);
-  return uri && !failed ? <Image source={{ uri }} onError={() => setFailed(true)} style={{ width: size, height: size, borderRadius: 12, backgroundColor: c.surface }} /> : <View style={{ width: size, height: size, borderRadius: 12, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: c.secondary, fontSize: size / 3 }}>♪</Text></View>;
+
+  return uri && !failed ? (
+    <Image
+      source={{ uri }}
+      onError={() => setFailed(true)}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 12,
+        backgroundColor: c.surface,
+      }}
+    />
+  ) : (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 12,
+        backgroundColor: c.surface,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Text style={{ color: c.secondary, fontSize: size / 3 }}>♪</Text>
+    </View>
+  );
 }
 function Button({ label, onPress, disabled = false, large = false, accessibilityLabel }: { label: string; onPress: () => void; disabled?: boolean; large?: boolean; accessibilityLabel?: string }) {
   const { colors: c } = useTheme(); const s = makeStyles(c);
@@ -2167,7 +2630,139 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     lineHeight: 14,
   },
   search: { color: c.text, backgroundColor: c.surface, borderRadius: 26, padding: 16, marginTop: 18, fontSize: 16 },
-  notice: { padding: 15, backgroundColor: c.surface, borderRadius: 12, marginVertical: 16 },
+  connectivityBannerWrap: {
+    position: 'absolute',
+    top: 66,
+    left: 14,
+    right: 14,
+    zIndex: 140,
+    alignItems: 'center',
+  },
+  connectivityBanner: {
+    minHeight: 40,
+    maxWidth: 220,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: c.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  connectivityBannerIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.background,
+  },
+  connectivityBannerTitle: {
+    color: c.text,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: -0.05,
+  },
+  offlineNotice: {
+    paddingVertical: 11,
+    paddingHorizontal: 13,
+    backgroundColor: c.surface,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    marginTop: 12,
+    marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  offlineNoticeIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.background,
+  },
+  offlineNoticeTitle: {
+    color: c.text,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  offlineNoticeMessage: {
+    color: c.secondary,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  notice: {
+    padding: 14,
+    backgroundColor: c.surface,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    marginVertical: 14,
+  },
+  noticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 11,
+  },
+  noticeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.background,
+  },
+  noticeTitle: {
+    color: c.text,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  noticeMessage: {
+    color: c.secondary,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+  recoveryActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  recoveryPill: {
+    minHeight: 34,
+    paddingHorizontal: 13,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.background,
+  },
+  recoveryPillPrimary: {
+    backgroundColor: c.accent,
+  },
+  recoveryPillText: {
+    color: c.text,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  recoveryPillPrimaryText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   mini: {
     height: 54,
     flexDirection: 'row',

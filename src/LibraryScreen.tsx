@@ -19,7 +19,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
 import { GlassView } from 'expo-glass-effect';
-import { request, coverURL, type Album, type Song } from './api';
+import { request, coverURL, isConnectivityFailure, type Album, type Song } from './api';
 import { useTheme } from './theme';
 import { DownloadBadge, useOffline } from './OfflineDownloads';
 import { preloadAlbumSongs } from './albumPrefetch';
@@ -196,7 +196,13 @@ export default function LibraryScreen(p: Props) {
         }
       } catch (e) {
         if (version === generation.current) {
-          setError(e instanceof Error ? e.message : 'Connessione non riuscita');
+          setError(
+            isConnectivityFailure(e)
+              ? ''
+              : e instanceof Error
+                ? e.message
+                : 'Connessione non riuscita'
+          );
         }
       } finally {
         if (version === generation.current) setBusy(false);
@@ -330,9 +336,11 @@ export default function LibraryScreen(p: Props) {
       .catch(e => {
         if (version === generation.current) {
           setArtistError(
-            e instanceof Error
-              ? e.message
-              : 'Impossibile aprire l’artista.'
+            isConnectivityFailure(e)
+              ? ''
+              : e instanceof Error
+                ? e.message
+                : 'Impossibile aprire l’artista.'
           );
         }
       })
@@ -583,7 +591,13 @@ export default function LibraryScreen(p: Props) {
       }
     } catch (e) {
       if (version === generation.current) {
-        setError(e instanceof Error ? e.message : 'Connessione non riuscita');
+        setError(
+          isConnectivityFailure(e)
+            ? ''
+            : e instanceof Error
+              ? e.message
+              : 'Connessione non riuscita'
+        );
       }
     } finally {
       if (version === generation.current) {

@@ -102,10 +102,6 @@ export default function AlbumActions(p: Props) {
 
   function downloadAlbum() {
     void perform(async () => {
-      if (store.account.offline) {
-        throw new Error('Accedi online per scaricare altri brani.');
-      }
-
       let songs = albumSongs;
 
       if (!songs) {

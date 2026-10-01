@@ -26,6 +26,11 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   song: Song;
+  artworkUri?: string;
+  connectivityBanner?: 'offline' | 'online' | null;
+  connectivityBannerOpacity?: Animated.Value;
+  connectivityBannerScale?: Animated.Value;
+  connectivityBannerY?: Animated.Value;
   player: AudioPlayer;
   queue: Song[];
   index: number;
@@ -363,7 +368,7 @@ export default function PlayerSheet(p: Props) {
     position: number;
   } | null>(null);
   const mounted = useRef(true);
-  const uri = coverURL(p.song.coverArt);
+  const uri = coverURL(p.song.coverArt) ?? p.artworkUri;
   // Apple Music-style player uses light foreground controls over a darkened
   // artwork-derived background. Keeping these independent from the app theme
   // avoids black controls on bright/colourful covers.
@@ -788,7 +793,7 @@ export default function PlayerSheet(p: Props) {
     </Pressable>
   );
 
-  const currentCover = coverURL(p.song.coverArt);
+  const currentCover = coverURL(p.song.coverArt) ?? p.artworkUri;
   const upNext = queueMounted ? p.queue.slice(Math.max(0, p.index + 1)) : [];
 
   // Proportions measured from the supplied Apple Music reference screenshot
@@ -838,6 +843,51 @@ export default function PlayerSheet(p: Props) {
       onRequestClose={() => dismissPlayer()}
     >
       <View style={playerStyles.modalRoot}>
+        {p.connectivityBanner &&
+          p.connectivityBannerOpacity &&
+          p.connectivityBannerScale &&
+          p.connectivityBannerY && (
+            <View
+              pointerEvents="none"
+              style={playerStyles.connectivityBannerWrap}
+            >
+              <Animated.View
+                style={[
+                  playerStyles.connectivityBanner,
+                  {
+                    opacity: p.connectivityBannerOpacity,
+                    transform: [
+                      { translateY: p.connectivityBannerY },
+                      { scale: p.connectivityBannerScale },
+                    ],
+                  },
+                ]}
+              >
+                <View style={playerStyles.connectivityBannerIcon}>
+                  <Ionicons
+                    name={
+                      p.connectivityBanner === 'offline'
+                        ? 'cloud-offline-outline'
+                        : 'checkmark-circle'
+                    }
+                    size={17}
+                    color={
+                      p.connectivityBanner === 'offline'
+                        ? 'rgba(255,255,255,0.72)'
+                        : '#ff375f'
+                    }
+                  />
+                </View>
+
+                <Text style={playerStyles.connectivityBannerTitle}>
+                  {p.connectivityBanner === 'offline'
+                    ? 'Sei offline'
+                    : 'Di nuovo online'}
+                </Text>
+              </Animated.View>
+            </View>
+          )}
+
         <Reanimated.View
           pointerEvents="none"
           style={[
@@ -1760,6 +1810,47 @@ const playerStyles = StyleSheet.create({
   modalRoot: {
     flex: 1,
     backgroundColor: 'transparent',
+  },
+  connectivityBannerWrap: {
+    position: 'absolute',
+    top: 70,
+    left: 14,
+    right: 14,
+    zIndex: 250,
+    elevation: 250,
+    alignItems: 'center',
+  },
+  connectivityBanner: {
+    minHeight: 40,
+    maxWidth: 220,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(32,24,38,0.94)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.14)',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  connectivityBannerIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  connectivityBannerTitle: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: -0.05,
   },
   sheet: {
     flex: 1,
