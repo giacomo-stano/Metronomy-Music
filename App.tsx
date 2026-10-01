@@ -6,6 +6,7 @@ import { coverURL, streamURL, request, type Album, type HomeResponse, type Song,
 import SearchScreen from './src/SearchScreen';
 import PlayerSheet from './src/PlayerSheet';
 import { useAppleMusicHaptics } from './src/useAppleMusicHaptics';
+import { nowPlayingMetadata } from './src/nowPlayingMetadata';
 import { Ionicons } from '@expo/vector-icons';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -261,8 +262,9 @@ function MusicApp({
   const current = queue[index];
   // Only bind haptics after the audio source AND lock-screen metadata are set.
   const [hapticsTrack, setHapticsTrack] = useState<Song>();
+  const nowPlayingTrack = useRef<Song | undefined>(undefined);
   const musicHaptics = useAppleMusicHaptics(
-    current?.id === hapticsTrack?.id ? hapticsTrack : undefined, !!status.playing
+    current?.id === hapticsTrack?.id ? hapticsTrack : undefined, !!status.playing, player, nowPlayingTrack
   );
   const playback = useRef({ queue, index });
   playback.current = { queue, index };
@@ -811,21 +813,17 @@ function MusicApp({
         );
       }
 
+      nowPlayingTrack.current = next;
       player.replace(source);
-      player.play();
 
       try {
         player.setActiveForLockScreen(
           true,
-          {
-            title: next.title,
-            artist: next.artist,
-            albumTitle: next.album,
-            artworkUrl: coverURL(next.coverArt),
-          },
+          nowPlayingMetadata(next, coverURL(next.coverArt)),
           {
             showSeekBackward: false,
             showSeekForward: false,
+            isLiveStream: false,
           }
         );
 
@@ -836,6 +834,8 @@ function MusicApp({
       } catch {
         /* Optional in Expo Go. */
       }
+      // Publish recording identity before the first playing Now Playing update.
+      player.play();
     } catch (e) {
       if (version === audioGeneration.current) {
         setQueue(previousQueue);

@@ -419,3 +419,6 @@ npx expo start
 Alcune funzioni di Metronomy utilizzano moduli nativi e richiedono una development build completa per essere testate; Expo Go non rappresenta tutte le funzionalità della release iOS.
 
 Il codice del server si trova in `server/`.
+
+Per l'integrazione Apple Music Haptics, i requisiti della build nativa e la
+diagnostica su iPhone, vedere [Music Haptics](docs/music-haptics.md).

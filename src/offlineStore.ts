@@ -195,7 +195,7 @@ export class OfflineStore {
     if (alive() && !info) {
       try {
         const result = await request<{ info: Record<string, unknown> }>('songs/' + encodeURIComponent(id));
-        const allowed = ['genre', 'year', 'bitRate', 'samplingRate', 'bitDepth', 'suffix', 'isrc'];
+        const allowed = ['genre', 'year', 'bitRate', 'samplingRate', 'bitDepth', 'suffix', 'isrc', 'isrcs'];
         info = Object.fromEntries(Object.entries(result.info ?? {}).filter(([key]) => allowed.includes(key)));
       } catch {}
     }

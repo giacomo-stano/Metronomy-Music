@@ -19,7 +19,7 @@ import { useVisiblePlaybackStatus } from './usePlaybackSignals';
 import { useTheme } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
 import ElasticPlayPauseButton from './ElasticPlayPauseButton';
-import { hapticsLabel, type AppleHapticsState } from './appleMusicHaptics';
+import { hapticsDiagnostics, hapticsLabel, type AppleHapticsState } from './appleMusicHaptics';
 import { AirPlayButton, SystemVolumeSlider, nativeAirPlayAvailable, nativeSystemVolumeAvailable } from '../modules/metronomy-audio-controls';
 
 type Props = {
@@ -41,7 +41,7 @@ type Props = {
   onRepeat: () => void;
   shuffle: boolean;
   onShuffle: () => void;
-  musicHaptics: { state: AppleHapticsState; retry: () => void };
+  musicHaptics: { state: AppleHapticsState; inspect: () => AppleHapticsState; retry: () => void };
   onBrowse: (type: 'album' | 'artist') => void;
   onFavorite: (starred: boolean) => void;
   onSleep: (minutes: number) => void;
@@ -1335,27 +1335,12 @@ export default function PlayerSheet(p: Props) {
                         accessibilityRole="button"
                         accessibilityLabel={hapticsLabel(p.musicHaptics.state)}
                         onPress={() => {
-                          const h = p.musicHaptics.state;
-                          const guidance = !h.active
-                            ? 'Music Haptics è disattivato nelle Impostazioni iPhone → Accessibilità.'
-                            : h.available === false
-                              ? 'Music Haptics è attivo, ma Apple non segnala una traccia aptica per questo ISRC.'
-                              : h.available === true && !h.playing
-                                ? 'Music Haptics è attivo e la traccia aptica è disponibile. Metronomy sta aspettando la conferma di riproduzione da iOS.'
-                                : h.playing
-                                  ? 'iOS conferma che la traccia aptica è in riproduzione.'
-                                  : 'Music Haptics è attivo. Metronomy sta completando la sincronizzazione con Now Playing.';
-                          Alert.alert('Music Haptics di Apple',
-                            hapticsLabel(h) + '\n\n' + guidance + '\n\n' +
-                            'ISRC brano: ' + (h.isrc || 'assente') + '\nISRC iOS: ' + (h.nativeIsrc || 'assente') +
-                            '\nAbilitato da iOS: ' + (h.active ? 'sì' : 'no') +
-                            '\nTraccia Apple: ' + (h.available === null ? 'non verificata' : h.available ? 'disponibile' : 'non disponibile') +
-                            '\nNow Playing pronto: ' + (h.nowPlayingReady ? 'sì' : 'no') +
-                            '\nAudio rilevato da iOS: ' + (h.audioPlaying ? 'sì' : 'no') +
-                            '\nObserver Apple: ' + (h.observerRegistered ? 'registrato' : 'non registrato') +
-                            '\nRiproduzione aptica confermata: ' + (h.playing ? 'sì' : 'no') +
-                            (h.error ? '\n\n' + h.error : ''),
-                            [{ text: 'Chiudi', style: 'cancel' }, { text: 'Riprova', onPress: p.musicHaptics.retry }]);
+                          const h = p.musicHaptics.inspect();
+                          const report = hapticsDiagnostics(h);
+                          Alert.alert('Music Haptics di Apple', report,
+                            [{ text: 'Chiudi', style: 'cancel' },
+                              { text: 'Condividi diagnostica', onPress: () => { void Share.share({ message: report }).catch(() => {}); } },
+                              { text: 'Riprova', onPress: p.musicHaptics.retry }]);
                         }}>
                         <SymbolView
                           name={(p.musicHaptics.state.available === false

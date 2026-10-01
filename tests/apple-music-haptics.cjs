@@ -6,7 +6,7 @@ const api = {};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/appleMusicHaptics.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText, { exports: api, Date, setTimeout, clearTimeout });
-const { normalizeISRC, detailISRC, AppleHapticsSession, hapticsLabel, withTimeout } = api;
+const { normalizeISRC, collectISRCs, detailISRC, detailISRCs, AppleHapticsSession, hapticsLabel, hapticsDiagnostics, withTimeout } = api;
 const A = 'DEE861902725', B = 'USUM71703861';
 const track = (id = 'a', isrc) => ({ id, title: id, artist: 'Artist', isrc });
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -40,7 +40,7 @@ function fixture(read = async () => ({ info: { isrc: [A] } }), timeout = 100) {
   assert.equal(f.session.state.isrc, A);
   assert.equal(f.session.state.available, true);
   assert.equal(f.session.state.playing, false, 'catalog availability is not proof of playback');
-  assert.equal(hapticsLabel(f.session.state), 'Music Haptics attivo');
+  assert.equal(hapticsLabel(f.session.state), 'Music Haptics: in attesa di iOS');
   f.session.accept({ ...f.state(), playing: true, audioPlaying: true });
   assert.equal(hapticsLabel(f.session.state), 'Music Haptics in riproduzione');
   f.session.accept({ ...f.state(), active: false, playing: false });
@@ -50,7 +50,7 @@ function fixture(read = async () => ({ info: { isrc: [A] } }), timeout = 100) {
   assert.equal(f.updates.length, count, 'ignore events belonging to old tracks/accounts');
 
   let finish;
-  const race = fixture(() => new Promise(resolve => finish = resolve));
+  const race = fixture(id => id === 'old' ? new Promise(resolve => finish = resolve) : Promise.resolve({ info: {} }));
   const old = race.session.select(track('old'));
   await tick();
   await race.session.select(track('new', B));
@@ -101,11 +101,67 @@ function fixture(read = async () => ({ info: { isrc: [A] } }), timeout = 100) {
   disposed.session.dispose(); completeDisposed({ isrc: A }); await outstanding;
   assert.equal(disposed.writes.length, 0, 'logout cannot publish an old lookup');
 
+  assert.equal(normalizeISRC('ISRC: US-AT2-13-00493'), 'USAT21300493');
+  assert.equal(collectISRCs(['bad', A], A, B).join(','), [A, B].join(','));
+  assert.equal(detailISRCs({ isrcs: [A], info: { isrc: [A, B] } }).join(','), [A, B].join(','));
+  const multiple = fixture(async () => ({ info: { isrc: [A, B] } }));
+  const queried = [];
+  multiple.native.checkAvailability = async code => { queried.push(code); return code === B; };
+  await multiple.session.select(track('multi', A));
+  assert.equal(queried.join(','), [A, B].join(','));
+  assert.equal(multiple.session.state.isrc, B, 'try detailed candidates after embedded false');
+  assert.equal(multiple.session.state.available, true);
+
+  const unavailable = fixture(async () => ({ info: { isrc: [A, B] } }));
+  unavailable.native.checkAvailability = async () => false;
+  await unavailable.session.select(track());
+  assert.equal(unavailable.session.state.available, false);
+  unavailable.native.checkAvailability = async () => true;
+  await unavailable.session.refresh(true);
+  assert.equal(unavailable.session.state.available, true, 'foreground retries a negative result');
+
+  const uncertain = fixture();
+  uncertain.native.checkAvailability = async () => { throw Error('network'); };
+  await uncertain.session.select(track('unknown', A));
+  assert.equal(uncertain.session.state.available, null, 'query error is not proof of unavailability');
+  const offlineDetails = fixture(async () => { throw Error('offline'); });
+  offlineDetails.native.checkAvailability = async () => false;
+  await offlineDetails.session.select(track('offline', A));
+  assert.equal(offlineDetails.session.state.available, null, 'incomplete metadata lookup is unknown');
+
+  const proof = fixture();
+  let resolveNegative;
+  proof.native.checkAvailability = () => new Promise(resolve => { resolveNegative = resolve; });
+  const confirming = proof.session.select(track('proof', A));
+  await tick();
+  proof.session.accept({ ...proof.state(), playing: true });
+  resolveNegative(false); await confirming;
+  assert.equal(proof.session.state.available, true, 'actual playback wins over late negative availability');
+
+  const order = [];
+  const owner = fixture();
+  const oldSetISRC = owner.native.setISRC;
+  owner.native.setISRC = (...args) => { order.push('observe'); return oldSetISRC(...args); };
+  const ordered = new AppleHapticsSession(owner.native, async () => ({}), () => {}, 100,
+    (_, code) => { order.push('publish:' + code); });
+  await ordered.select(track('ordered', A));
+  assert.equal(order.join(','), 'publish:' + A + ',observe');
+
+  const diagnostics = { ...f.session.state, playing: false, active: true, audioPlaying: true,
+    supported: true, integrationVersion: 2, ownerReady: true, timelineValid: true, available: true,
+    callbackReceived: false, duration: 200, elapsed: 45, rate: 1, isLive: false };
+  assert(hapticsDiagnostics(diagnostics).includes('non ancora ricevuta'));
+  assert(hapticsDiagnostics({ ...diagnostics, callbackReceived: true }).includes('Apple ha risposto'));
+  assert(hapticsDiagnostics({ ...diagnostics, integrationVersion: undefined }).includes('nuova build iOS'));
+  assert.equal(hapticsLabel({ ...diagnostics, audioPlaying: false }), 'Music Haptics in pausa');
+
   const swift = fs.readFileSync('modules/metronomy-audio-controls/ios/MetronomyMusicHapticsModule.swift', 'utf8');
   assert(!/import CoreHaptics|CHHapticEngine|hapticTransient/.test(swift));
   assert(swift.includes('.runOnQueue(.main)'));
   assert(swift.includes('restartPlaybackObserver'));
-  assert(swift.includes('scheduleAttachmentRetry'));
+  assert(!swift.includes('scheduleAttachmentRetry'), 'observer is not a playback trigger');
+  assert(!/nowPlayingInfo\s*=/.test(swift), 'haptics observer must not mutate the audio owner metadata');
+  assert(swift.includes('callbackReceived'));
   assert.equal(JSON.parse(fs.readFileSync('app.json')).expo.ios.infoPlist.MusicHapticsSupported, true);
   assert(JSON.parse(fs.readFileSync('modules/metronomy-audio-controls/expo-module.config.json')).apple.modules.includes('MetronomyMusicHapticsModule'));
   console.log('Apple Music Haptics: ISRC shapes, state semantics, native absence, retry/timeout, stale lookups/events, metadata recovery, cleanup and Apple-only configuration passed.');

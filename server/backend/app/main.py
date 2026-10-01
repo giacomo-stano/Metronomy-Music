@@ -13,6 +13,7 @@ from .config import settings
 from .imports import import_queue
 from .models import ImportRequest, ImportRequestCreate
 from .navidrome import navidrome
+from .song_metadata import song, song_info
 from .lyrics_provider import lrclib, LyricsUnavailable
 from . import network, file_ops, album_ops, storage, settings_info
 from .sessions import authenticate as require_api_key, router as auth_router, username
@@ -44,17 +45,6 @@ async def private_responses(request, call_next):
 
 
 app.include_router(auth_router)
-
-
-def song(item: dict) -> dict:
-    return {
-        "id": item["id"], "title": item.get("title", "Untitled"),
-        "artist": item.get("artist", "Unknown artist"), "album": item.get("album"),
-        "duration": item.get("duration", 0), "coverArt": item.get("coverArt"),
-        "track": item.get("track"), "year": item.get("year"),
-        "albumId": item.get("albumId"), "artistId": item.get("artistId"),
-        "starred": bool(item.get("starred")),
-    }
 
 
 app.include_router(network.router(require_api_key))
@@ -167,7 +157,7 @@ class Favorite(BaseModel):
 @app.get('/songs/{song_id}')
 async def song_detail(song_id: str, _: None = Depends(require_api_key)):
     item = (await navidrome.json('getSong', {'id': song_id})).get('song', {})
-    return {'song': song(item), 'info': {key: item.get(key) for key in ('genre', 'year', 'bitRate', 'samplingRate', 'bitDepth', 'suffix', 'isrc', 'artists', 'albumArtists')}}
+    return {'song': song(item), 'info': song_info(item)}
 
 
 @app.post('/songs/{song_id}/favorite')

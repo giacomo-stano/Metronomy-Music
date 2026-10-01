@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { requireOptionalNativeModule } from 'expo-modules-core';
-import { request, type Song } from './api';
+import type { AudioPlayer } from 'expo-audio';
+import { coverURL, request, type Song } from './api';
+import { nowPlayingMetadata } from './nowPlayingMetadata';
 import { AppleHapticsSession, emptyHapticsState, type AppleHapticsNative, type NativeHapticsState } from './appleMusicHaptics';
 
 type NativeModule = AppleHapticsNative & {
@@ -10,18 +12,37 @@ type NativeModule = AppleHapticsNative & {
 const native = Platform.OS === 'ios'
   ? requireOptionalNativeModule<NativeModule>('MetronomyMusicHaptics') : null;
 
-export function useAppleMusicHaptics(song: Song | undefined, audioPlaying: boolean) {
+export function useAppleMusicHaptics(song: Song | undefined, audioPlaying: boolean,
+  player: AudioPlayer, activeTrack: { current: Song | undefined }) {
   const [state, setState] = useState(emptyHapticsState);
   const session = useMemo(() => new AppleHapticsSession(native,
-    id => request('songs/' + encodeURIComponent(id), 8000), setState), []);
+    id => request('songs/' + encodeURIComponent(id), 8000), next => setState(previous => {
+      // Keep the latest position in session.state for on-demand diagnostics,
+      // without rerendering the entire app just because the clock advanced.
+      const { elapsed: _previousElapsed, ...previousStatus } = previous;
+      const { elapsed: _nextElapsed, ...nextStatus } = next;
+      return JSON.stringify(previousStatus) === JSON.stringify(nextStatus) ? previous : next;
+    }), 10000,
+    (track, code) => {
+      // The audio source can change before React commits the next render.
+      // Consult the synchronous source identity, not a captured song object.
+      const current = activeTrack.current;
+      if (current?.id !== track.id) return;
+      player.updateLockScreenMetadata(nowPlayingMetadata(current, coverURL(current.coverArt), code));
+    }), [player, activeTrack]);
 
   useEffect(() => {
     // Subscribe before select() can emit the initial state.
-    const subscription = native?.addListener('onStateChanged', value => session.accept(value));
+    const subscription = native?.addListener('onStateChanged', value => {
+      const activated = value.key === session.state.key && value.active && !session.state.active;
+      session.accept(value);
+      if (activated) void session.refresh(true);
+    });
     return () => { subscription?.remove(); session.dispose(); };
   }, [session]);
 
-  useEffect(() => { void session.select(song); }, [session, song?.id, song?.isrc]);
+  const codes = JSON.stringify([song?.isrc, song?.isrcs]);
+  useEffect(() => { void session.select(song); }, [session, song?.id, codes]);
   useEffect(() => { void session.refresh(); }, [session, audioPlaying]);
   useEffect(() => {
     if (!native || !song) return;
@@ -31,17 +52,15 @@ export function useAppleMusicHaptics(song: Song | undefined, audioPlaying: boole
       refreshing = true;
       void session.refresh().finally(() => { refreshing = false; });
     };
-    // Repair/read back the actual shared Now Playing dictionary, not a cached
-    // initial ISRC. No PCM listener and no 250ms root renders.
+    // Read-only diagnostics. No metadata rewriting, audio taps or 250ms renders.
     const timer = setInterval(refresh, 2000);
     const appState = AppState.addEventListener('change', next => {
       if (next === 'active') {
-        refresh();
-        if (session.state.phase === 'error') void session.retry();
+        void session.refresh(true);
       }
     });
     return () => { clearInterval(timer); appState.remove(); };
   }, [session, song?.id]);
 
-  return { state, retry: () => { void session.retry(); } };
+  return { state, inspect: () => session.state, retry: () => { void session.retry(); } };
 }

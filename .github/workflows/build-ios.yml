@@ -26,7 +26,9 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Test Apple Music Haptics state management
-        run: node tests/apple-music-haptics.cjs
+        run: |
+          node tests/apple-music-haptics.cjs
+          node tests/now-playing-metadata.cjs
 
       - name: Generate iOS project
         env:
@@ -37,6 +39,11 @@ jobs:
         run: |
           cd ios
           pod install
+
+      - name: Verify Music Haptics audio-owner patch
+        run: |
+          grep -q 'metronomyISRC' node_modules/expo-audio/ios/AudioRecords.swift
+          grep -q 'applyMetronomyMetadata(&nowPlayingInfo, for: player)' node_modules/expo-audio/ios/MediaController.swift
 
       - name: Verify Music Haptics plist configuration
         shell: bash
