@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import { seekPlayback, invalidatePlaybackSeeks } from './src/playbackTimeline';
+import { playbackSource } from './src/playbackSource';
 import { ActivityIndicator, Alert, Animated, Easing, Image, PanResponder, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { coverURL, streamURL, request, type Album, type HomeResponse, type Song, type SearchResponse, type Lyrics } from './src/api';
 import SearchScreen from './src/SearchScreen';
@@ -786,25 +787,11 @@ function MusicApp({
       await audioReady.current;
       if (version !== audioGeneration.current) return;
 
-      /*
-       * In modalità offline streamURL() non può essere usato: per scelta
-       * api.ts genera un errore quando account.offline === true.
-       *
-       * Recuperiamo quindi direttamente il file locale verificato da
-       * OfflineStore.source(). In modalità online continuiamo invece a usare
-       * lo stream HTTP del bridge esattamente come prima.
-       */
-      const source = isOffline
-        ? await offlineStore.source(next.id)
-        : streamURL(next.id);
+      const source = await playbackSource(
+        next.id, isOffline, id => offlineStore.source(id), streamURL,
+      );
 
       if (version !== audioGeneration.current) return;
-
-      if (!source) {
-        throw new Error(
-          'Il file di questo brano non è disponibile su questo iPhone.'
-        );
-      }
 
       await invalidatePlaybackSeeks(player);
       if (version !== audioGeneration.current) return;

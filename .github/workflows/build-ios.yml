@@ -26,12 +26,18 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Playback timeline regression tests
-        run: node tests/playback-timeline.cjs
+        run: |
+          node tests/playback-timeline.cjs
+          node tests/playback-source.cjs
+          node tests/precise-audio-timing.cjs
 
       - name: Generate iOS project
         env:
           CI: "1"
         run: npx expo prebuild --platform ios --clean
+
+      - name: Verify precise native audio timing is applied
+        run: node tests/precise-audio-timing.cjs --verify-installed
 
       - name: Ensure CocoaPods are installed
         run: |
