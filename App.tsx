@@ -3,9 +3,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import { seekPlayback, invalidatePlaybackSeeks } from './src/playbackTimeline';
 import { playbackSource } from './src/playbackSource';
-import { ActivityIndicator, Alert, Animated, AppState, Easing, Image, PanResponder, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, PanResponder, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { coverURL, streamURL, request, type Album, type HomeResponse, type Song, type SearchResponse, type Lyrics } from './src/api';
 import SearchScreen from './src/SearchScreen';
+import PersistentScreen from './src/PersistentScreen';
+import { ScreenCache } from './src/ScreenCache';
 import PlayerSheet from './src/PlayerSheet';
 import { Ionicons } from '@expo/vector-icons';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
@@ -364,6 +366,8 @@ function MusicApp({
   const [home, setHome] = useState<HomeResponse | null>(null);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [hasMore, setHasMore] = useState(false);
+  const homeCache = useRef(new ScreenCache<HomeResponse>(1)).current;
+  const additionsCache = useRef(new ScreenCache<{ albums: Album[]; hasMore: boolean }>(1)).current;
   const catalogOpacity = useRef(new Animated.Value(1)).current;
   const catalogTransition =
     useRef<Animated.CompositeAnimation | null>(null);
@@ -831,6 +835,9 @@ function MusicApp({
 
   useEffect(() => {
     const version = ++generation.current;
+    const scope = String(isOffline) + ":" + reload;
+    homeCache.useScope(scope);
+    additionsCache.useScope(scope);
 
     if ((tab === 'Cerca' || tab === 'Libreria') && !album) return;
 
@@ -871,6 +878,14 @@ function MusicApp({
     }
 
     setError('');
+    const cachedHome = tab === 'Home' ? homeCache.peek('home') : undefined;
+    const cachedAdditions = tab === 'Novità' ? additionsCache.peek('newest') : undefined;
+    if (cachedHome || cachedAdditions) {
+      if (cachedHome) setHome(cachedHome);
+      if (cachedAdditions) { setAlbums(cachedAdditions.albums); setHasMore(cachedAdditions.hasMore); }
+      setBusy(false);
+      return;
+    }
 
     const hasVisibleCatalog =
       tab === 'Home'
@@ -924,7 +939,7 @@ function MusicApp({
     const run = async () => {
       try {
         if (tab === 'Home') {
-          const data = await request<HomeResponse>('home');
+          const data = await homeCache.get('home', () => request<HomeResponse>('home'));
 
           await warmArtwork([
             ...data.recentAlbums,
@@ -942,15 +957,7 @@ function MusicApp({
             if (generation.current === version) setResults(data);
           }
         } else {
-          const data = await request<{
-            albums: Album[];
-            hasMore: boolean;
-          }>(
-            'albums?sort=' +
-              (tab === 'Novità'
-                ? 'newest'
-                : 'alphabeticalByName')
-          );
+          const data = await additionsCache.get('newest', () => request<{ albums: Album[]; hasMore: boolean }>('albums?sort=newest'));
 
           await warmArtwork(data.albums);
 
@@ -1235,8 +1242,8 @@ function MusicApp({
     const version = generation.current;
     setBusy(true); setError('');
     try {
-      const data = await request<{ albums: Album[]; hasMore: boolean }>('albums?offset=' + albums.length + '&sort=' + (tab === 'Novità' ? 'newest' : 'alphabeticalByName'));
-      if (version === generation.current) { setAlbums(previous => [...previous, ...data.albums]); setHasMore(data.hasMore); }
+      const data = await request<{ albums: Album[]; hasMore: boolean }>('albums?offset=' + albums.length + '&sort=newest');
+      if (version === generation.current) { setAlbums(previous => { const next = [...previous, ...data.albums]; additionsCache.set('newest', { albums: next, hasMore: data.hasMore }); return next; }); setHasMore(data.hasMore); }
     } catch (e) { if (version === generation.current) setError(message(e)); }
     finally { if (version === generation.current) setBusy(false); }
   }
@@ -1378,9 +1385,9 @@ function MusicApp({
     )}
     {actionAlbum && <AlbumActions key={actionAlbum.id} album={actionAlbum} onClose={() => setActionAlbum(null)} onOpen={() => openAlbum(actionAlbum)} onPlay={songs => start(songs, 0, false)} onQueue={songs => { if (!current) start(songs, 0, false); else setQueue(old => [...old, ...songs]); }} onDeleted={(ids, complete) => { deletedSongs(ids); if (complete && album?.id === actionAlbum.id) setAlbum(null); }} />}
     {actionSong && <SongActions key={actionSong.id} song={actionSong} onClose={() => setActionSong(null)} onPlay={() => start([actionSong], 0, false)} onQueue={() => { if (!current) start([actionSong], 0, false); else setQueue(old => [...old, actionSong]); }} onBrowse={type => browseSong(actionSong, type)} onDeleted={deleted} onFavorite={(id, starred) => { setQueue(old => old.map(song => song.id === id ? { ...song, starred } : song)); setReload(v => v + 1); }} />}
-    {tab === 'Libreria' && (
-      <View style={s.flex}>
+    <PersistentScreen active={tab === 'Libreria'}>
         <LibraryScreen
+          active={tab === 'Libreria' && !album && !expanded && !settingsOpen}
           revision={reload}
           onSettings={() => setSettingsOpen(true)}
           onPlay={start}
@@ -1391,12 +1398,13 @@ function MusicApp({
           currentId={current?.id}
           isPlaying={!!status.playing}
         />
-      </View>
-    )}
+    </PersistentScreen>
 
-    {tab === 'Cerca' && (
+    <PersistentScreen active={tab === 'Cerca'}>
       <SearchScreen
-        key={query + ':' + (isOffline ? 'offline' : 'online')}
+        active={tab === 'Cerca' && !album && !expanded && !settingsOpen}
+        revision={reload}
+        offline={isOffline}
         initialQuery={query}
         onSettings={() => setSettingsOpen(true)}
         onPlay={song => start([song], 0, false)}
@@ -1407,18 +1415,30 @@ function MusicApp({
         onActions={setActionSong}
         onScroll={mini.onScroll}
       />
-    )}
+    </PersistentScreen>
 
-    {tab !== 'Libreria' && tab !== 'Cerca' && (
-      <ScrollView
+    {(['Home', 'Novità'] as const).map(screenTab => (
+      <PersistentScreen key={screenTab} active={tab === screenTab}>
+      <FlatList<Album>
+        data={screenTab === 'Novità' ? albums : []}
+        numColumns={2}
+        keyExtractor={item => item.id}
+        initialNumToRender={8}
+        maxToRenderPerBatch={6}
+        windowSize={7}
+        columnWrapperStyle={{ gap: 14, marginBottom: 22 }}
+        renderItem={({ item }) => <View style={{ width: (width - 54) / 2 }}><Pressable onPress={() => openAlbum(item)} accessibilityRole="button" accessibilityLabel={'Apri album ' + item.name}><Artwork id={item.coverArt} size={(width - 54) / 2} /></Pressable>{albumCaption(item)}</View>}
+        ListFooterComponent={screenTab === 'Novità' && hasMore ? <Button label="Carica altri album" disabled={busy} onPress={() => void more()} /> : null}
         style={s.flex}
         contentContainerStyle={s.page}
         keyboardShouldPersistTaps="handled"
         onScroll={mini.onScroll}
         scrollEventThrottle={32}
-      >
+        refreshing={tab === screenTab && busy && (screenTab === 'Home' ? !!home : albums.length > 0)}
+        onRefresh={() => setReload(value => value + 1)}
+        ListHeaderComponent={<>
         <View style={s.headingRow}>
-          <Text style={[s.title, { flex: 1 }]}>{tab}</Text>
+          <Text style={[s.title, { flex: 1 }]}>{screenTab}</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Apri impostazioni"
@@ -1433,7 +1453,7 @@ function MusicApp({
           </Pressable>
         </View>
 
-        {tab === 'Home' && isOffline && (
+        {screenTab === 'Home' && isOffline && (
           <View style={s.offlineNotice}>
             <View style={s.offlineNoticeIcon}>
               <Ionicons
@@ -1453,7 +1473,7 @@ function MusicApp({
           </View>
         )}
 
-        {!!error && (
+        {tab === screenTab && !!error && (
           <View style={s.notice}>
             <View style={s.noticeHeader}>
               <View style={s.noticeIcon}>
@@ -1505,7 +1525,7 @@ function MusicApp({
           </View>
         )}
 
-        {busy && (
+        {tab === screenTab && busy && (
           <ActivityIndicator
             color={c.accent}
             style={{ margin: 24 }}
@@ -1513,7 +1533,7 @@ function MusicApp({
         )}
 
         <Animated.View style={{ opacity: catalogOpacity }}>
-        {tab === 'Home' ? (
+        {screenTab === 'Home' ? (
           <>
             {home && (
               <>
@@ -1548,7 +1568,6 @@ function MusicApp({
             {featured(albums)}
 
             <Text style={s.section}>Tutte le aggiunte</Text>
-            {cards(albums)}
 
             {!busy && !error && !albums.length && (
               <Text style={s.sub}>
@@ -1556,18 +1575,14 @@ function MusicApp({
               </Text>
             )}
 
-            {hasMore && (
-              <Button
-                label="Carica altri album"
-                disabled={busy}
-                onPress={() => void more()}
-              />
-            )}
+
           </>
         )}
         </Animated.View>
-      </ScrollView>
-    )}
+        </>}
+      />
+      </PersistentScreen>
+    ))}
 
     {album && (() => {
       const albumCover = coverURL(album.coverArt);

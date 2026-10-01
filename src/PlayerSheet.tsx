@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Image, Modal, SafeAreaView, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
@@ -15,7 +15,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
 import type { AudioPlayer } from 'expo-audio';
 import { coverURL, streamURL, request, type Song, type Lyrics } from './api';
-import { useVisiblePlaybackStatus } from './usePlaybackSignals';
+import { usePlaybackSignals, useVisiblePlaybackStatus } from './usePlaybackSignals';
+import MusicSlider from './MusicSlider';
+import { useMotionPreferences } from './motionPreferences';
 import { playbackTimeline, seekPlayback, invalidatePlaybackSeeks } from './playbackTimeline';
 import { useTheme } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
@@ -332,7 +334,7 @@ function QueueDragRow({
 }
 
 export default function PlayerSheet(p: Props) {
-  const status = useVisiblePlaybackStatus(p.player, p.visible);
+  const status = usePlaybackSignals(p.player);
   const { colors: c, isDark } = useTheme();
   const { width, height } = useWindowDimensions();
   const [mode, setMode] = useState<'cover' | 'lyrics' | 'queue'>('cover');
@@ -352,15 +354,11 @@ export default function PlayerSheet(p: Props) {
   const closingPlayer = useRef(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [starred, setStarred] = useState(!!p.song.starred);
-  const [volume, setVolume] = useState(p.player.volume);
-  const [autoScroll, setAutoScroll] = useState(true);
   const [autoplay, setAutoplay] = useState(true);
   const [automix, setAutomix] = useState(false);
   const [playlists, setPlaylists] = useState<{ id: string; name: string }[] | null>(null);
   const [playlistBusy, setPlaylistBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const scroll = useRef<ScrollView>(null);
-  const positions = useRef<Record<number, number>>({});
   const activeSong = useRef(p.song.id); activeSong.current = p.song.id;
   const localRemovalPlayback = useRef<{
     songId: string;
@@ -392,7 +390,7 @@ export default function PlayerSheet(p: Props) {
     };
   }, []);
   useEffect(() => { setStarred(!!p.song.starred); }, [p.song.id, p.song.starred]);
-  useEffect(() => { positions.current = {}; setMenu(false); setPlaylists(null); menuProgress.setValue(0); }, [p.song.id]);
+  useEffect(() => { setMenu(false); setPlaylists(null); menuProgress.setValue(0); }, [p.song.id]);
   useEffect(() => {
     if (p.visible) {
       closingPlayer.current = false;
@@ -479,11 +477,6 @@ export default function PlayerSheet(p: Props) {
     }).start();
   }, [menu, menuProgress]);
 
-  let active = -1;
-  if (p.lyrics?.synced) p.lyrics.line.forEach((line, index) => { if (line.start !== undefined && line.start <= status.currentTime * 1000 + (p.lyrics?.offset ?? 0)) active = index; });
-  useEffect(() => { if (autoScroll && mode === 'lyrics' && active >= 0) scroll.current?.scrollTo({ y: Math.max(0, (positions.current[active] ?? 0) - 100), animated: true }); }, [active, mode, autoScroll]);
-  const { duration, position: currentTime, remaining: remainingTime, progress } = playbackTimeline(status, p.song.duration);
-  const seek = (value: number) => { void seekPlayback(p.player, value, p.song.duration).catch(() => Alert.alert('Riproduzione', 'Impossibile spostarsi nel brano.')); };
   const openMenu = () => {
     setPlaylists(null);
     setMenu(true);
@@ -605,7 +598,7 @@ export default function PlayerSheet(p: Props) {
     localRemovalPlayback.current = {
       songId,
       wasPlaying: !!status.playing,
-      position: Math.max(0, status.currentTime || 0),
+      position: Math.max(0, p.player.currentTime || 0),
     };
 
     try {
@@ -959,45 +952,7 @@ export default function PlayerSheet(p: Props) {
                   <View style={{ width: 40 }} />
                 </View>
 
-                {!p.lyrics ? (
-                  <Text style={playerStyles.lyricsEmpty}>{p.lyricsMessage}</Text>
-                ) : (
-                  <ScrollView
-                    ref={scroll}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={playerStyles.lyricsContent}
-                  >
-                    <Text style={playerStyles.lyricsSource}>
-                      {p.lyricsSource}
-                    </Text>
-                    {p.lyrics.line.map((line, i) => (
-                      <Pressable
-                        key={i}
-                        disabled={!p.lyrics?.synced || line.start === undefined}
-                        onLayout={e => {
-                          positions.current[i] = e.nativeEvent.layout.y;
-                        }}
-                        onPress={() =>
-                          seek(
-                            ((line.start ?? 0) - (p.lyrics?.offset ?? 0)) / 1000
-                          )
-                        }
-                      >
-                        <Text
-                          style={[
-                            playerStyles.lyricLine,
-                            {
-                              opacity:
-                                !p.lyrics?.synced || active === i ? 1 : 0.30,
-                            },
-                          ]}
-                        >
-                          {line.value || '♪'}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                )}
+                <PlayerLyrics key={p.song.id} player={p.player} song={p.song} lyrics={p.lyrics} message={p.lyricsMessage} source={p.lyricsSource} />
               </View>
             ) : (
               <>
@@ -1360,35 +1315,7 @@ export default function PlayerSheet(p: Props) {
                     },
                   ]}
                 >
-                  <View style={playerStyles.progressArea}>
-                    <Range
-                      value={progress}
-                      onChange={v => seek(v * duration)}
-                      color="rgba(255,255,255,0.82)"
-                      track="rgba(255,255,255,0.25)"
-                      label="Posizione del brano"
-                      height={4}
-                    />
-                    <View style={playerStyles.timeRow}>
-                      <Text style={playerStyles.timeText}>
-                        {clock(currentTime)}
-                      </Text>
-                      <View style={playerStyles.hapticsChip}>
-                        <SymbolView
-                          name={'hand.tap' as SFSymbol}
-                          size={9}
-                          weight="regular"
-                          tintColor="rgba(255,255,255,0.48)"
-                        />
-                        <Text style={playerStyles.hapticsText}>
-                          Feedback aptici in pausa
-                        </Text>
-                      </View>
-                      <Text style={playerStyles.timeText}>
-                        −{clock(remainingTime)}
-                      </Text>
-                    </View>
-                  </View>
+                  <PlaybackProgress key={p.song.id} player={p.player} song={p.song} visible={p.visible} />
 
                   <View style={playerStyles.transportRow}>
                     <Pressable
@@ -1454,17 +1381,7 @@ export default function PlayerSheet(p: Props) {
                           style={{ width: '100%', height: 34 }}
                         />
                       ) : (
-                        <Range
-                          value={volume}
-                          onChange={v => {
-                            p.player.volume = v;
-                            setVolume(v);
-                          }}
-                          color="rgba(255,255,255,0.80)"
-                          track="rgba(255,255,255,0.22)"
-                          label="Volume del player"
-                          height={5}
-                        />
+                        <FallbackVolume player={p.player} />
                       )}
                     </View>
                     <SymbolView
@@ -2112,9 +2029,9 @@ const playerStyles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   timeText: {
-    width: 42,
-    color: 'rgba(255,255,255,0.34)',
-    fontSize: 9.5,
+    minWidth: 42,
+    color: 'rgba(255,255,255,0.58)',
+    fontSize: 11,
     fontWeight: '500',
     fontVariant: ['tabular-nums'],
   },
@@ -2330,77 +2247,56 @@ const menuStyles = StyleSheet.create({
   },
 });
 
-function Range({
-  value,
-  onChange,
-  color,
-  track,
-  label,
-  height = 5,
-}: {
-  value: number;
-  onChange: (value: number) => void;
-  color: string;
-  track: string;
-  label: string;
-  height?: number;
-}) {
-  const width = useRef(1);
-  const [drag, setDrag] = useState<number | null>(null);
-  const position = (x: number) =>
-    Math.min(1, Math.max(0, x / width.current));
-  const shown = Math.min(1, Math.max(0, drag ?? value));
-
-  return (
-    <View
-      accessibilityRole="adjustable"
-      accessibilityLabel={label}
-      accessibilityValue={{ min: 0, max: 100, now: Math.round(shown * 100) }}
-      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-      onAccessibilityAction={e =>
-        onChange(
-          Math.min(
-            1,
-            Math.max(
-              0,
-              value +
-                (e.nativeEvent.actionName === 'increment' ? 0.05 : -0.05)
-            )
-          )
-        )
-      }
-      onLayout={e => {
-        width.current = e.nativeEvent.layout.width;
-      }}
-      onStartShouldSetResponder={() => true}
-      onResponderGrant={e => setDrag(position(e.nativeEvent.locationX))}
-      onResponderMove={e => setDrag(position(e.nativeEvent.locationX))}
-      onResponderRelease={e => {
-        onChange(position(e.nativeEvent.locationX));
-        setDrag(null);
-      }}
-      onResponderTerminate={() => setDrag(null)}
-      style={{ height: 28, justifyContent: 'center' }}
-    >
-      <View
-        pointerEvents="none"
-        style={{
-          height,
-          borderRadius: height / 2,
-          overflow: 'hidden',
-          backgroundColor: track,
-        }}
-      >
-        <View
-          style={{
-            height,
-            width: `${shown * 100}%`,
-            backgroundColor: color,
-          }}
-        />
-      </View>
+const PlaybackProgress = memo(function PlaybackProgress({ player, song, visible }: { player: AudioPlayer; song: Song; visible: boolean }) {
+  const status = useVisiblePlaybackStatus(player, visible);
+  const timeline = playbackTimeline(status, song.duration);
+  const [preview, setPreview] = useState<number | null>(null);
+  const pending = useRef(false);
+  const seekSequence = useRef(0);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const onPreview = useCallback((value: number | null) => { if (value !== null || !pending.current) setPreview(value); }, []);
+  const commit = useCallback((fraction: number) => {
+    const sequence = ++seekSequence.current;
+    pending.current = true;
+    setPreview(fraction);
+    void seekPlayback(player, fraction * playbackTimeline(player.currentStatus, song.duration).duration, song.duration)
+      .catch(() => { if (alive.current && seekSequence.current === sequence) Alert.alert('Riproduzione', 'Impossibile spostarsi nel brano.'); })
+      .finally(() => { if (seekSequence.current === sequence) { pending.current = false; if (alive.current) setPreview(null); } });
+  }, [player, song.duration]);
+  const position = preview === null ? timeline.position : preview * timeline.duration;
+  return <View style={playerStyles.progressArea}>
+    <MusicSlider value={preview ?? timeline.progress} onChange={commit} onPreview={onPreview} enabled={timeline.duration > 0} color="rgba(255,255,255,0.86)" track="rgba(255,255,255,0.22)" label="Posizione del brano" height={4} />
+    <View style={playerStyles.timeRow}>
+      <Text style={playerStyles.timeText}>{clock(position)}</Text>
+      <Text style={playerStyles.timeText}>−{clock(Math.max(0, timeline.duration - position))}</Text>
     </View>
-  );
+  </View>;
+});
+
+function FallbackVolume({ player }: { player: AudioPlayer }) {
+  const [volume, setVolume] = useState(player.volume);
+  const change = useCallback((value: number) => { player.volume = value; setVolume(value); }, [player]);
+  return <MusicSlider value={volume} onChange={change} live color="rgba(255,255,255,0.82)" track="rgba(255,255,255,0.22)" label="Volume del player" height={5} />;
+}
+
+function PlayerLyrics({ player, song, lyrics, message, source }: { player: AudioPlayer; song: Song; lyrics: Lyrics | null; message: string; source: string }) {
+  const status = useVisiblePlaybackStatus(player, true);
+  const { reduceMotion } = useMotionPreferences();
+  const scroll = useRef<ScrollView>(null);
+  const positions = useRef<Record<number, number>>({});
+  let active = -1;
+  if (lyrics?.synced) lyrics.line.forEach((line, index) => { if (line.start !== undefined && line.start <= status.currentTime * 1000 + (lyrics.offset ?? 0)) active = index; });
+  useEffect(() => { if (active >= 0) scroll.current?.scrollTo({ y: Math.max(0, (positions.current[active] ?? 0) - 100), animated: !reduceMotion }); }, [active, reduceMotion]);
+  if (!lyrics) return <Text style={playerStyles.lyricsEmpty}>{message}</Text>;
+  return <ScrollView ref={scroll} showsVerticalScrollIndicator={false} contentContainerStyle={playerStyles.lyricsContent}>
+    <Text style={playerStyles.lyricsSource}>{source}</Text>
+    {lyrics.line.map((line, index) => <Pressable key={index} disabled={!lyrics.synced || line.start === undefined}
+      onLayout={event => { positions.current[index] = event.nativeEvent.layout.y; }}
+      onPress={() => { void seekPlayback(player, Math.max(0, ((line.start ?? 0) - (lyrics.offset ?? 0)) / 1000), song.duration).catch(() => Alert.alert('Riproduzione', 'Impossibile spostarsi nel brano.')); }}>
+      <Text style={[playerStyles.lyricLine, { opacity: !lyrics.synced || active === index ? 1 : 0.3 }]}>{line.value || '♪'}</Text>
+    </Pressable>)}
+  </ScrollView>;
 }
 
 import Pressable from './SpringPressable';

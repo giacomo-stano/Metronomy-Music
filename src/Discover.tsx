@@ -1,20 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Text, View } from 'react-native';
 import Pressable from './SpringPressable';
 import { request, coverURL, currentAccount, isConnectivityFailure, type Album } from './api';
 import { useTheme } from './theme';
 import { recentAlbums } from './listeningHistory';
+import { ScreenCache } from './ScreenCache';
 
-export default function Discover({ scope, onAlbum, onQuery }: { scope: 'qobuz' | 'library'; onAlbum: (album: Album) => void; onQuery: (query: string) => void }) {
+export default function Discover({ active: visible, revisionKey, scope, onAlbum, onQuery }: { active: boolean; revisionKey: string; scope: 'qobuz' | 'library'; onAlbum: (album: Album) => void; onQuery: (query: string) => void }) {
   const { colors: c } = useTheme();
   const [items, setItems] = useState<(Album & { cover?: string })[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
+  const cache = useRef(new ScreenCache<(Album & { cover?: string })[]>(2)).current;
   useEffect(() => {
-    let active = true; setBusy(true); setItems([]); setError('');
+    if (!visible) return;
+    cache.useScope(revisionKey + ':' + revision);
+    const cached = cache.peek(scope);
+    if (cached) { setItems(cached); setBusy(false); setError(''); return; }
+    let active = true; setBusy(true); setError('');
     (async () => {
       try {
+        const result = await cache.get(scope, async () => {
         let result = scope === 'library'
           ? (await request<{ albums: Album[] }>('library/recent')).albums
           : (await request<{ items: { id: string; title: string; artist: string; cover?: string }[] }>('network/discover', 35000)).items.map(i => ({ ...i, name: i.title }));
@@ -23,12 +30,14 @@ export default function Discover({ scope, onAlbum, onQuery }: { scope: 'qobuz' |
           const own = currentAccount()?.offline ? history.filter(a => result.some(b => b.id === a.id)) : history;
           result = [...own, ...result.filter(a => !own.some(b => b.id === a.id))].slice(0, 24);
         }
+        return result;
+        });
         if (active) setItems(result);
       } catch (e) { if (active) setError(isConnectivityFailure(e) ? '' : e instanceof Error ? e.message : 'Non disponibile'); }
       finally { if (active) setBusy(false); }
     })();
     return () => { active = false; };
-  }, [scope, revision]);
+  }, [scope, revision, revisionKey, visible, cache]);
   return <View><View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}><Text style={{ color: c.text, fontSize: 25, fontWeight: '700', flex: 1 }}>{scope === 'qobuz' ? 'Da scoprire' : 'Ascoltati di recente'}</Text><Pressable accessibilityLabel="Aggiorna suggerimenti" onPress={() => setRevision(v => v + 1)}><Text style={{ color: c.accent }}>Aggiorna</Text></Pressable></View>
     {scope === 'qobuz' && <Text style={{ color: c.secondary, marginBottom: 18 }}>Una selezione dai bestseller Qobuz</Text>}
     {busy ? <ActivityIndicator color={c.accent} /> : error ? <Text style={{ color: c.secondary }}>{error}</Text> : !items.length ? <Text style={{ color: c.secondary }}>Nessun ascolto registrato da Navidrome per questo account.</Text> : <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 22 }}>{items.map(item => <Pressable key={item.id} style={{ width: '46%' }} onPress={() => scope === 'library' ? onAlbum(item) : onQuery(item.name)} accessibilityLabel={item.name + ', ' + item.artist}>

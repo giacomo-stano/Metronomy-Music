@@ -75,6 +75,6 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
   assert(!sheet.includes('catalogDuration || playerDuration'));
   assert(!sheet.includes('.seekTo(') && !app.includes('.seekTo('), 'app seek entry points use one queue');
   assert(app.indexOf('await invalidatePlaybackSeeks(player)') < app.indexOf('player.replace(source)'));
-  assert(sheet.includes('value={progress}'));
+  // Slider gestures and the preview fraction are exercised by ui-performance.cjs.
   console.log('Playback timeline: native/catalog durations, invalid values, counters, forward/back/end seeks, serialization, coalescing, track replacement and error recovery passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

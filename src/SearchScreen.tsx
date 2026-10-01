@@ -3,21 +3,23 @@ import { ActivityIndicator, Alert, Image, Keyboard, ScrollView, StyleSheet, Text
 import Pressable from './SpringPressable';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useAudioPlayer } from 'expo-audio';
 import { coverURL, request, accountStorageKey, currentAccount, isConnectivityFailure, type Album, type SearchResponse, type Song } from './api';
 import { useTheme } from './theme';
 import GlassBackground from './GlassBackground';
 import Discover from './Discover';
 import { DownloadBadge } from './OfflineDownloads';
+import { ScreenCache } from './ScreenCache';
+import { usePlaybackSignals } from './usePlaybackSignals';
 
 type Item = { id: string; kind: 'track' | 'album'; title: string; artist: string; album: string; cover?: string; available: boolean; libraryMatch?: string };
 type Job = { id: string; target: string; title: string; status: string; message: string };
 type Catalog = { items: Item[]; hasMore: boolean; libraryChecked: boolean };
-type Props = { onSettings: () => void; onPlay: (song: Song) => void; onAlbum: (album: Album) => void; onAlbumActions: (album: Album) => void; beforePreview: () => void; localPlaying: boolean; initialQuery: string; onActions: (song: Song) => void; onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void };
+type Props = { active: boolean; revision: number; offline: boolean; onSettings: () => void; onPlay: (song: Song) => void; onAlbum: (album: Album) => void; onAlbumActions: (album: Album) => void; beforePreview: () => void; localPlaying: boolean; initialQuery: string; onActions: (song: Song) => void; onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void };
 const label: Record<string, string> = { queued: 'In coda', downloading: 'Download in corso', completed: 'Già scaricato', failed: 'Non completato' };
 const msg = (e: unknown) => isConnectivityFailure(e) ? 'Connessione non disponibile.' : e instanceof Error ? e.message : 'Connessione non riuscita';
 
-export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActions, beforePreview, localPlaying, initialQuery, onActions, onScroll }: Props) {
+export default function SearchScreen({ active: isActive, revision, offline, onSettings, onPlay, onAlbum, onAlbumActions, beforePreview, localPlaying, initialQuery, onActions, onScroll }: Props) {
   const { colors: c } = useTheme();
   const [query, setQuery] = useState(initialQuery);
   const [searchStorageKey] = useState(() => accountStorageKey('searches'));
@@ -40,7 +42,8 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   const [previewId, setPreviewId] = useState('');
   const [previewBusy, setPreviewBusy] = useState('');
   const preview = useAudioPlayer(null, { updateInterval: 250 });
-  const previewStatus = useAudioPlayerStatus(preview);
+  const previewStatus = usePlaybackSignals(preview);
+  const cache = useRef(new ScreenCache<SearchResponse | Catalog>()).current;
   const generation = useRef(0);
   const previewGeneration = useRef(0);
   const recentTouched = useRef(false);
@@ -59,28 +62,42 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
     stopPreview(); beforePreview(); setDictationHelp(true); input.current?.focus();
   }
   useEffect(() => { if (localPlaying) stopPreview(); }, [localPlaying]);
-  useEffect(() => { if (previewStatus.currentTime >= 30 || previewStatus.didJustFinish) { preview.pause(); setPreviewId(''); } }, [previewStatus.currentTime, previewStatus.didJustFinish]);
+  useEffect(() => { if (previewStatus.didJustFinish) stopPreview(); }, [previewStatus.didJustFinish]);
+  useEffect(() => { if (!previewId) return; const timer = setTimeout(stopPreview, 30000); return () => clearTimeout(timer); }, [previewId]);
+  useEffect(() => { if (!isActive) { stopPreview(); input.current?.blur(); setFocused(false); } }, [isActive]);
+  useEffect(() => { setQuery(initialQuery); if (initialQuery) setScope('library'); }, [initialQuery]);
+  useEffect(() => { if (offline) setScope('library'); }, [offline]);
   useEffect(() => {
+    if (!isActive || offline || scope !== 'qobuz') return;
     let active = true; let timer: ReturnType<typeof setTimeout>;
-    async function poll() { try { const data = await request<{ jobs: Job[] }>('network/downloads'); if (active) { setJobs(data.jobs); setJobError(''); } } catch (e) { if (active) setJobError(isConnectivityFailure(e) ? '' : msg(e)); } if (active) timer = setTimeout(poll, 5000); }
+    async function poll() { try { const data = await request<{ jobs: Job[] }>('network/downloads'); if (active) { setJobs(old => JSON.stringify(old) === JSON.stringify(data.jobs) ? old : data.jobs); setJobError(''); } } catch (e) { if (active) setJobError(isConnectivityFailure(e) ? '' : msg(e)); } if (active) timer = setTimeout(poll, 5000); }
     void poll(); return () => { active = false; clearTimeout(timer); };
-  }, []);
+  }, [isActive, offline, scope]);
   useEffect(() => {
+    if (!isActive) return;
+    cache.useScope(String(offline) + ':' + revision + ':' + reload);
+    const key = scope + ':' + kind + ':' + query.trim();
+    const cached = cache.peek(key);
+    if (cached) {
+      if (scope === 'library') { setLocal(cached as SearchResponse); setCatalog(null); }
+      else { setCatalog(cached as Catalog); setLocal(null); }
+      setBusy(false); setError(''); return;
+    }
     const version = ++generation.current;
     stopPreview(); setCatalog(null); setLocal(null); setError(''); setBusy(!!query.trim());
     const timer = setTimeout(async () => {
       if (!query.trim()) return;
       try {
-        if (scope === 'library') { const data = await request<SearchResponse>('search?q=' + encodeURIComponent(query.trim())); if (version === generation.current) setLocal(data); }
-        else { const data = await request<Catalog>(`network/search?q=${encodeURIComponent(query.trim())}&kind=${kind}`, 100000); if (version === generation.current) setCatalog(data); }
+        if (scope === 'library') { const data = await cache.get(key, () => request<SearchResponse>('search?q=' + encodeURIComponent(query.trim()))) as SearchResponse; if (version === generation.current) setLocal(data); }
+        else { const data = await cache.get(key, () => request<Catalog>(`network/search?q=${encodeURIComponent(query.trim())}&kind=${kind}`, 100000)) as Catalog; if (version === generation.current) setCatalog(data); }
       } catch (e) { if (version === generation.current) setError(isConnectivityFailure(e) ? '' : msg(e)); }
       finally { if (version === generation.current) setBusy(false); }
     }, 400);
     return () => { clearTimeout(timer); generation.current++; previewGeneration.current++; };
-  }, [query, scope, kind, reload]);
+  }, [query, scope, kind, reload, revision, offline, isActive, cache]);
   async function more() {
     const version = generation.current; setBusy(true);
-    try { const data = await request<Catalog>(`network/search?q=${encodeURIComponent(query.trim())}&kind=${kind}&offset=${catalog?.items.length ?? 0}`, 100000); if (version === generation.current) setCatalog(old => ({ ...data, items: [...(old?.items ?? []), ...data.items], libraryChecked: !!old?.libraryChecked && data.libraryChecked })); }
+    try { const data = await request<Catalog>(`network/search?q=${encodeURIComponent(query.trim())}&kind=${kind}&offset=${catalog?.items.length ?? 0}`, 100000); if (version === generation.current) setCatalog(old => { const next = { ...data, items: [...(old?.items ?? []), ...data.items], libraryChecked: !!old?.libraryChecked && data.libraryChecked }; cache.set(scope + ':' + kind + ':' + query.trim(), next); return next; }); }
     catch (e) { if (version === generation.current) setError(isConnectivityFailure(e) ? '' : msg(e)); }
     finally { if (version === generation.current) setBusy(false); }
   }
@@ -123,7 +140,7 @@ export default function SearchScreen({ onSettings, onPlay, onAlbum, onAlbumActio
   </View><ScrollView onScroll={onScroll} scrollEventThrottle={32} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, paddingBottom: 200 }}>
     {scope === 'qobuz' && !!query.trim() && <View style={{ paddingBottom: 16 }}><Text style={sub}>Scarica nella libreria: {targets.length === 1 ? targets[0].label : 'scegli la destinazione'}</Text>{targets.length > 1 && <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>{targets.map(target => <Pressable key={target.id} accessibilityRole="radio" accessibilityState={{ checked: destination === target.id }} onPress={() => setDestination(target.id)} style={{ borderRadius: 18, padding: 12, backgroundColor: c.surface }}><Text style={{ color: destination === target.id ? c.accent : c.secondary }}>{destination === target.id ? '✓ ' : ''}{target.label}</Text></Pressable>)}</View>}</View>}
     {!query.trim() && focused && <><View style={row}><Text style={{ ...text, flex: 1, fontWeight: '700', fontSize: 22 }}>Ricerche recenti</Text><Pressable onPress={() => saveRecent([])} accessibilityLabel="Cancella ricerche recenti"><Text style={{ color: c.accent }}>Cancella</Text></Pressable></View>{recent.map(value => <Pressable key={value} onPress={() => setQuery(value)} style={row}><Ionicons name="time-outline" size={23} color={c.secondary} /><Text style={{ ...text, flex: 1 }}>{value}</Text><Ionicons name="chevron-forward" color={c.secondary} size={18} /></Pressable>)}{!recent.length && <Text style={sub}>Le ricerche selezionate o confermate appariranno qui.</Text>}</>}
-    {!query.trim() && !focused && <Discover scope={scope} onAlbum={onAlbum} onQuery={value => { setKind('album'); setQuery(value); }} />}
+    <View style={{ display: !query.trim() && !focused ? 'flex' : 'none' }}><Discover active={isActive && !query.trim() && !focused} revisionKey={String(offline) + ':' + revision} scope={scope} onAlbum={onAlbum} onQuery={value => { setKind('album'); setQuery(value); }} /></View>
     {scope === 'qobuz' && !!query.trim() && <View style={{ flexDirection: 'row', gap: 12, marginBottom: 10 }}>{(['track', 'album'] as const).map(value => <Pressable key={value} onPress={() => setKind(value)} style={{ padding: 10, borderRadius: 18, backgroundColor: kind === value ? c.surface : 'transparent' }}><Text style={{ color: kind === value ? c.accent : c.secondary }}>{value === 'track' ? 'Brani' : 'Album'}</Text></Pressable>)}</View>}
     {!!error && <Pressable onPress={() => setReload(v => v + 1)}><Text style={{ color: c.accent }}>{error} · Riprova</Text></Pressable>}
     {catalog && !catalog.libraryChecked && <Text style={{ color: c.accent }}>Verifica libreria non disponibile: download temporaneamente bloccati.</Text>}

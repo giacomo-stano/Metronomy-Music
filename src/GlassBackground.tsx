@@ -1,18 +1,12 @@
-import { useEffect, useState } from 'react';
-import { AccessibilityInfo, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { useTheme } from './theme';
+import { useMotionPreferences } from './motionPreferences';
 
 export default function GlassBackground() {
   const { colors: c, isDark } = useTheme();
-  const [opaque, setOpaque] = useState(true);
-  useEffect(() => {
-    let active = true;
-    AccessibilityInfo.isReduceTransparencyEnabled().then(v => { if (active) setOpaque(v); }).catch(() => {});
-    const event = AccessibilityInfo.addEventListener('reduceTransparencyChanged', setOpaque);
-    return () => { active = false; event.remove(); };
-  }, []);
+  const { reduceTransparency: opaque } = useMotionPreferences();
   if (opaque) return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: c.surface }]} />;
   let native = false;
   try { native = isGlassEffectAPIAvailable() && isLiquidGlassAvailable(); } catch {}

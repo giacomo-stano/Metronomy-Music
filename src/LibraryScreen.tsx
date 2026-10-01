@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -6,7 +6,6 @@ import {
   Easing,
   FlatList,
   Image,
-  Pressable as RNPressable,
   ScrollView,
   SafeAreaView,
   StyleSheet,
@@ -24,6 +23,7 @@ import { useTheme } from './theme';
 import { DownloadBadge, useOffline } from './OfflineDownloads';
 import { preloadAlbumSongs } from './albumPrefetch';
 import NowPlayingWaves from './NowPlayingWaves';
+import { ScreenCache } from './ScreenCache';
 
 type Page = {
   title: string;
@@ -55,6 +55,7 @@ type AlbumOpenOrigin = {
 };
 
 type Props = {
+  active: boolean;
   onSettings: () => void;
   onPlay: (songs: Song[], index: number) => void;
   onAlbum: (album: Album, origin?: AlbumOpenOrigin) => void;
@@ -91,6 +92,7 @@ export default function LibraryScreen(p: Props) {
   const { colors: c, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const albumArtworkRefs = useRef<Record<string, any>>({});
+  const scrollOffsets = useRef<Record<string, number>>({});
 
   function measureAlbumOrigin(
     album: Album,
@@ -142,7 +144,13 @@ export default function LibraryScreen(p: Props) {
     [page.type]
   );
 
-  const [data, setData] = useState<Data>({});
+  const cache = useRef(new ScreenCache<Data>()).current;
+  const [data, setDataState] = useState<Data>({});
+  const setData = (value: Data | ((previous: Data) => Data)) => setDataState(previous => {
+    const next = typeof value === 'function' ? value(previous) : value;
+    cache.set(page.endpoint, next);
+    return next;
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -159,7 +167,10 @@ export default function LibraryScreen(p: Props) {
   const artistClosing = useRef(false);
 
   const generation = useRef(0);
+  const artistGeneration = useRef(0);
+  useEffect(() => () => { artistGeneration.current++; }, []);
   const loadingMore = useRef(false);
+  const displayedPage = useRef('');
 
   const push = (next: Page) => setStack(old => [...old, next]);
 
@@ -173,7 +184,14 @@ export default function LibraryScreen(p: Props) {
   useEffect(() => {
     const version = ++generation.current;
 
-    setData({});
+    if (!p.active) return;
+    const pageKey = page.type + ':' + page.endpoint;
+    const samePage = displayedPage.current === pageKey;
+    displayedPage.current = pageKey;
+    cache.useScope(String(p.revision) + ':' + retry);
+    const cached = cache.peek(page.endpoint);
+    if (cached) { setDataState(cached); setBusy(false); setError(''); return; }
+    if (!samePage) setDataState({});
     setBusy(true);
     setError('');
     loadingMore.current = false;
@@ -182,7 +200,7 @@ export default function LibraryScreen(p: Props) {
 
     const load = async () => {
       try {
-        const result = await request<Data>(page.endpoint, 60000);
+        const result = await cache.get(page.endpoint, () => request<Data>(page.endpoint, 60000));
 
         if (version !== generation.current) return;
 
@@ -214,11 +232,11 @@ export default function LibraryScreen(p: Props) {
     return () => {
       generation.current++;
     };
-  }, [page, retry, p.revision]);
+  }, [page, retry, p.revision, p.active, cache]);
 
-  const albums = data.albums ?? [];
-  const songs = page.type === 'downloads' ? Object.values(offline.tracks).sort((a, b) => b.savedAt - a.savedAt).map(t => t.song) : data.songs ?? [];
-  const entries = data.artists ?? data.playlists ?? [];
+  const albums = useMemo(() => data.albums ?? [], [data.albums]);
+  const songs = useMemo(() => page.type === 'downloads' ? Object.values(offline.tracks).sort((a, b) => b.savedAt - a.savedAt).map(t => t.song) : data.songs ?? [], [page.type, offline, offlineRevision, data.songs]);
+  const entries = useMemo(() => data.artists ?? data.playlists ?? [], [data.artists, data.playlists]);
   const grid = page.type === 'home' || page.type === 'albums';
   const songPage =
     page.type === 'songs' ||
@@ -230,7 +248,7 @@ export default function LibraryScreen(p: Props) {
     page.type === 'artists' ||
     page.type === 'playlists';
 
-  const visibleSongs = songPage
+  const visibleSongs = useMemo(() => songPage
     ? (() => {
         const ordered = [...songs];
 
@@ -253,9 +271,9 @@ export default function LibraryScreen(p: Props) {
 
         return dateOrder === 'oldest' ? ordered.reverse() : ordered;
       })()
-    : songs;
+    : songs, [songPage, songs, sortMode, dateOrder]);
 
-  const visibleAlbums = page.type === 'albums'
+  const visibleAlbums = useMemo(() => page.type === 'albums'
     ? [...albums].sort((a, b) => {
         if (sortMode === 'title') {
           return a.name.localeCompare(b.name, 'it', { sensitivity: 'base' });
@@ -275,9 +293,9 @@ export default function LibraryScreen(p: Props) {
 
         return 0;
       })
-    : albums;
+    : albums, [page.type, albums, sortMode]);
 
-  const visibleEntries = collectionPage && page.type !== 'albums'
+  const visibleEntries = useMemo(() => collectionPage && page.type !== 'albums'
     ? [...entries].sort((a, b) => {
         if (sortMode === 'title' || sortMode === 'artist') {
           return a.name.localeCompare(b.name, 'it', { sensitivity: 'base' });
@@ -285,7 +303,7 @@ export default function LibraryScreen(p: Props) {
 
         return 0;
       })
-    : entries;
+    : entries, [collectionPage, page.type, entries, sortMode]);
 
   function playAll() {
     if (visibleSongs.length) p.onPlay(visibleSongs, 0);
@@ -322,19 +340,19 @@ export default function LibraryScreen(p: Props) {
       }).start();
     });
 
-    const version = ++generation.current;
+    const version = ++artistGeneration.current;
 
-    void request<Data>(
-      'library/artists/' + encodeURIComponent(entry.id),
-      60000
-    )
+    const endpoint = 'library/artists/' + encodeURIComponent(entry.id);
+    const cached = cache.peek(endpoint);
+    if (cached) { setArtistData(cached); setArtistBusy(false); return; }
+    void cache.get(endpoint, () => request<Data>(endpoint, 60000))
       .then(result => {
-        if (version === generation.current) {
+        if (version === artistGeneration.current) {
           setArtistData(result);
         }
       })
       .catch(e => {
-        if (version === generation.current) {
+        if (version === artistGeneration.current) {
           setArtistError(
             isConnectivityFailure(e)
               ? ''
@@ -345,7 +363,7 @@ export default function LibraryScreen(p: Props) {
         }
       })
       .finally(() => {
-        if (version === generation.current) {
+        if (version === artistGeneration.current) {
           setArtistBusy(false);
         }
       });
@@ -367,7 +385,7 @@ export default function LibraryScreen(p: Props) {
         return;
       }
 
-      generation.current++;
+      artistGeneration.current++;
       setArtistDetail(null);
       setArtistData({});
       setArtistError('');
@@ -1140,11 +1158,18 @@ export default function LibraryScreen(p: Props) {
         paddingTop: 6,
         paddingBottom: 200,
       }}
-      onScroll={p.onScroll}
+      contentOffset={{ x: 0, y: scrollOffsets.current[page.endpoint] ?? 0 }}
+      onScroll={event => { scrollOffsets.current[page.endpoint] = event.nativeEvent.contentOffset.y; p.onScroll(event); }}
       scrollEventThrottle={32}
+      refreshing={busy && Object.keys(data).length > 0}
+      onRefresh={() => setRetry(value => value + 1)}
       onViewableItemsChanged={prefetchVisibleAlbums}
       viewabilityConfig={albumViewabilityConfig}
-      keyExtractor={(item, index) => item.id + ':' + index}
+      keyExtractor={item => item.id}
+      initialNumToRender={10}
+      maxToRenderPerBatch={8}
+      windowSize={7}
+      updateCellsBatchingPeriod={40}
       ListHeaderComponent={header}
       ListEmptyComponent={
         !busy && !error ? (
@@ -1205,13 +1230,13 @@ export default function LibraryScreen(p: Props) {
                 }}
                 collapsable={false}
               >
-                <RNPressable
+                <Pressable
                   onPressIn={() => { void preloadAlbumSongs(album.id).catch(() => {}); }}
                   onPress={() => openMeasuredAlbum(album)}
                   accessibilityLabel={'Apri ' + album.name}
                 >
                   {art(album.coverArt, albumSize)}
-                </RNPressable>
+                </Pressable>
               </View>
 
               <View
@@ -1221,7 +1246,7 @@ export default function LibraryScreen(p: Props) {
                   marginTop: 6,
                 }}
               >
-                <RNPressable
+                <Pressable
                   onPressIn={() => { void preloadAlbumSongs(album.id).catch(() => {}); }}
                   onPress={() => openMeasuredAlbum(album)}
                   style={{ flex: 1, minWidth: 0 }}
@@ -1250,7 +1275,7 @@ export default function LibraryScreen(p: Props) {
                   >
                     {album.artist}
                   </Text>
-                </RNPressable>
+                </Pressable>
 
                 <Pressable
                   accessibilityRole="button"
@@ -1717,7 +1742,7 @@ export default function LibraryScreen(p: Props) {
                             }}
                             collapsable={false}
                           >
-                            <RNPressable
+                            <Pressable
                               accessibilityRole="button"
                               accessibilityLabel={'Apri album ' + album.name}
                               onPress={() => {
@@ -1760,7 +1785,7 @@ export default function LibraryScreen(p: Props) {
                                   />
                                 </View>
                               )}
-                            </RNPressable>
+                            </Pressable>
                           </View>
 
                           <Text

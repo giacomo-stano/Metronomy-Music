@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  AccessibilityInfo,
   Animated,
   Easing,
   type PressableProps,
@@ -9,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SymbolView } from 'expo-symbols';
 
 import Pressable from './SpringPressable';
+import { useMotionPreferences } from './motionPreferences';
 
 type Props = {
   playing: boolean;
@@ -29,6 +29,7 @@ export default function ElasticPlayPauseButton({
   size,
   variant = 'symbol',
 }: Props) {
+  const { reduceMotion } = useMotionPreferences();
   const [displayPlaying, setDisplayPlaying] = useState(playing);
 
   const scaleX = useRef(new Animated.Value(1)).current;
@@ -51,34 +52,14 @@ export default function ElasticPlayPauseButton({
   }, [playing]);
 
   useEffect(() => {
-    let alive = true;
-
-    AccessibilityInfo.isReduceMotionEnabled().then(value => {
-      if (alive) reducedMotion.current = value;
-    });
-
-    const subscription = AccessibilityInfo.addEventListener(
-      'reduceMotionChanged',
-      value => {
-        reducedMotion.current = value;
-
-        if (value) {
-          animationToken.current++;
-          scaleX.stopAnimation();
-          scaleY.stopAnimation();
-          opacity.stopAnimation();
-          scaleX.setValue(1);
-          scaleY.setValue(1);
-          opacity.setValue(1);
-          setDisplayPlaying(playingRef.current);
-        }
-      }
-    );
-
+    reducedMotion.current = reduceMotion;
+    if (reduceMotion) {
+      animationToken.current++;
+      scaleX.stopAnimation(); scaleY.stopAnimation(); opacity.stopAnimation();
+      scaleX.setValue(1); scaleY.setValue(1); opacity.setValue(1);
+      setDisplayPlaying(playingRef.current);
+    }
     return () => {
-      alive = false;
-      subscription.remove();
-
       if (syncTimer.current) {
         clearTimeout(syncTimer.current);
         syncTimer.current = null;
@@ -88,7 +69,7 @@ export default function ElasticPlayPauseButton({
       scaleY.stopAnimation();
       opacity.stopAnimation();
     };
-  }, [opacity, scaleX, scaleY]);
+  }, [reduceMotion, opacity, scaleX, scaleY]);
 
   function animateTo(targetPlaying: boolean, immediateFromPress: boolean) {
     const token = ++animationToken.current;
@@ -110,29 +91,22 @@ export default function ElasticPlayPauseButton({
       return;
     }
 
-    /*
-     * Reference-video motion:
-     * 1. the current glyph collapses almost into a dot;
-     * 2. it is swapped at the smallest point;
-     * 3. the new glyph grows past its final size and springs back.
-     *
-     * scaleX collapses more than scaleY to create the elastic/squashed feel.
-     */
+    // A short glyph crossfade with a restrained spring avoids a rubbery bounce.
     Animated.parallel([
       Animated.timing(scaleX, {
-        toValue: 0.10,
+        toValue: 0.84,
         duration: immediateFromPress ? 82 : 74,
         easing: Easing.in(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(scaleY, {
-        toValue: 0.42,
+        toValue: 0.84,
         duration: immediateFromPress ? 82 : 74,
         easing: Easing.in(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(opacity, {
-        toValue: 0.72,
+        toValue: 0.5,
         duration: immediateFromPress ? 82 : 74,
         easing: Easing.in(Easing.quad),
         useNativeDriver: true,
@@ -143,15 +117,15 @@ export default function ElasticPlayPauseButton({
       setDisplayPlaying(targetPlaying);
 
       // Start the new symbol from a compressed shape.
-      scaleX.setValue(0.16);
-      scaleY.setValue(0.48);
+      scaleX.setValue(0.84);
+      scaleY.setValue(0.84);
       opacity.setValue(0.82);
 
       Animated.parallel([
         Animated.spring(scaleX, {
           toValue: 1,
           stiffness: 520,
-          damping: 13,
+          damping: 25,
           mass: 0.46,
           overshootClamping: false,
           restDisplacementThreshold: 0.001,
@@ -161,7 +135,7 @@ export default function ElasticPlayPauseButton({
         Animated.spring(scaleY, {
           toValue: 1,
           stiffness: 420,
-          damping: 14,
+          damping: 25,
           mass: 0.50,
           overshootClamping: false,
           restDisplacementThreshold: 0.001,
