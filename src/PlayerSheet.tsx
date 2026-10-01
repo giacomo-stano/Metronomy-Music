@@ -16,6 +16,7 @@ import { SymbolView, type SFSymbol } from 'expo-symbols';
 import type { AudioPlayer } from 'expo-audio';
 import { coverURL, streamURL, request, type Song, type Lyrics } from './api';
 import { useVisiblePlaybackStatus } from './usePlaybackSignals';
+import { playbackTimeline, seekPlayback, invalidatePlaybackSeeks } from './playbackTimeline';
 import { useTheme } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
 import ElasticPlayPauseButton from './ElasticPlayPauseButton';
@@ -476,18 +477,8 @@ export default function PlayerSheet(p: Props) {
   let active = -1;
   if (p.lyrics?.synced) p.lyrics.line.forEach((line, index) => { if (line.start !== undefined && line.start <= status.currentTime * 1000 + (p.lyrics?.offset ?? 0)) active = index; });
   useEffect(() => { if (autoScroll && mode === 'lyrics' && active >= 0) scroll.current?.scrollTo({ y: Math.max(0, (positions.current[active] ?? 0) - 100), animated: true }); }, [active, mode, autoScroll]);
-  // Navidrome's catalog duration describes the actual track. For remote streams,
-  // the native player can temporarily report a different container/stream duration.
-  const catalogDuration = Number.isFinite(p.song.duration) && p.song.duration > 0
-    ? p.song.duration
-    : 0;
-  const playerDuration = Number.isFinite(status.duration) && status.duration > 0
-    ? status.duration
-    : 0;
-  const duration = catalogDuration || playerDuration;
-  const currentTime = Math.max(0, status.currentTime || 0);
-  const remainingTime = Math.max(0, duration - currentTime);
-  const seek = (value: number) => { void p.player.seekTo(Math.min(duration, Math.max(0, value))).catch(() => Alert.alert('Riproduzione', 'Impossibile spostarsi nel brano.')); };
+  const { duration, position: currentTime, remaining: remainingTime, progress } = playbackTimeline(status, p.song.duration);
+  const seek = (value: number) => { void seekPlayback(p.player, value, p.song.duration).catch(() => Alert.alert('Riproduzione', 'Impossibile spostarsi nel brano.')); };
   const openMenu = () => {
     setPlaylists(null);
     setMenu(true);
@@ -656,6 +647,8 @@ export default function PlayerSheet(p: Props) {
        * quando replace() riceve direttamente una stringa, anche se il tipo
        * TypeScript la ammette.
        */
+      await invalidatePlaybackSeeks(p.player);
+      if (activeSong.current !== previous.songId) return;
       p.player.replace({ uri: remoteSource });
 
       /*
@@ -668,12 +661,13 @@ export default function PlayerSheet(p: Props) {
 
       if (previous.position > 0) {
         try {
-          await p.player.seekTo(previous.position);
+          await seekPlayback(p.player, previous.position, p.song.duration);
         } catch {
           // Se non è ancora seekable, lasciamo il brano dall'inizio.
         }
       }
 
+      if (activeSong.current !== previous.songId) return;
       if (previous.wasPlaying) {
         p.player.play();
       }
@@ -1318,7 +1312,7 @@ export default function PlayerSheet(p: Props) {
                 >
                   <View style={playerStyles.progressArea}>
                     <Range
-                      value={Math.min(1, currentTime / (duration || 1))}
+                      value={progress}
                       onChange={v => seek(v * duration)}
                       color="rgba(255,255,255,0.82)"
                       track="rgba(255,255,255,0.25)"

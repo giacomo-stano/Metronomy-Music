@@ -25,6 +25,9 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
+      - name: Playback timeline regression tests
+        run: node tests/playback-timeline.cjs
+
       - name: Generate iOS project
         env:
           CI: "1"

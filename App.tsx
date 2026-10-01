@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
+import { seekPlayback, invalidatePlaybackSeeks } from './src/playbackTimeline';
 import { ActivityIndicator, Alert, Animated, Easing, Image, PanResponder, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { coverURL, streamURL, request, type Album, type HomeResponse, type Song, type SearchResponse, type Lyrics } from './src/api';
 import SearchScreen from './src/SearchScreen';
@@ -565,7 +566,7 @@ function MusicApp({
   useEffect(() => {
     audioReady.current = setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix' });
     void audioReady.current.catch(() => Alert.alert('Audio', 'Impossibile configurare la sessione audio.'));
-    return () => { audioGeneration.current++; };
+    return () => { audioGeneration.current++; void invalidatePlaybackSeeks(player); };
   }, []);
 
   useEffect(() => {
@@ -805,6 +806,8 @@ function MusicApp({
         );
       }
 
+      await invalidatePlaybackSeeks(player);
+      if (version !== audioGeneration.current) return;
       player.replace(source);
       player.play();
 
@@ -843,10 +846,10 @@ function MusicApp({
       );
     }
   }
-  const seek = (seconds: number) => { void player.seekTo(Math.max(0, seconds)).catch(() => Alert.alert('Riproduzione', 'Impossibile spostarsi in questo brano.')); };
+  const seek = (seconds: number) => { void seekPlayback(player, seconds, current?.duration).catch(() => Alert.alert('Riproduzione', 'Impossibile spostarsi in questo brano.')); };
   const toggle = () => {
     if (status.playing) player.pause();
-    else if (status.didJustFinish) { void player.seekTo(0).then(() => player.play()).catch(() => Alert.alert('Audio', 'Impossibile riavviare il brano.')); }
+    else if (status.didJustFinish) { void seekPlayback(player, 0).then(applied => { if (applied) player.play(); }).catch(() => Alert.alert('Audio', 'Impossibile riavviare il brano.')); }
     else player.play();
   };
   useEffect(() => { player.loop = repeat === 'one'; }, [repeat, player]);
