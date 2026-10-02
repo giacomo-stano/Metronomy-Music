@@ -21,6 +21,8 @@ import { useMotionPreferences } from './motionPreferences';
 import { playbackTimeline, seekPlayback, invalidatePlaybackSeeks } from './playbackTimeline';
 import { useTheme } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
+import NetworkActions from './NetworkActions';
+import { songCatalogItem } from './networkCatalog';
 import ElasticPlayPauseButton from './ElasticPlayPauseButton';
 import { AirPlayButton, SystemVolumeSlider, nativeAirPlayAvailable, nativeSystemVolumeAvailable } from '../modules/metronomy-audio-controls';
 
@@ -341,6 +343,7 @@ export default function PlayerSheet(p: Props) {
   const [queueMounted, setQueueMounted] = useState(false);
   const queueUnmountTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [menu, setMenu] = useState(false);
+  const [networkMenu, setNetworkMenu] = useState(false);
   const menuProgress = useRef(new Animated.Value(0)).current;
   const queueProgress = useRef(new Animated.Value(0)).current;
   const openProgress = useSharedValue(0);
@@ -390,7 +393,7 @@ export default function PlayerSheet(p: Props) {
     };
   }, []);
   useEffect(() => { setStarred(!!p.song.starred); }, [p.song.id, p.song.starred]);
-  useEffect(() => { setMenu(false); setPlaylists(null); menuProgress.setValue(0); }, [p.song.id]);
+  useEffect(() => { setMenu(false); setNetworkMenu(false); setPlaylists(null); menuProgress.setValue(0); }, [p.song.id]);
   useEffect(() => {
     if (p.visible) {
       closingPlayer.current = false;
@@ -478,6 +481,7 @@ export default function PlayerSheet(p: Props) {
   }, [menu, menuProgress]);
 
   const openMenu = () => {
+    if (p.song.qobuzId) { setNetworkMenu(true); return; }
     setPlaylists(null);
     setMenu(true);
   };
@@ -680,6 +684,7 @@ export default function PlayerSheet(p: Props) {
   }
 
   async function favorite() {
+    if (p.song.qobuzId) { Alert.alert('Preferiti', 'Scarica prima il brano sul server per aggiungerlo ai preferiti della tua libreria.'); return; }
     const songId = p.song.id; setFavoriteBusy(true);
     try { const result = await request<{ starred: boolean }>('songs/' + encodeURIComponent(songId) + '/favorite', 15000, { enabled: !starred }); if (mounted.current && activeSong.current === songId) { setStarred(result.starred); p.onFavorite(result.starred); } }
     catch (e) { Alert.alert('Preferiti', e instanceof Error ? e.message : 'Operazione non riuscita'); }
@@ -1718,6 +1723,7 @@ export default function PlayerSheet(p: Props) {
             </>
           )}
         </Reanimated.View>
+        {networkMenu && p.song.qobuzId && <NetworkActions item={songCatalogItem(p.song)} onClose={() => setNetworkMenu(false)} />}
       </View>
     </Modal>
   );

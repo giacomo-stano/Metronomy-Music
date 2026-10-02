@@ -2,7 +2,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import { seekPlayback, invalidatePlaybackSeeks } from './src/playbackTimeline';
-import { playbackSource } from './src/playbackSource';
+import { songPlaybackSource } from './src/songPlaybackSource';
+import { rememberTrack } from './src/listeningProfile';
 import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, PanResponder, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { coverURL, streamURL, request, type Album, type HomeResponse, type Song, type SearchResponse, type Lyrics } from './src/api';
 import SearchScreen from './src/SearchScreen';
@@ -826,6 +827,20 @@ function MusicApp({
     return () => { audioGeneration.current++; void invalidatePlaybackSeeks(player); };
   }, []);
 
+  const listeningSession = useRef<{ songId: string; version: number; seconds: number; previous: number | null } | null>(null);
+  useEffect(() => {
+    const subscription = player.addListener('playbackStatusUpdate', sample => {
+      const session = listeningSession.current;
+      if (!session || session.version !== audioGeneration.current) return;
+      const delta = session.previous === null ? 0 : sample.currentTime - session.previous;
+      session.previous = sample.currentTime;
+      // Seek jumps are not listening time. No app-wide state updates per frame.
+      if (sample.playing && !sample.isBuffering && delta > 0 && delta <= 2) session.seconds += delta;
+      if (session.seconds >= 10) { rememberTrack(session.songId); listeningSession.current = null; }
+    });
+    return () => subscription.remove();
+  }, [player]);
+
   useEffect(() => {
     if (current?.albumId && status.playing && status.listened && remembered.current !== current.id) {
       remembered.current = current.id;
@@ -1053,7 +1068,7 @@ function MusicApp({
               instrumental: false,
             })
         : request<LyricsResult>(
-            'lyrics/' + encodeURIComponent(current.id),
+            current.qobuzId ? 'network/lyrics/' + encodeURIComponent(current.qobuzId) : 'lyrics/' + encodeURIComponent(current.id),
             35000
           );
 
@@ -1116,8 +1131,8 @@ function MusicApp({
       await audioReady.current;
       if (version !== audioGeneration.current) return;
 
-      const source = await playbackSource(
-        next.id, isOffline, id => offlineStore.source(id), streamURL,
+      const source = await songPlaybackSource(
+        next, isOffline, id => offlineStore.source(id),
       );
 
       if (version !== audioGeneration.current) return;
@@ -1126,6 +1141,7 @@ function MusicApp({
       if (version !== audioGeneration.current) return;
       player.replace(source);
       player.play();
+      listeningSession.current = { songId: next.id, version, seconds: 0, previous: null };
 
       try {
         player.setActiveForLockScreen(
@@ -1410,8 +1426,6 @@ function MusicApp({
         onPlay={song => start([song], 0, false)}
         onAlbum={openAlbum}
         onAlbumActions={setActionAlbum}
-        beforePreview={() => player.pause()}
-        localPlaying={status.playing}
         onActions={setActionSong}
         onScroll={mini.onScroll}
       />

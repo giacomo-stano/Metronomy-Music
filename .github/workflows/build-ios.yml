@@ -30,6 +30,7 @@ jobs:
           node tests/playback-timeline.cjs
           node tests/playback-source.cjs
           node tests/precise-audio-timing.cjs
+          node tests/network-search.cjs
 
       - name: Generate iOS project
         env:

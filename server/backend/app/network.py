@@ -10,6 +10,8 @@ import shutil
 import sqlite3
 import time
 import uuid
+import re
+from urllib.parse import urlsplit
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
@@ -22,6 +24,7 @@ from .config import settings
 from .navidrome import navidrome
 from .library_match import library, same_recording, text_key
 from .sessions import current, identity, destinations, destination, refresh_access, sessions
+from .lyrics_provider import lrclib, LyricsUnavailable
 
 
 def credentials():
@@ -79,6 +82,10 @@ async def catalog(endpoint, params):
 
 
 def normalize(item, kind):
+    if kind == 'artist':
+        return {'id': str(item['id']), 'kind': kind, 'title': item.get('name', ''),
+                'artist': item.get('name', ''), 'album': '', 'available': True,
+                'cover': (item.get('image') or {}).get('large'), 'libraryMatch': None}
     album = item if kind == 'album' else item.get('album') or {}
     artist = item.get('performer') or album.get('artist') or {}
     title = item.get('title', '')
@@ -86,7 +93,7 @@ def normalize(item, kind):
         title += ' (' + item['version'] + ')'
     return {'id': str(item['id']), 'kind': kind, 'title': title,
             'artist': artist.get('name', ''), 'album': album.get('title', ''),
-            'duration': item.get('duration', 0),
+            'duration': item.get('duration', 0), 'genre': (album.get('genre') or {}).get('name', ''),
             'cover': (album.get('image') or {}).get('large'),
             'available': bool(item.get('streamable')), 'previewable': bool(item.get('sampleable') or item.get('previewable')), 'libraryMatch': None}
 
@@ -223,6 +230,72 @@ class Download(BaseModel):
     destination: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_]{1,64}$')
 
 
+class ListenSeed(BaseModel):
+    id: str = Field(min_length=1, max_length=100, pattern=r'^(qobuz:)?[A-Za-z0-9_-]+$')
+    plays: int = Field(default=1, ge=1, le=1000)
+
+
+class RecommendationRequest(BaseModel):
+    seeds: list[ListenSeed] = Field(default_factory=list, max_length=12)
+
+
+def valid_id(value, numeric=False):
+    if not re.fullmatch(r'[0-9]{1,20}' if numeric else r'[A-Za-z0-9]{1,64}', value):
+        raise HTTPException(422, 'ID Qobuz non valido.')
+    return value
+
+
+async def checked_items(raw, kind):
+    items = [normalize(item, kind) for item in raw if item.get('id') is not None]
+    if kind == 'artist':
+        return items, True
+    try:
+        local = await library.read()
+        for item, original in zip(items, [i for i in raw if i.get('id') is not None]):
+            match = next((s for s in local if (same_recording(original, s) if kind == 'track' else
+                text_key(item['title']) == text_key(s.get('album')) and text_key(item['artist']) == text_key(s.get('artist')))), None)
+            if match:
+                item['libraryMatch'] = match['id']
+        return items, True
+    except HTTPException as error:
+        if error.status_code in (401, 403):
+            raise
+        return items, False
+
+
+def network_song(raw):
+    item = normalize(raw, 'track')
+    return {'id': 'qobuz:' + item['id'], 'qobuzId': item['id'], 'title': item['title'],
+            'artist': item['artist'], 'album': item['album'], 'duration': item['duration'],
+            'genre': item['genre'], 'coverArt': item['cover']}
+
+
+_stream_slots = asyncio.Semaphore(3)
+
+
+async def full_stream(track_id):
+    valid_id(track_id, True)
+    credentials()
+    process = None
+    async with _stream_slots:
+        try:
+            process = await asyncio.create_subprocess_exec('metronomy-appid', 'stream', track_id,
+                env={**os.environ, 'QOGET_CONFIG': settings.qoget_config}, stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL)
+            output, _ = await asyncio.wait_for(process.communicate(), 30)
+            data = json.loads(output)
+            parsed = urlsplit(data.get('url', ''))
+            if process.returncode or data.get('full') is not True or parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
+                raise ValueError()
+            return {'url': data['url']}
+        except (OSError, ValueError, TimeoutError, TypeError, AttributeError):
+            raise HTTPException(403, 'Riproduzione completa non disponibile. Verifica abbonamento Qobuz, disponibilità del brano e aggiornamento del bridge. Nessuna anteprima avviata.') from None
+        finally:
+            if process and process.returncode is None:
+                process.kill()
+                await process.wait()
+
+
 def router(auth):
     routes = APIRouter(prefix='/network', dependencies=[Depends(auth)])
 
@@ -244,22 +317,59 @@ def router(auth):
             return {'ready': False, 'message': error.detail}
 
     @routes.get('/search')
-    async def search(q: str = Query(min_length=1, max_length=200), kind: Literal['track', 'album'] = 'track', offset: int = Query(0, ge=0, le=10000)):
-        result = await catalog(kind + '/search', {'query': q, 'limit': 20, 'offset': offset})
-        group = result.get(kind + 's') or {}
-        items = [normalize(item, kind) for item in group.get('items', [])]
-        library_checked = True
+    async def search(q: str = Query(min_length=1, max_length=200), kind: Literal['all', 'track', 'album', 'artist'] = 'all', offset: int = Query(0, ge=0, le=10000)):
+        kinds = ['track', 'album', 'artist'] if kind == 'all' else [kind]
+        async def group(k):
+            result = await catalog(k + '/search', {'query': q, 'limit': 12, 'offset': offset})
+            data = result.get(k + 's') or {}
+            items, checked = await checked_items(data.get('items', []), k)
+            return items, checked, offset + len(items) < data.get('total', 0)
+        groups = await asyncio.gather(*(group(k) for k in kinds))
+        return {'items': [i for items, _, _ in groups for i in items], 'hasMore': any(g[2] for g in groups),
+                'nextOffset': offset + 12, 'libraryChecked': all(g[1] for g in groups)}
+
+    @routes.get('/artist/{artist_id}')
+    async def artist(artist_id: str, offset: int = Query(0, ge=0, le=10000)):
+        result = await catalog('artist/get', {'artist_id': valid_id(artist_id, True), 'extra': 'albums', 'limit': 40, 'offset': offset})
+        group = result.get('albums') or {}
+        items, checked = await checked_items(group.get('items', []), 'album')
+        return {'title': result.get('name', ''), 'items': items, 'libraryChecked': checked,
+                'hasMore': offset + len(items) < group.get('total', 0), 'nextOffset': offset + 40}
+
+    @routes.get('/album/{album_id}')
+    async def album(album_id: str, offset: int = Query(0, ge=0, le=10000)):
+        result = await catalog('album/get', {'album_id': valid_id(album_id), 'limit': 100, 'offset': offset})
+        group = result.get('tracks') or {}
+        items, checked = await checked_items([{**t, 'album': result} for t in group.get('items', [])], 'track')
+        return {'title': result.get('title', ''), 'items': items, 'libraryChecked': checked,
+                'hasMore': offset + len(items) < group.get('total', 0), 'nextOffset': offset + 100}
+
+    @routes.get('/track/{track_id}')
+    async def track(track_id: str):
+        raw = await catalog('track/get', {'track_id': valid_id(track_id, True)})
+        return {'song': network_song(raw)}
+
+    @routes.get('/playback/{track_id}')
+    async def playback(track_id: str):
+        raw = await catalog('track/get', {'track_id': valid_id(track_id, True)})
+        if not raw.get('streamable'):
+            raise HTTPException(403, 'Brano non disponibile per la riproduzione completa con questo account Qobuz.')
+        return await full_stream(track_id)
+
+    @routes.get('/lyrics/{track_id}')
+    async def track_lyrics(track_id: str):
+        raw = await catalog('track/get', {'track_id': valid_id(track_id, True)})
         try:
-            local = await library.read()
-            for item, raw in zip(items, group.get('items', [])):
-                for candidate in local:
-                    match = same_recording(raw, candidate) if kind == 'track' else (text_key(item['title']) == text_key(candidate.get('album')) and text_key(item['artist']) == text_key(candidate.get('artist')))
-                    if match:
-                        item['libraryMatch'] = candidate['id']
-                        break
-        except HTTPException:
-            library_checked = False
-        return {'items': items, 'hasMore': offset + len(items) < group.get('total', 0), 'libraryChecked': library_checked}
+            return await lrclib.lookup(network_song(raw))
+        except LyricsUnavailable as error:
+            raise HTTPException(503, str(error)) from None
+
+    @routes.post('/recommendations')
+    async def recommendations(body: RecommendationRequest):
+        from .recommendations import recommend
+        raw, genres = await recommend(body.seeds, catalog, navidrome, library)
+        items, checked = await checked_items(raw, 'track')
+        return {'items': items, 'genres': genres, 'personalized': bool(genres), 'libraryChecked': checked, 'hasMore': False}
 
     @routes.get('/preview/{track_id}')
     async def preview(track_id: str):

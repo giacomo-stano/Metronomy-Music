@@ -1,0 +1,37 @@
+name: Test catalog and Qobuz adapter
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths: ['server/backend/**', 'server/tests/**', '.github/workflows/test-catalog.yml']
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r server/backend/requirements.txt
+      - run: python -m unittest discover -s server/tests -p 'test_*.py' -v
+  adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: davidetoniatti/qoget
+          ref: fea61a3f97b4008d36e52d4f1b362a89e51465a2
+          path: .ci/qoget
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: false
+      - name: Compile adapter against the same qoget revision as Docker
+        run: |
+          mkdir -p .ci/qoget/cmd/metronomy-appid
+          cp server/backend/qoget-appid/*.go .ci/qoget/cmd/metronomy-appid/
+          cd .ci/qoget
+          go test ./cmd/metronomy-appid

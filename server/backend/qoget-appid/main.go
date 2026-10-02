@@ -1,5 +1,5 @@
 // Small adapter built inside qoget's module, using its existing account client.
-// Only the public application ID is returned; account tokens and secrets stay local.
+// Returns an application ID or a media URL; account tokens and secrets stay local.
 package main
 
 import (
@@ -26,6 +26,18 @@ func main() {
     ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
     defer cancel()
     if _, err := client.User(ctx); err != nil { os.Exit(1) }
+    if len(os.Args) == 3 && os.Args[1] == "stream" {
+        track := os.Args[2]
+        if _, err := strconv.ParseUint(track, 10, 64); err != nil { os.Exit(1) }
+        // The existing authenticated client rejects sample-only responses. Do
+        // not fall back to previews or bypass subscription/territory restrictions.
+        file, err := client.FileURL(ctx, track, qobuz.FormatFLAC)
+        if err != nil { os.Exit(1) }
+        parsed, err := url.Parse(file.URL)
+        if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil { os.Exit(1) }
+        json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"url": file.URL, "full": true})
+        return
+    }
     appID, secrets := client.Credentials()
     if appID == "" { os.Exit(1) }
     if len(os.Args) == 3 && os.Args[1] == "preview" {

@@ -1,5 +1,5 @@
 export type Album = { id: string; name: string; artist?: string; coverArt?: string; year?: number };
-export type Song = { id: string; title: string; artist: string; album?: string; albumId?: string; artistId?: string; starred?: boolean; duration: number; coverArt?: string };
+export type Song = { id: string; title: string; artist: string; album?: string; albumId?: string; artistId?: string; starred?: boolean; duration: number; coverArt?: string; qobuzId?: string; genre?: string };
 export type HomeResponse = { recentAlbums: Album[]; madeForYou: Song[] };
 export type SearchResponse = { artists: Array<{ id: string; name: string }>; albums: Album[]; songs: Song[] };
 export type Lyrics = { synced: boolean; offset?: number; line: { start?: number; value: string }[] };
@@ -168,6 +168,9 @@ export function coverURL(coverArtId?: string): string | undefined {
   const cached = local?.cover(coverArtId);
   if (cached) return cached;
   if (configuration().offline) return undefined;
+  // Remote artwork is supplied by the authenticated catalog, without attaching
+  // the bridge session token to the Qobuz image request.
+  if (/^https:\/\//i.test(coverArtId)) return coverArtId;
   const { baseURL, token } = configuration();
   return `${baseURL}/cover/${encodeURIComponent(coverArtId)}?access_token=${encodeURIComponent(token)}`;
 }
