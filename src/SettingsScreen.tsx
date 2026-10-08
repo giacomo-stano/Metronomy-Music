@@ -103,7 +103,7 @@ export default function SettingsScreen({ onClose, onLogout }: { onClose: () => v
           {group(<>{link('device', 'download-outline', '#30a66c', tracks.length + ' brani salvati su iPhone')}{link('appearance', 'contrast-outline', '#737380', mode === 'system' ? 'Automatico' : mode === 'dark' ? 'Scuro' : 'Chiaro')}</>)}
           {logout}
           <Text style={{ color: c.muted, fontSize: 12, textAlign: 'center', marginTop: 18 }}>
-            Versione {appConfig.expo.version}
+            Versione {appConfig.expo.version}{process.env.EXPO_PUBLIC_RELEASE_CHANNEL === 'beta' ? ' · Beta' : ''}{process.env.EXPO_PUBLIC_BUILD_NUMBER ? ' · Build ' + process.env.EXPO_PUBLIC_BUILD_NUMBER : ''}
           </Text>
           {note('Le copie locali restano sul telefono dopo il logout, accessibili da “Ascolta offline”.')}
         </>}

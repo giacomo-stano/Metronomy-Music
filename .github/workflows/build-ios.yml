@@ -2,6 +2,35 @@ name: Build Metronomy iOS IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      channel:
+        description: 'artifact = solo IPA; beta = AltStore Beta; stable = release ufficiale'
+        type: choice
+        options: [artifact, beta, stable]
+        default: artifact
+      confirm_stable:
+        description: 'Confermo la pubblicazione di una release stabile (solo main)'
+        type: boolean
+        default: false
+      notes:
+        description: 'Novità mostrate in AltStore e nella release GitHub'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: metronomy-ios-${{ inputs.channel || 'artifact' }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_CHANNEL: ${{ inputs.channel || 'artifact' }}
+  CONFIRM_STABLE: ${{ inputs.confirm_stable || false }}
+  METRONOMY_CHANNEL: ${{ inputs.channel == 'beta' && 'beta' || 'stable' }}
+  METRONOMY_BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+  EXPO_PUBLIC_RELEASE_CHANNEL: ${{ inputs.channel == 'beta' && 'beta' || 'stable' }}
+  EXPO_PUBLIC_BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
 
 jobs:
   build-ios:
@@ -22,6 +51,11 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm ci
 
+      - name: Validate branch, channel and stable confirmation
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/prepare-altstore.cjs
+
       - name: TypeScript check
         run: npx tsc --noEmit
 
@@ -31,6 +65,8 @@ jobs:
           node tests/playback-source.cjs
           node tests/precise-audio-timing.cjs
           node tests/network-search.cjs
+          node tests/altstore-release.cjs
+          python3 -m unittest discover -s tests -p 'test_ipa_manifest.py' -v
 
       - name: Generate iOS project
         env:
@@ -148,3 +184,43 @@ jobs:
           path: build/Metronomy.ipa
           if-no-files-found: error
           retention-days: 14
+
+      - name: Inspect actual IPA metadata and permissions
+        run: python3 scripts/inspect-ipa.py build/Metronomy.ipa ios build/ipa-manifest.json
+
+      - name: Upload publication inputs
+        if: inputs.channel == 'beta' || inputs.channel == 'stable'
+        uses: actions/upload-artifact@v4
+        with:
+          name: altstore-publication
+          path: |
+            build/Metronomy.ipa
+            build/ipa-manifest.json
+            build/release-plan.json
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-altstore:
+    name: Publish selected AltStore channel
+    needs: build-ios
+    if: inputs.channel == 'beta' || inputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: altstore-publication
+          path: build
+      - name: Publish IPA, then update only the selected source
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+        run: node scripts/publish-altstore.cjs

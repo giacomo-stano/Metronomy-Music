@@ -1,0 +1,8 @@
+{
+  "name": "Metronomy Beta",
+  "identifier": "com.giacomostano.metronomy.beta.source",
+  "sourceURL": "https://raw.githubusercontent.com/giacomo-stano/Metronomy-Music/develop/altstore-beta.json",
+  "subtitle": "Canale di test, separato dalla versione stabile.",
+  "apps": [],
+  "news": []
+}

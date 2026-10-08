@@ -310,6 +310,12 @@ Il volume `metronomy-data` conserva i dati persistenti, inclusa la configurazion
 
 Se usi AltStore, gli aggiornamenti compaiono direttamente nella source Metronomy quando viene pubblicata una nuova release.
 
+Per pubblicare le IPA direttamente da GitHub Actions, distinguendo **Metronomy
+Beta** dalla versione stabile, vedi [Canali AltStore](docs/altstore-channels.md).
+La modalità predefinita produce solo un artifact; pubblicare una beta o una
+release richiede una scelta esplicita. La beta è un'app separata e non sostituisce
+la stabile.
+
 ---
 
 # Reset completo del server

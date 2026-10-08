@@ -1,0 +1,19 @@
+{
+  "repository": "giacomo-stano/Metronomy-Music",
+  "stable": {
+    "name": "Metronomy",
+    "branch": "main",
+    "bundleIdentifier": "com.anonymous.metronomy.SFNN9B96MD",
+    "sourceFile": "altstore-source.json",
+    "sourceIdentifier": "com.giacomostano.metronomy.source",
+    "assetName": "Metronomy.ipa"
+  },
+  "beta": {
+    "name": "Metronomy Beta",
+    "branch": "develop",
+    "bundleIdentifier": "com.anonymous.metronomy.beta",
+    "sourceFile": "altstore-beta.json",
+    "sourceIdentifier": "com.giacomostano.metronomy.beta.source",
+    "assetName": "Metronomy-Beta.ipa"
+  }
+}
