@@ -35,7 +35,8 @@ env:
 jobs:
   build-ios:
     name: Build unsigned iOS IPA
-    runs-on: macos-latest
+    # Use the Intel pool: ARM64 hosted runners can fail before acquiring the job.
+    runs-on: macos-26-intel
     timeout-minutes: 45
 
     steps:
