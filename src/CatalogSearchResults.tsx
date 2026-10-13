@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Pressable from './SpringPressable';
 import { useTheme } from './theme';
 import { searchItems, type CatalogItem } from './networkCatalog';
+import { ServerDownloadBadge } from './ServerDownloads';
 
 export default function CatalogSearchResults({ items, query, focused, onQuery, onOpen, onActions }: {
   items: CatalogItem[]; query: string; focused: boolean; onQuery: (value: string) => void;
@@ -18,7 +19,8 @@ export default function CatalogSearchResults({ items, query, focused, onQuery, o
         {item.cover ? <Image source={{ uri: item.cover }} style={{ width: 56, height: 56, borderRadius: item.kind === 'artist' ? 28 : 5 }} /> : <View style={{ width: 56, height: 56, borderRadius: item.kind === 'artist' ? 28 : 5, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center' }}><Ionicons name={item.kind === 'artist' ? 'person' : 'musical-notes'} size={26} color={c.secondary} /></View>}
         <View style={{ flex: 1 }}><Text numberOfLines={1} style={{ color: c.text, fontSize: 17 }}>{item.title}</Text><Text numberOfLines={1} style={{ color: c.secondary, fontSize: 15, marginTop: 3 }}>{item.kind === 'artist' ? 'Artista' : (item.kind === 'album' ? 'Album' : 'Brano') + ' · ' + item.artist}</Text>{item.libraryMatch && <Text style={{ color: c.secondary, fontSize: 11, marginTop: 2 }}>Già in libreria</Text>}</View>
       </Pressable>
-      <Pressable onPress={() => item.kind === 'track' ? onActions(item) : onOpen(item)} accessibilityLabel={(item.kind === 'track' ? 'Opzioni per ' : 'Apri ') + item.title} style={{ width: 44, minHeight: 50, alignItems: 'center', justifyContent: 'center' }}><Ionicons name={item.kind === 'track' ? 'ellipsis-horizontal' : 'chevron-forward'} size={item.kind === 'track' ? 23 : 19} color={item.kind === 'track' ? c.text : c.secondary} /></Pressable>
+      <ServerDownloadBadge item={item} />
+      <Pressable onPress={() => item.kind === 'artist' ? onOpen(item) : onActions(item)} accessibilityLabel={(item.kind === 'artist' ? 'Apri ' : 'Opzioni per ') + item.title} style={{ width: 44, minHeight: 50, alignItems: 'center', justifyContent: 'center' }}><Ionicons name={item.kind === 'artist' ? 'chevron-forward' : 'ellipsis-horizontal'} size={item.kind === 'artist' ? 19 : 23} color={c.secondary} /></Pressable>
       <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 68, right: 0, height: 0.5, backgroundColor: c.border }} />
     </View>)}
   </>;

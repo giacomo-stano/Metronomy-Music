@@ -18,6 +18,7 @@ import { GlassView } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
 import GlassBackground from './src/GlassBackground';
 import LibraryScreen from './src/LibraryScreen';
+import { ServerDownloadsProvider, useServerCompletion } from './src/ServerDownloads';
 import SongActions from './src/SongActions';
 import AlbumActions from './src/AlbumActions';
 import { usePlaybackSignals } from './src/usePlaybackSignals';
@@ -312,11 +313,11 @@ function AccountGate() {
     <OfflineProvider
       key={account.baseURL + ':' + account.username}
     >
-      <MusicApp
+      <ServerDownloadsProvider offline={!!account.offline}><MusicApp
         account={account}
         onLogout={() => void logout()}
         onOffline={enterOfflineForCurrentAccount}
-      />
+      /></ServerDownloadsProvider>
     </OfflineProvider>
   ) : (
     <LoginScreen onLogin={enter} />
@@ -503,6 +504,14 @@ function MusicApp({
   const [lyricsMessage, setLyricsMessage] = useState('');
   const [lyricsSource, setLyricsSource] = useState('');
   const [reload, setReload] = useState(0);
+  const serverCompletion = useServerCompletion();
+  useEffect(() => {
+    if (!serverCompletion) return;
+    setReload(value => value + 1);
+    // qoget can finish before Navidrome indexes the new files.
+    const timer = setTimeout(() => setReload(value => value + 1), 25000);
+    return () => clearTimeout(timer);
+  }, [serverCompletion]);
   const generation = useRef(0);
   const player = useAudioPlayer(null, { updateInterval: 250 });
   const status = usePlaybackSignals(player);

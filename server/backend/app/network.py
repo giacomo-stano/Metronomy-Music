@@ -97,6 +97,7 @@ def normalize(item, kind):
             'duration': item.get('duration', 0), 'genre': (album.get('genre') or {}).get('name', ''),
             'releaseDate': album.get('release_date_original') or '', 'trackCount': album.get('tracks_count', 0),
             'artistId': str(artist['id']) if artist.get('id') is not None else None,
+            'albumId': str(album['id']) if album.get('id') is not None else None,
             'explicit': bool(item.get('parental_warning')),
             'cover': (album.get('image') or {}).get('large'),
             'available': bool(item.get('streamable')), 'previewable': bool(item.get('sampleable') or item.get('previewable')), 'libraryMatch': None}
@@ -260,6 +261,10 @@ async def checked_items(raw, kind):
                 text_key(item['title']) == text_key(s.get('album')) and text_key(item['artist']) == text_key(s.get('artist')))), None)
             if match:
                 item['libraryMatch'] = match['id']
+                if kind == 'album':
+                    local_tracks = {s['id'] for s in local if text_key(item['title']) == text_key(s.get('album'))
+                                    and text_key(item['artist']) == text_key(s.get('artist'))}
+                    item['libraryComplete'] = bool(item['trackCount'] and len(local_tracks) >= item['trackCount'])
         return items, True
     except HTTPException as error:
         if error.status_code in (401, 403):
@@ -270,7 +275,7 @@ async def checked_items(raw, kind):
 def network_song(raw):
     item = normalize(raw, 'track')
     return {'id': 'qobuz:' + item['id'], 'qobuzId': item['id'], 'title': item['title'],
-            'artist': item['artist'], 'album': item['album'], 'duration': item['duration'],
+            'artist': item['artist'], 'album': item['album'], 'qobuzAlbumId': item['albumId'], 'duration': item['duration'],
             'genre': item['genre'], 'coverArt': item['cover']}
 
 

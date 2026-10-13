@@ -59,6 +59,20 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual((await self.client.get(path)).status_code, 422)
             upstream.assert_not_called()
 
+    async def test_download_badge_identity_and_partial_album(self):
+        self.assertEqual(network.normalize(TRACK, 'track')['albumId'], 'abc')
+        album = {**TRACK['album'], 'tracks_count': 2}
+        with patch.object(network.library, 'read', AsyncMock(return_value=[LOCAL])):
+            items, _ = await network.checked_items([album], 'album')
+            self.assertEqual(items[0]['libraryMatch'], 'local1')
+            self.assertFalse(items[0]['libraryComplete'])
+        with patch.object(network.library, 'read', AsyncMock(return_value=[LOCAL, {**LOCAL, 'id': 'local2'}])):
+            items, _ = await network.checked_items([album], 'album')
+            self.assertTrue(items[0]['libraryComplete'])
+        with patch.object(network.library, 'read', AsyncMock(return_value=[LOCAL, LOCAL])):
+            items, _ = await network.checked_items([album], 'album')
+            self.assertFalse(items[0]['libraryComplete'], 'duplicate rows cannot complete an album')
+
     async def test_complete_playback_restrictions_and_metadata(self):
         with patch.object(network, 'catalog', AsyncMock(return_value={**TRACK, 'streamable': False})), patch.object(network, 'full_stream', AsyncMock()) as stream:
             self.assertEqual((await self.client.get('/network/playback/123')).status_code, 403)

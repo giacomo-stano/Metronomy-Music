@@ -24,6 +24,7 @@ import { DarkSurface, useTheme } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
 import NetworkActions from './NetworkActions';
 import { songCatalogItem } from './networkCatalog';
+import { ServerDownloadBadge } from './ServerDownloads';
 import ElasticPlayPauseButton from './ElasticPlayPauseButton';
 import { AirPlayButton, SystemVolumeSlider, nativeAirPlayAvailable, nativeSystemVolumeAvailable } from '../modules/metronomy-audio-controls';
 
@@ -971,6 +972,7 @@ export default function PlayerSheet(p: Props) {
                         >
                           {p.song.artist}
                         </Text>
+                        {p.song.qobuzId && <DarkSurface><ServerDownloadBadge item={songCatalogItem(p.song)} label /></DarkSurface>}
                       </View>
 
                       <Pressable
@@ -1054,6 +1056,7 @@ export default function PlayerSheet(p: Props) {
                         >
                           {p.song.artist}
                         </Text>
+                        {p.song.qobuzId && <DarkSurface><ServerDownloadBadge item={songCatalogItem(p.song)} /></DarkSurface>}
                       </View>
 
                       <Pressable

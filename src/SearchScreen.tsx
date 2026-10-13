@@ -14,8 +14,8 @@ import CatalogBrowser from './CatalogBrowser';
 import { albumTracks, catalogQueue } from './catalogPlayback';
 import NetworkActions from './NetworkActions';
 import { catalogSong, mergeCatalog, type Catalog, type CatalogItem } from './networkCatalog';
+import { useServerDownloads } from './ServerDownloads';
 
-type Job = { id: string; title: string; status: string; message: string };
 type Detail = { endpoint: string; title: string };
 type Props = { active: boolean; revision: number; offline: boolean; onSettings: () => void; onDetailChange: (open: boolean) => void; onPlay: (song: Song) => void; onPlayQueue: (songs: Song[]) => void; onAlbum: (album: Album) => void; onAlbumActions: (album: Album) => void; initialQuery: string; onActions: (song: Song) => void; onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void };
 const labels: Record<string, string> = { queued: 'In coda', downloading: 'Download in corso', completed: 'Scaricato', failed: 'Non completato' };
@@ -29,7 +29,8 @@ export default function SearchScreen({ active: isActive, revision, offline, onSe
   const [catalog, setCatalog] = useState<Catalog | null>(null), [local, setLocal] = useState<SearchResponse | null>(null);
   const [detail, setDetail] = useState<Detail[]>([]), [action, setAction] = useState<CatalogItem | null>(null);
   const [browser, setBrowser] = useState<CatalogItem | null>(null);
-  const [recent, setRecent] = useState<string[]>([]), [jobs, setJobs] = useState<Job[]>([]);
+  const [recent, setRecent] = useState<string[]>([]);
+  const { jobs } = useServerDownloads();
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [reload, setReload] = useState(0);
   const input = useRef<TextInput>(null), scroll = useRef<ScrollView>(null);
   const cache = useRef(new ScreenCache<SearchResponse | Catalog>()).current;
@@ -49,12 +50,6 @@ export default function SearchScreen({ active: isActive, revision, offline, onSe
   useEffect(() => { if (!isActive) { playGeneration.current++; input.current?.blur(); setFocused(false); } }, [isActive]);
   useEffect(() => { changeQuery(initialQuery); if (initialQuery) setScope('library'); }, [initialQuery]);
   useEffect(() => { if (offline) { setScope('library'); setDetail([]); setBrowser(null); setAction(null); } }, [offline]);
-  useEffect(() => {
-    if (!isActive || offline || scope !== 'qobuz') return;
-    let active = true; let timer: ReturnType<typeof setTimeout>;
-    async function poll() { try { const data = await request<{ jobs: Job[] }>('network/downloads'); if (active) setJobs(old => JSON.stringify(old) === JSON.stringify(data.jobs) ? old : data.jobs); } catch { /* Search/playback errors are shown separately. */ } if (active) timer = setTimeout(poll, 5000); }
-    void poll(); return () => { active = false; clearTimeout(timer); };
-  }, [isActive, offline, scope, reload]);
   useEffect(() => {
     if (!isActive || browser) return;
     const version = ++generation.current;

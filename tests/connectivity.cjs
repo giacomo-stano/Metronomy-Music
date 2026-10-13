@@ -33,7 +33,7 @@ const context = vm.createContext({
   offlineProfiles: () => profileRead(),
   offlineAccount: p => ({ ...p, offline: true, token: '', expires: 0, admin: false, destinations: [] }),
   ACCOUNT_STORAGE_KEY: 'metronomy.activeAccount.v1',
-  OfflineProvider: 'OfflineProvider', MusicApp: 'MusicApp', LoginScreen: 'LoginScreen',
+  OfflineProvider: 'OfflineProvider', ServerDownloadsProvider: 'ServerDownloadsProvider', MusicApp: 'MusicApp', LoginScreen: 'LoginScreen',
   SafeAreaView: 'SafeAreaView', ActivityIndicator: 'ActivityIndicator',
   require: () => ({ jsx: (type, props, key) => ({ type, props, key }) }),
 });
@@ -43,7 +43,7 @@ Object.assign(context, api);
 vm.runInContext(compile(gate.getText(app)), context);
 function render() { index = 0; const result = context.AccountGate(); const queue = pending; pending = []; queue.forEach(run => run()); return result; }
 function interval(ms) { const entry = [...intervals.values()].find(item => item.ms === ms); assert(entry); return entry.callback(); }
-const music = view => view.props.children.props;
+const music = view => view.props.children.props.children.props;
 async function fresh() {
   effects.forEach(effect => effect?.cleanup?.()); states = []; effects = []; pending = []; intervals.clear();
   saved = JSON.stringify(online); response = async () => ({ ok: true, status: 200 });

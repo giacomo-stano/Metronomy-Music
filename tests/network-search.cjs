@@ -13,6 +13,7 @@ function load(file, modules = {}) {
   const track = { kind: 'track', id: '1', title: 'Title', artist: 'Artist', album: 'Album', duration: 123, cover: 'https://images.test/a.jpg', available: true };
   const song = catalogSong(track);
   assert.equal(song.id, 'qobuz:1'); assert.equal(song.duration, 123); assert(!song.albumId);
+  assert.equal(catalogSong({ ...track, albumId: 'remote-album' }).qobuzAlbumId, 'remote-album');
   const combined = mergeCatalog({ items: [track], libraryChecked: true }, { items: [track, { ...track, kind: 'artist' }], libraryChecked: false, nextOffset: 24 });
   assert.equal(combined.items.length, 2); assert.equal(combined.nextOffset, 24); assert.equal(combined.libraryChecked, false);
 

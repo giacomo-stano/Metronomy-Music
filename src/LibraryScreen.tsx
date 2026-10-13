@@ -238,6 +238,9 @@ export default function LibraryScreen(p: Props) {
   const songs = useMemo(() => page.type === 'downloads' ? Object.values(offline.tracks).sort((a, b) => b.savedAt - a.savedAt).map(t => t.song) : data.songs ?? [], [page.type, offline, offlineRevision, data.songs]);
   const entries = useMemo(() => data.artists ?? data.playlists ?? [], [data.artists, data.playlists]);
   const grid = page.type === 'home' || page.type === 'albums';
+  // This is an initial offset for the keyed list, not a controlled scroll value.
+  // Re-publishing the last JS scroll event on each audio tick rewinds native momentum.
+  const initialScrollOffset = useMemo(() => ({ x: 0, y: scrollOffsets.current[page.endpoint] ?? 0 }), [page.endpoint, grid]);
   const songPage =
     page.type === 'songs' ||
     page.type === 'downloads' ||
@@ -984,7 +987,7 @@ export default function LibraryScreen(p: Props) {
         paddingTop: 6,
         paddingBottom: 200,
       }}
-      contentOffset={{ x: 0, y: scrollOffsets.current[page.endpoint] ?? 0 }}
+      contentOffset={initialScrollOffset}
       onScroll={event => { scrollOffsets.current[page.endpoint] = event.nativeEvent.contentOffset.y; p.onScroll(event); }}
       scrollEventThrottle={32}
       refreshing={busy && Object.keys(data).length > 0}
