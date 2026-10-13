@@ -22,10 +22,12 @@ from pydantic import BaseModel, Field
 
 from .config import settings
 from .navidrome import navidrome
-from .library_match import library, same_recording, text_key
+from .library_match import library, same_recording
 from .sessions import current, identity, destinations, destination, refresh_access, sessions
 from .lyrics_provider import lrclib, LyricsUnavailable
 from .artist_profile import build_profile
+from .album_inventory import full_album, inventory
+from collections import OrderedDict
 
 
 def credentials():
@@ -107,18 +109,39 @@ async def duplicate(item, kind, fresh=False):
     songs = await library.read(fresh)
     if kind == 'track':
         return next((s for s in songs if same_recording(item, s)), None)
-    tracks = (item.get('tracks') or {}).get('items', [])
-    total = (item.get('tracks') or {}).get('total', item.get('tracks_count', len(tracks)))
-    if not tracks or len(tracks) < total:
-        raise HTTPException(503, 'Impossibile verificare tutti i brani dell’album. Cerca i brani singolarmente.')
-    # Refuse whole-album imports if any track is already present. The user can
-    # select individual missing tracks instead; never re-download existing ones.
-    for track in tracks:
-        track = {**track, 'album': item}
-        match = next((s for s in songs if same_recording(track, s)), None)
-        if match:
-            return match
-    return None
+    state = inventory(await full_album(item, catalog), songs)
+    return {'id': state['libraryMatch']} if state['libraryComplete'] else None
+
+
+# Cache only Qobuz metadata, never an account's ownership result. Bound both
+# lifetime and concurrency; a failed lookup remains unknown, not "complete".
+_album_cache = OrderedDict()
+_album_slots = asyncio.Semaphore(4)
+
+
+async def album_inventory(raw, local):
+    key = (current.get().id if current.get() else '', str(raw.get('id')))
+    async with asyncio.timeout(25), _album_slots:
+        cached = _album_cache.get(key)
+        if cached and cached[0] > time.monotonic():
+            album = cached[1]
+        else:
+            album = await asyncio.wait_for(full_album(raw, catalog), 12)
+            _album_cache[key] = (time.monotonic() + 60, album)
+            _album_cache.move_to_end(key)
+            while len(_album_cache) > 128:
+                _album_cache.popitem(last=False)
+    return inventory(album, local)
+
+
+async def download_targets(metadata, kind):
+    local = await library.read(fresh=True)
+    if kind == 'track':
+        return [] if any(same_recording(metadata, song) for song in local) else ['track:' + valid_id(str(metadata['id']), True)]
+    state = inventory(await full_album(metadata, catalog), local)
+    if any(not track.get('streamable', metadata.get('streamable')) for track in state['missing']):
+        raise HTTPException(409, 'Alcuni brani mancanti non sono disponibili con questo account Qobuz.')
+    return ['track:' + valid_id(str(track['id']), True) for track in state['missing']]
 
 
 @contextmanager
@@ -131,6 +154,7 @@ def database():
     for name in ('owner', 'destination', 'session_id'):
         if name not in columns:
             db.execute(f"ALTER TABLE jobs ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
+    db.execute('CREATE TABLE IF NOT EXISTS recent_downloads (target TEXT, owner TEXT, destination TEXT, completed REAL, PRIMARY KEY (target, owner, destination))')
     try:
         with db:
             yield db
@@ -180,7 +204,8 @@ async def worker():
                     raise HTTPException(503, 'Cartella non disponibile.')
             kind, item_id = row['target'].split(':', 1)
             metadata = await catalog(kind + '/get', {kind + '_id': item_id, 'limit': 500})
-            if await duplicate(metadata, kind, fresh=True):
+            targets = await download_targets(metadata, kind)
+            if not targets:
                 update(row['id'], 'completed', 'Già in libreria: nessun file riscaricato.')
                 continue
             env = {**os.environ, 'QOGET_CONFIG': settings.qoget_config}
@@ -188,21 +213,40 @@ async def worker():
                 # qoget history/config cache must not suppress a different user's download.
                 env['XDG_CONFIG_HOME'] = '/data/qoget/' + row['destination']
                 env['XDG_DATA_HOME'] = '/data/qoget/' + row['destination']
-            flags = ['-no-db'] if settings.multi_user else []
-            process = await asyncio.create_subprocess_exec('qoget', 'dl', '-d', directory, *flags,
-                row['target'], env=env, stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-            if settings.multi_user:
-                async with asyncio.timeout(7200):
-                    while process.returncode is None:
-                        identity()  # Logout/expiry cancels an active download within a second.
-                        try:
-                            await asyncio.wait_for(process.wait(), 1)
-                        except TimeoutError:
-                            continue
-                code = process.returncode
-            else:
-                code = await asyncio.wait_for(process.wait(), timeout=7200)
+            # The library check is authoritative: qoget's old album/track history
+            # must not suppress a recording which has since been removed.
+            flags = ['-no-db'] if settings.multi_user or kind == 'album' else []
+            code = 0
+            for target in targets:
+                # A short receipt bridges Navidrome's scan delay, including partial
+                # retries. It is never used to claim an album is in the library.
+                with database() as db:
+                    db.execute('DELETE FROM recent_downloads WHERE completed < ?', (time.time() - 120,))
+                    recent = db.execute('SELECT 1 FROM recent_downloads WHERE target=? AND owner=? AND destination=?',
+                                        (target, row['owner'], row['destination'])).fetchone()
+                if recent:
+                    continue
+                if settings.multi_user:
+                    identity()
+                process = await asyncio.create_subprocess_exec('qoget', 'dl', '-d', directory, *flags,
+                    target, env=env, stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+                if settings.multi_user:
+                    async with asyncio.timeout(7200):
+                        while process.returncode is None:
+                            identity()  # Logout/expiry cancels an active download within a second.
+                            try:
+                                await asyncio.wait_for(process.wait(), 1)
+                            except TimeoutError:
+                                continue
+                    code = process.returncode
+                else:
+                    code = await asyncio.wait_for(process.wait(), timeout=7200)
+                if code:
+                    break
+                with database() as db:
+                    db.execute('INSERT OR REPLACE INTO recent_downloads VALUES (?,?,?,?)',
+                               (target, row['owner'], row['destination'], time.time()))
             if code:
                 update(row['id'], 'failed', 'qoget non ha completato il download. Verifica account, disponibilità e spazio sul server.')
             else:
@@ -256,16 +300,26 @@ async def checked_items(raw, kind):
         return items, True
     try:
         local = await library.read()
-        for item, original in zip(items, [i for i in raw if i.get('id') is not None]):
-            match = next((s for s in local if (same_recording(original, s) if kind == 'track' else
-                text_key(item['title']) == text_key(s.get('album')) and text_key(item['artist']) == text_key(s.get('artist')))), None)
-            if match:
-                item['libraryMatch'] = match['id']
-                if kind == 'album':
-                    local_tracks = {s['id'] for s in local if text_key(item['title']) == text_key(s.get('album'))
-                                    and text_key(item['artist']) == text_key(s.get('artist'))}
-                    item['libraryComplete'] = bool(item['trackCount'] and len(local_tracks) >= item['trackCount'])
-        return items, True
+        async def check(item, original):
+            if kind == 'track':
+                match = next((s for s in local if same_recording(original, s)), None)
+                item['libraryMatch'] = match['id'] if match else None
+                return True
+            item['libraryComplete'] = False
+            try:
+                state = await album_inventory(original, local)
+                item.update({k: v for k, v in state.items() if k != 'missing'})
+                item['trackCount'] = state['libraryTotalCount']
+                return True
+            except HTTPException as error:
+                if error.status_code in (401, 403):
+                    raise
+                return False
+            except (TimeoutError, httpx.HTTPError):
+                return False
+        checked = await asyncio.gather(*(check(item, original) for item, original in
+                                        zip(items, [i for i in raw if i.get('id') is not None])))
+        return items, all(checked)
     except HTTPException as error:
         if error.status_code in (401, 403):
             raise
@@ -312,8 +366,9 @@ def router(auth):
     async def discover():
         import random
         result = await catalog('album/getFeatured', {'type': 'best-sellers', 'limit': 50})
-        items = [normalize(item, 'album') for item in (result.get('albums') or {}).get('items', [])]
-        return {'items': random.sample(items, min(12, len(items)))}
+        raw = (result.get('albums') or {}).get('items', [])
+        items, checked = await checked_items(random.sample(raw, min(12, len(raw))), 'album')
+        return {'items': items, 'libraryChecked': checked}
 
     @routes.get('/status')
     async def status():
@@ -428,11 +483,11 @@ def router(auth):
         item = await catalog(body.kind + '/get', {body.kind + '_id': body.id, 'limit': 500})
         if not item.get('streamable'):
             raise HTTPException(409, 'Contenuto non disponibile per questo account.')
-        if await duplicate(item, body.kind, fresh=True):
-            raise HTTPException(409, 'Già nella tua libreria: download bloccato.' if body.kind == 'track' else 'Questo album contiene brani già in libreria. Cerca e scarica solo i brani mancanti.')
+        if not await download_targets(item, body.kind):
+            raise HTTPException(409, 'Già nella tua libreria: download bloccato.' if body.kind == 'track' else 'Tutti i brani di questo album sono già sul server.')
         target = body.kind + ':' + body.id
         with database() as db:
-            if db.execute("SELECT id FROM jobs WHERE target=? AND owner=? AND destination=? AND status='completed'", (target, owner, target_folder)).fetchone():
+            if body.kind == 'track' and db.execute("SELECT id FROM jobs WHERE target=? AND owner=? AND destination=? AND status='completed'", (target, owner, target_folder)).fetchone():
                 raise HTTPException(409, 'Già scaricato sul server. Attendi la scansione di Navidrome e aggiorna la Libreria.')
             existing = db.execute("SELECT * FROM jobs WHERE target=? AND owner=? AND destination=? AND status IN ('queued','downloading')", (target, owner, target_folder)).fetchone()
             if existing:

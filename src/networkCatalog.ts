@@ -1,5 +1,5 @@
 import type { Song } from './api';
-export type CatalogItem = { id: string; kind: 'track' | 'album' | 'artist'; title: string; artist: string; album: string; albumId?: string | null; duration?: number; genre?: string; cover?: string; available: boolean; libraryMatch?: string | null; libraryComplete?: boolean; releaseDate?: string; trackCount?: number; artistId?: string | null; explicit?: boolean };
+export type CatalogItem = { id: string; kind: 'track' | 'album' | 'artist'; title: string; artist: string; album: string; albumId?: string | null; duration?: number; genre?: string; cover?: string; available: boolean; libraryMatch?: string | null; libraryComplete?: boolean; libraryPresentCount?: number; libraryTotalCount?: number; releaseDate?: string; trackCount?: number; artistId?: string | null; explicit?: boolean };
 export type Catalog = { items: CatalogItem[]; hasMore: boolean; nextOffset?: number; libraryChecked: boolean; title?: string; personalized?: boolean; genres?: string[]; album?: CatalogItem };
 export type ArtistProfile = {
   artist: CatalogItem & { biography: string; biographySource: string };

@@ -7,16 +7,30 @@ export const serverLabels: Record<ServerState, string> = {
   completed: 'Download completato', failed: 'Download non riuscito', present: 'Presente sul server', partial: 'Contiene brani sul server',
 };
 export const catalogTarget = (item: CatalogItem) => item.kind + ':' + item.id;
+export function albumCounts(item: CatalogItem): string | null {
+  const present = item.libraryPresentCount, total = item.libraryTotalCount;
+  return item.kind === 'album' && Number.isInteger(present) && Number.isInteger(total) && total! > 0 && present! >= 0 && present! <= total! ? `${present} / ${total}` : null;
+}
+export function isServerComplete(item: CatalogItem): boolean {
+  return item.kind === 'album' ? !!albumCounts(item) && item.libraryComplete === true && item.libraryPresentCount === item.libraryTotalCount : item.kind === 'track' && !!item.libraryMatch;
+}
+export function serverLabel(item: CatalogItem, state: ServerState): string {
+  const count = albumCounts(item);
+  return count ? `${count} brani sul server${['submitting', 'queued', 'downloading', 'failed'].includes(state) ? ' · ' + serverLabels[state] : ''}` : serverLabels[state];
+}
 export function serverState(item: CatalogItem, jobs: ServerJob[], pending: string[], destination?: string): ServerState {
   if (item.kind === 'artist') return 'none';
-  if (item.libraryMatch) return item.kind === 'album' && item.libraryComplete !== true ? 'partial' : 'present';
+  if (isServerComplete(item)) return 'present';
   const targets = [catalogTarget(item), ...(item.kind === 'track' && item.albumId ? ['album:' + item.albumId] : [])];
   if (pending.some(key => targets.some(target => key.startsWith(target + '|')) && (!destination || key.endsWith('|' + destination)))) return 'submitting';
   const matches = jobs.filter(job => targets.includes(job.target) && (!destination || job.destination === destination));
   const active = matches.find(job => job.status === 'downloading') ?? matches.find(job => job.status === 'queued');
   if (active) return active.status;
+  const latest = [...matches].sort((a, b) => b.created - a.created)[0];
+  if (latest?.status === 'failed') return 'failed';
+  if (item.kind === 'album') return albumCounts(item) || item.libraryMatch ? 'partial' : 'none';
   // Album jobs also cover its tracks. Never match by title (different recordings).
-  return [...matches].sort((a, b) => b.created - a.created)[0]?.status ?? 'none';
+  return latest?.status ?? 'none';
 }
 
 type Snapshot = { jobs: ServerJob[]; pending: string[]; completion: number };

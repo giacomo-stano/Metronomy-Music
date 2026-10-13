@@ -21,6 +21,7 @@ LOCAL = {'id': 'local1', 'title': 'Test', 'artist': 'Artist', 'duration': 240, '
 
 class CatalogTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        network._album_cache.clear()
         app = FastAPI()
         app.include_router(network.router(lambda: None))
         self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://bridge.test')
@@ -30,6 +31,8 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unified_search_and_independent_page_offset(self):
         async def catalog(endpoint, params):
+            if endpoint == 'album/get':
+                return {**TRACK['album'], 'tracks': {'items': [TRACK], 'total': 1}}
             self.assertEqual(params['offset'], 12)
             self.assertEqual(params['limit'], 12)
             kind = endpoint.split('/')[0]
@@ -43,7 +46,7 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['items'][0]['libraryMatch'], 'local1')
         self.assertEqual(result['nextOffset'], 24)
         self.assertTrue(result['hasMore'])
-        self.assertEqual(upstream.await_count, 3)
+        self.assertEqual(upstream.await_count, 4)
 
     async def test_detail_and_validation(self):
         with patch.object(network, 'catalog', AsyncMock(return_value={'name': 'Artist', 'albums': {'items': [TRACK['album']], 'total': 41}})), patch.object(network.library, 'read', AsyncMock(return_value=[])):
@@ -61,15 +64,18 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_download_badge_identity_and_partial_album(self):
         self.assertEqual(network.normalize(TRACK, 'track')['albumId'], 'abc')
-        album = {**TRACK['album'], 'tracks_count': 2}
+        other = {**TRACK, 'id': 124, 'title': 'Other'}
+        album = {**TRACK['album'], 'tracks_count': 2, 'tracks': {'total': 2, 'items': [TRACK, other]}}
         with patch.object(network.library, 'read', AsyncMock(return_value=[LOCAL])):
             items, _ = await network.checked_items([album], 'album')
             self.assertEqual(items[0]['libraryMatch'], 'local1')
             self.assertFalse(items[0]['libraryComplete'])
-        with patch.object(network.library, 'read', AsyncMock(return_value=[LOCAL, {**LOCAL, 'id': 'local2'}])):
+            self.assertEqual(items[0]['libraryPresentCount'], 1)
+            self.assertEqual(items[0]['libraryTotalCount'], 2)
+        with patch.object(network.library, 'read', AsyncMock(return_value=[LOCAL, {**LOCAL, 'id': 'local2', 'title': 'Other'}])):
             items, _ = await network.checked_items([album], 'album')
             self.assertTrue(items[0]['libraryComplete'])
-        with patch.object(network.library, 'read', AsyncMock(return_value=[LOCAL, LOCAL])):
+        with patch.object(network.library, 'read', AsyncMock(return_value=[LOCAL, {**LOCAL, 'id': 'duplicate'}])):
             items, _ = await network.checked_items([album], 'album')
             self.assertFalse(items[0]['libraryComplete'], 'duplicate rows cannot complete an album')
 

@@ -5,7 +5,7 @@ import { currentAccount, request } from './api';
 import type { CatalogItem } from './networkCatalog';
 import { useTheme } from './theme';
 import { useMotionPreferences } from './motionPreferences';
-import { ServerDownloadStore, serverState, serverLabels, type ServerJob } from './serverDownloadState';
+import { ServerDownloadStore, serverState, serverLabel, albumCounts, type ServerJob } from './serverDownloadState';
 
 const Context = createContext<ServerDownloadStore | null>(null);
 export function ServerDownloadsProvider({ offline, children }: { offline: boolean; children: ReactNode }) {
@@ -49,8 +49,10 @@ export function ServerDownloadBadge({ item, label = false }: { item: CatalogItem
   if (state === 'none') return null;
   const busy = state === 'submitting' || state === 'queued' || state === 'downloading';
   const color = state === 'failed' ? c.accent : c.secondary;
-  return <View accessible accessibilityLabel={serverLabels[state]} accessibilityState={{ busy }} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 22, minHeight: 24 }}>
+  const caption = serverLabel(item, state);
+  const count = albumCounts(item);
+  return <View accessible accessibilityLabel={caption} accessibilityState={{ busy }} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 22, minHeight: 24 }}>
     {busy && !reduceMotion ? <ActivityIndicator size="small" color={c.accent} /> : <Ionicons size={20} color={color} name={busy ? 'hourglass-outline' : state === 'failed' ? 'alert-circle-outline' : state === 'partial' ? 'cloud-outline' : state === 'completed' ? 'cloud-download-outline' : 'cloud-done-outline'} />}
-    {label && <Text style={{ fontSize: 12, color, flexShrink: 1 }}>{serverLabels[state]}</Text>}
+    {(label || count) && <Text style={{ fontSize: 12, color, flexShrink: 1 }}>{label ? caption : count}</Text>}
   </View>;
 }

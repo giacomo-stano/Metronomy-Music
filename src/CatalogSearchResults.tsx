@@ -1,3 +1,4 @@
+import { isServerComplete } from './serverDownloadState';
 import { Image, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Pressable from './SpringPressable';
@@ -17,7 +18,7 @@ export default function CatalogSearchResults({ items, query, focused, onQuery, o
     {searchItems(items, query).map(item => <View key={item.kind + ':' + item.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
       <Pressable onPress={() => onOpen(item)} accessibilityRole="button" accessibilityLabel={(item.kind === 'track' ? 'Riproduci ' : 'Apri ') + item.title} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, minHeight: 74 }}>
         {item.cover ? <Image source={{ uri: item.cover }} style={{ width: 56, height: 56, borderRadius: item.kind === 'artist' ? 28 : 5 }} /> : <View style={{ width: 56, height: 56, borderRadius: item.kind === 'artist' ? 28 : 5, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center' }}><Ionicons name={item.kind === 'artist' ? 'person' : 'musical-notes'} size={26} color={c.secondary} /></View>}
-        <View style={{ flex: 1 }}><Text numberOfLines={1} style={{ color: c.text, fontSize: 17 }}>{item.title}</Text><Text numberOfLines={1} style={{ color: c.secondary, fontSize: 15, marginTop: 3 }}>{item.kind === 'artist' ? 'Artista' : (item.kind === 'album' ? 'Album' : 'Brano') + ' · ' + item.artist}</Text>{item.libraryMatch && <Text style={{ color: c.secondary, fontSize: 11, marginTop: 2 }}>Già in libreria</Text>}</View>
+        <View style={{ flex: 1 }}><Text numberOfLines={1} style={{ color: c.text, fontSize: 17 }}>{item.title}</Text><Text numberOfLines={1} style={{ color: c.secondary, fontSize: 15, marginTop: 3 }}>{item.kind === 'artist' ? 'Artista' : (item.kind === 'album' ? 'Album' : 'Brano') + ' · ' + item.artist}</Text>{isServerComplete(item) && <Text style={{ color: c.secondary, fontSize: 11, marginTop: 2 }}>Già in libreria</Text>}</View>
       </Pressable>
       <ServerDownloadBadge item={item} />
       <Pressable onPress={() => item.kind === 'artist' ? onOpen(item) : onActions(item)} accessibilityLabel={(item.kind === 'artist' ? 'Apri ' : 'Opzioni per ') + item.title} style={{ width: 44, minHeight: 50, alignItems: 'center', justifyContent: 'center' }}><Ionicons name={item.kind === 'artist' ? 'chevron-forward' : 'ellipsis-horizontal'} size={item.kind === 'artist' ? 19 : 23} color={c.secondary} /></Pressable>

@@ -21,6 +21,7 @@ MODERN = {'id': 'single1', 'title': 'Single', 'artist': {'id': 42, 'name': {'dis
 
 class ArtistProfileTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        network._album_cache.clear()
         app = FastAPI()
         app.include_router(network.router(lambda: None))
         self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://bridge.test')
@@ -41,6 +42,10 @@ class ArtistProfileTests(unittest.IsolatedAsyncioTestCase):
             return {'artists': {'items': [{'id': 99, 'name': 'Related'}]}}
         if endpoint == 'track/get':
             return {**TRACK, 'id': int(params['track_id'])}
+        if endpoint == 'album/get':
+            album = ALBUM if params['album_id'] == 'album1' else {**MODERN, 'artist': ALBUM['artist']}
+            count = album['tracks_count']
+            return {**album, 'tracks': {'total': count, 'items': [{**TRACK, 'id': i + 1, 'title': 'Song' if i == 0 else 'Song ' + str(i)} for i in range(count)]}}
         raise AssertionError(endpoint)
 
     async def test_profile_projects_real_data_and_preserves_library_matching(self):
@@ -93,9 +98,9 @@ class ArtistProfileTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn((await client.get('/network/artist/42/profile')).status_code, (401, 403))
 
     async def test_album_detail_contains_playback_and_display_metadata(self):
-        with patch.object(network, 'catalog', AsyncMock(return_value={**ALBUM, 'tracks': {'items': [TRACK], 'total': 1}})), patch.object(network.library, 'read', AsyncMock(return_value=[])):
+        with patch.object(network, 'catalog', AsyncMock(return_value={**ALBUM, 'tracks_count': 1, 'tracks': {'items': [TRACK], 'total': 1}})), patch.object(network.library, 'read', AsyncMock(return_value=[])):
             data = (await self.client.get('/network/album/album1')).json()
-        self.assertEqual(data['album']['trackCount'], 13)
+        self.assertEqual(data['album']['trackCount'], 1)
         self.assertEqual(data['album']['artistId'], '42')
         self.assertEqual(data['items'][0]['duration'], 200)
         self.assertFalse(data['hasMore'])
