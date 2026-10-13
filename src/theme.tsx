@@ -8,6 +8,11 @@ export type Palette = typeof dark;
 type Mode = 'system' | 'light' | 'dark';
 const Context = createContext({ colors: dark, isDark: true, mode: 'system' as Mode, setMode: (_: Mode) => {} });
 export const useTheme = () => useContext(Context);
+// Immersive catalog pages keep their own dark surface without changing the saved theme.
+export function DarkSurface({ children }: { children: ReactNode }) {
+  const theme = useTheme();
+  return <Context.Provider value={{ ...theme, colors: dark, isDark: true }}>{children}</Context.Provider>;
+}
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const system = useColorScheme();
   const [mode, update] = useState<Mode>('system');

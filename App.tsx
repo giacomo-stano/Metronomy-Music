@@ -349,6 +349,7 @@ function MusicApp({
   const isOffline = !!account.offline;
   const s = useMemo(() => makeStyles(c), [c]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchDetailOpen, setSearchDetailOpen] = useState(false);
   const previousOffline = useRef(isOffline);
   const [connectivityBanner, setConnectivityBanner] = useState<
     'offline' | 'online' | null
@@ -1328,13 +1329,13 @@ function MusicApp({
   return (
     <SafeAreaView
       ref={safeAreaRef}
-      style={s.safe}
+      style={[s.safe, searchDetailOpen && { backgroundColor: '#000000' }]}
       onLayout={event => {
         const { width: layoutWidth, height: layoutHeight } = event.nativeEvent.layout;
         updateSafeAreaMetrics(layoutWidth, layoutHeight);
       }}
     >
-    <StatusBar style={album ? 'light' : isDark ? 'light' : 'dark'} />
+    <StatusBar style={album || searchDetailOpen ? 'light' : isDark ? 'light' : 'dark'} />
     {connectivityBanner && (
       <View pointerEvents="none" style={s.connectivityBannerWrap}>
         <Animated.View
@@ -1424,6 +1425,8 @@ function MusicApp({
         initialQuery={query}
         onSettings={() => setSettingsOpen(true)}
         onPlay={song => start([song], 0, false)}
+        onPlayQueue={songs => start(songs, 0, false)}
+        onDetailChange={setSearchDetailOpen}
         onAlbum={openAlbum}
         onAlbumActions={setActionAlbum}
         onActions={setActionSong}

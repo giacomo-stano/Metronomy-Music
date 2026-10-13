@@ -25,6 +25,7 @@ from .navidrome import navidrome
 from .library_match import library, same_recording, text_key
 from .sessions import current, identity, destinations, destination, refresh_access, sessions
 from .lyrics_provider import lrclib, LyricsUnavailable
+from .artist_profile import build_profile
 
 
 def credentials():
@@ -85,7 +86,7 @@ def normalize(item, kind):
     if kind == 'artist':
         return {'id': str(item['id']), 'kind': kind, 'title': item.get('name', ''),
                 'artist': item.get('name', ''), 'album': '', 'available': True,
-                'cover': (item.get('image') or {}).get('large'), 'libraryMatch': None}
+                'cover': next(((item.get('image') or {}).get(k) for k in ('mega', 'extralarge', 'large', 'medium', 'small') if (item.get('image') or {}).get(k)), None) or item.get('picture'), 'libraryMatch': None}
     album = item if kind == 'album' else item.get('album') or {}
     artist = item.get('performer') or album.get('artist') or {}
     title = item.get('title', '')
@@ -94,6 +95,9 @@ def normalize(item, kind):
     return {'id': str(item['id']), 'kind': kind, 'title': title,
             'artist': artist.get('name', ''), 'album': album.get('title', ''),
             'duration': item.get('duration', 0), 'genre': (album.get('genre') or {}).get('name', ''),
+            'releaseDate': album.get('release_date_original') or '', 'trackCount': album.get('tracks_count', 0),
+            'artistId': str(artist['id']) if artist.get('id') is not None else None,
+            'explicit': bool(item.get('parental_warning')),
             'cover': (album.get('image') or {}).get('large'),
             'available': bool(item.get('streamable')), 'previewable': bool(item.get('sampleable') or item.get('previewable')), 'libraryMatch': None}
 
@@ -336,12 +340,17 @@ def router(auth):
         return {'title': result.get('name', ''), 'items': items, 'libraryChecked': checked,
                 'hasMore': offset + len(items) < group.get('total', 0), 'nextOffset': offset + 40}
 
+    @routes.get('/artist/{artist_id}/profile')
+    async def artist_profile(artist_id: str):
+        return await build_profile(valid_id(artist_id, True), catalog, checked_items, normalize)
+
     @routes.get('/album/{album_id}')
     async def album(album_id: str, offset: int = Query(0, ge=0, le=10000)):
         result = await catalog('album/get', {'album_id': valid_id(album_id), 'limit': 100, 'offset': offset})
         group = result.get('tracks') or {}
         items, checked = await checked_items([{**t, 'album': result} for t in group.get('items', [])], 'track')
-        return {'title': result.get('title', ''), 'items': items, 'libraryChecked': checked,
+        album_items, album_checked = await checked_items([result], 'album')
+        return {'title': result.get('title', ''), 'album': album_items[0], 'items': items, 'libraryChecked': checked and album_checked,
                 'hasMore': offset + len(items) < group.get('total', 0), 'nextOffset': offset + 100}
 
     @routes.get('/track/{track_id}')
