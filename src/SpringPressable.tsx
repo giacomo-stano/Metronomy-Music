@@ -29,6 +29,8 @@ export default forwardRef<View, PressableProps>(function SpringPressable({ style
         onPress?.(event);
       }}
       onPressIn={event => {
+        const { pageX, pageY } = event.nativeEvent;
+        pressPoint = Number.isFinite(pageX) && Number.isFinite(pageY) ? { x: pageX, y: pageY } : null;
         if (typeof style === 'function') setPressed(true);
         if (!disabled && !reduceMotion) scale.value = withTiming(0.97, { duration: 85 });
         onPressIn?.(event);

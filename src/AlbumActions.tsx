@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Modal, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { GlassView } from 'expo-glass-effect';
-import { SymbolView, type SFSymbol } from 'expo-symbols';
+import { ActivityIndicator, Alert, Share } from 'react-native';
+import FloatingMenu from './FloatingMenu';
+import { MenuRow, MenuQuickActions, MenuQuickAction, MenuSeparator } from './MenuControls';
 import { request, type Album, type Song } from './api';
 import { useTheme } from './theme';
 import { useOffline } from './OfflineDownloads';
@@ -10,30 +10,13 @@ type Props = { album: Album; onClose: () => void; onOpen: () => void; onPlay: (s
 type Check = { title: string; artist: string; count: number; bytes: number; token: string; expires: number; warning?: string };
 
 export default function AlbumActions(p: Props) {
-  const { colors: c, isDark } = useTheme();
-  const { width, height } = useWindowDimensions();
+  const { colors: c } = useTheme();
   const { store } = useOffline();
   const [busy, setBusy] = useState(false);
   const [albumSongs, setAlbumSongs] = useState<Song[] | null>(null);
   const pending = useRef(false);
   const mounted = useRef(true);
-  const progress = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    mounted.current = true;
-    progress.setValue(0);
-    Animated.spring(progress, {
-      toValue: 1,
-      useNativeDriver: true,
-      damping: 19,
-      stiffness: 240,
-      mass: 0.75,
-    }).start();
-
-    return () => {
-      mounted.current = false;
-    };
-  }, [progress]);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const endpoint = 'albums/' + encodeURIComponent(p.album.id);
 
@@ -56,18 +39,7 @@ export default function AlbumActions(p: Props) {
     };
   }, [endpoint]);
 
-  const close = (after?: () => void) => {
-    if (pending.current) return;
-
-    Animated.timing(progress, {
-      toValue: 0,
-      duration: 130,
-      useNativeDriver: true,
-    }).start(() => {
-      p.onClose();
-      after?.();
-    });
-  };
+  const close = (after?: () => void) => { p.onClose(); after?.(); };
 
   async function perform(action: () => Promise<void>) {
     if (pending.current || !mounted.current) return;
@@ -363,313 +335,21 @@ export default function AlbumActions(p: Props) {
           : `${activeAlbumDownloads} download in corso`
     : undefined;
 
-  const row = (icon: SFSymbol, label: string, action: () => void, destructive = false, subtitle?: string) => (
-    <Pressable disabled={busy} accessibilityRole="button" onPress={action} style={styles.row}>
-      <View style={styles.iconBox}>
-        <SymbolView
-          name={icon}
-          size={19}
-          weight="regular"
-          tintColor={destructive ? '#ff3b30' : c.text}
-        />
-      </View>
-
-      <View style={{ flex: 1 }}>
-        <Text
-          numberOfLines={1}
-          style={[styles.rowText, { color: destructive ? '#ff3b30' : c.text }]}
-        >
-          {label}
-        </Text>
-
-        {!!subtitle && (
-          <Text numberOfLines={1} style={[styles.subtitle, { color: c.secondary }]}>
-            {subtitle}
-          </Text>
-        )}
-      </View>
-    </Pressable>
-  );
-
-  const action = (icon: SFSymbol, label: string, onPress: () => void) => (
-    <Pressable disabled={busy} onPress={onPress} style={styles.action}>
-      <View style={[styles.actionCircle, { backgroundColor: isDark ? '#ffffff14' : '#0000000b' }]}>
-        <SymbolView name={icon} size={23} weight="medium" tintColor={c.text} />
-      </View>
-      <Text numberOfLines={1} style={[styles.actionLabel, { color: c.text }]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-
-  return (
-    <Modal
-      transparent
-      animationType="none"
-      onRequestClose={() => {
-        if (!pending.current) close();
-      }}
-    >
-      <View style={{ flex: 1 }}>
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              backgroundColor: isDark ? '#0000004a' : '#0000002b',
-              opacity: progress,
-            },
-          ]}
-        />
-
-        <Pressable
-          disabled={busy}
-          onPress={() => close()}
-          accessibilityLabel="Chiudi opzioni album"
-          style={StyleSheet.absoluteFill}
-        />
-
-        <Animated.View
-          style={[
-            styles.popover,
-            {
-              right: 16,
-              top: Math.max(105, height * 0.125),
-              width: Math.min(292, width * 0.66),
-              maxHeight: Math.min(560, height * 0.69),
-              opacity: progress,
-              transform: [
-                {
-                  translateY: progress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-7, 0],
-                  }),
-                },
-                {
-                  scale: progress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.94, 1],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <GlassView
-            style={StyleSheet.absoluteFill}
-            glassEffectStyle="regular"
-            isInteractive={false}
-          />
-
-          <View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFill,
-              {
-                borderRadius: 24,
-                backgroundColor: isDark
-                  ? 'rgba(34,34,34,0.86)'
-                  : 'rgba(248,248,248,0.90)',
-              },
-            ]}
-          />
-
-          <View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFill,
-              {
-                borderRadius: 24,
-                borderWidth: 0.5,
-                borderColor: isDark ? '#ffffff32' : '#ffffffd8',
-              },
-            ]}
-          />
-
-          <ScrollView
-            bounces={false}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scroll}
-          >
-            <View style={styles.header}>
-              <Text numberOfLines={1} style={[styles.title, { color: c.text }]}>
-                {p.album.name}
-              </Text>
-              {!!p.album.artist && (
-                <Text numberOfLines={1} style={[styles.artist, { color: c.secondary }]}>
-                  {p.album.artist}
-                </Text>
-              )}
-            </View>
-
-            {busy && (
-              <View style={styles.busy}>
-                <ActivityIndicator color={c.text} size="small" />
-                <Text style={[styles.busyText, { color: c.secondary }]}>Operazione in corso…</Text>
-              </View>
-            )}
-
-            <View style={styles.actionRow}>
-              {action('play.fill', 'Riproduci', () => play())}
-              {action('text.badge.plus', 'Coda', () => play(true))}
-              {action(
-                'square.and.arrow.up',
-                'Condividi',
-                () => void perform(async () => {
-                  await Share.share({
-                    message: p.album.name + ' — ' + (p.album.artist ?? ''),
-                  });
-                })
-              )}
-            </View>
-
-            <View style={[styles.groupSeparator, { backgroundColor: c.border }]} />
-
-            {row(
-              albumFullyDownloaded ? 'checkmark.circle' : 'arrow.down.circle',
-              albumDownloadLabel,
-              downloadAlbum,
-              false,
-              albumDownloadSubtitle
-            )}
-
-            {hasLocalAlbumContent && (
-              <>
-                <View style={[styles.separatorInset, { backgroundColor: c.border }]} />
-
-                {row(
-                  'trash',
-                  albumRemoveLabel,
-                  removeAlbumFromIPhone,
-                  true,
-                  albumRemoveSubtitle
-                )}
-              </>
-            )}
-
-            <View style={[styles.separatorInset, { backgroundColor: c.border }]} />
-
-            {row('rectangle.stack', 'Apri album', () => close(() => p.onOpen()))}
-
-            <View style={[styles.separatorInset, { backgroundColor: c.border }]} />
-
-            {row('info.circle', 'Informazioni', info)}
-
-            <View style={[styles.groupSeparator, { backgroundColor: c.border }]} />
-
-            {row('trash', 'Elimina intero album dal server', remove, true)}
-          </ScrollView>
-        </Animated.View>
-      </View>
-    </Modal>
-  );
+  return <FloatingMenu onClose={p.onClose} busy={busy}>
+    {busy && <ActivityIndicator color={c.text} style={{ padding: 12 }} />}
+    <MenuQuickActions>
+      <MenuQuickAction icon={albumFullyDownloaded ? 'checkmark.circle.fill' : 'arrow.down.circle.fill'} label={albumFullyDownloaded ? 'Scaricato' : 'Scarica'} onPress={downloadAlbum} disabled={busy} />
+      <MenuQuickAction icon="play.fill" label="Riproduci" onPress={() => play()} disabled={busy} />
+      <MenuQuickAction icon="square.and.arrow.up.fill" label="Condividi" onPress={() => void perform(async () => { await Share.share({ message: p.album.name + ' — ' + (p.album.artist ?? '') }); })} disabled={busy} />
+    </MenuQuickActions>
+    <MenuSeparator />
+    <MenuRow icon="arrow.down.circle" label={albumDownloadLabel} subtitle={albumDownloadSubtitle} onPress={downloadAlbum} disabled={busy} />
+    {hasLocalAlbumContent && <MenuRow icon="trash" label={albumRemoveLabel} subtitle={albumRemoveSubtitle} onPress={removeAlbumFromIPhone} destructive disabled={busy} />}
+    <MenuSeparator />
+    <MenuRow icon="text.line.last.and.arrowtriangle.forward" label="Aggiungi alla coda" onPress={() => play(true)} disabled={busy} />
+    <MenuRow icon="square.stack" label="Apri album" onPress={() => close(p.onOpen)} disabled={busy} />
+    <MenuRow icon="info.circle" label="Informazioni" onPress={info} disabled={busy} />
+    <MenuSeparator />
+    <MenuRow icon="trash" label="Elimina intero album dal server" onPress={remove} destructive disabled={busy} />
+  </FloatingMenu>;
 }
-
-const styles = StyleSheet.create({
-  popover: {
-    position: 'absolute',
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: 'transparent',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 18,
-  },
-  scroll: {
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  header: {
-    paddingHorizontal: 15,
-    paddingTop: 8,
-    paddingBottom: 10,
-  },
-  title: {
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-  },
-  artist: {
-    marginTop: 2,
-    fontSize: 12,
-    lineHeight: 15,
-  },
-  busy: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-  },
-  busyText: {
-    fontSize: 12,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-evenly',
-    paddingHorizontal: 8,
-    paddingTop: 3,
-    paddingBottom: 10,
-  },
-  action: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    minWidth: 0,
-  },
-  actionCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionLabel: {
-    marginTop: 5,
-    fontSize: 10.5,
-    lineHeight: 12,
-    fontWeight: '500',
-    letterSpacing: -0.15,
-    maxWidth: 72,
-    textAlign: 'center',
-  },
-  row: {
-    minHeight: 47,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-  iconBox: {
-    width: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 7,
-  },
-  rowText: {
-    fontSize: 15.5,
-    lineHeight: 19,
-    fontWeight: '500',
-    letterSpacing: -0.2,
-  },
-  subtitle: {
-    marginTop: 1,
-    fontSize: 11.5,
-    lineHeight: 14,
-    fontWeight: '400',
-  },
-  separatorInset: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 49,
-  },
-  groupSeparator: {
-    height: StyleSheet.hairlineWidth,
-    marginVertical: 5,
-  },
-});
-
-import Pressable from './SpringPressable';

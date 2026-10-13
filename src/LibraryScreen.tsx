@@ -1,3 +1,5 @@
+import FloatingMenu from './FloatingMenu';
+import { MenuRow } from './MenuControls';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -157,7 +159,6 @@ export default function LibraryScreen(p: Props) {
   const [sortMode, setSortMode] = useState<'default' | 'title' | 'artist'>('default');
   const [dateOrder, setDateOrder] = useState<'newest' | 'oldest'>('newest');
   const [topMenu, setTopMenu] = useState<'filter' | 'sort' | 'dateOrder' | 'page' | null>(null);
-  const topMenuProgress = useRef(new Animated.Value(0)).current;
   const [artistDetail, setArtistDetail] = useState<Entry | null>(null);
   const [artistData, setArtistData] = useState<Data>({});
   const [artistBusy, setArtistBusy] = useState(false);
@@ -178,8 +179,7 @@ export default function LibraryScreen(p: Props) {
     setSortMode('default');
     setDateOrder('newest');
     setTopMenu(null);
-    topMenuProgress.setValue(0);
-  }, [page.endpoint, page.type, topMenuProgress]);
+  }, [page.endpoint, page.type]);
 
   useEffect(() => {
     const version = ++generation.current;
@@ -321,7 +321,6 @@ export default function LibraryScreen(p: Props) {
 
   function openArtist(entry: Entry) {
     setTopMenu(null);
-    topMenuProgress.setValue(0);
     setArtistDetail(entry);
     setArtistData({});
     setArtistError('');
@@ -450,55 +449,8 @@ export default function LibraryScreen(p: Props) {
       });
   }
 
-  function closeTopMenu(after?: () => void) {
-    Animated.timing(topMenuProgress, {
-      toValue: 0,
-      duration: 145,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (!finished) return;
-      setTopMenu(null);
-      after?.();
-    });
-  }
-
-  function openTopMenu(kind: 'filter' | 'sort' | 'page') {
-    if (topMenu === kind) {
-      closeTopMenu();
-      return;
-    }
-
-    if (topMenu) {
-      closeTopMenu(() => {
-        topMenuProgress.setValue(0);
-        setTopMenu(kind);
-        requestAnimationFrame(() => {
-          Animated.spring(topMenuProgress, {
-            toValue: 1,
-            damping: 20,
-            stiffness: 255,
-            mass: 0.72,
-            useNativeDriver: true,
-          }).start();
-        });
-      });
-      return;
-    }
-
-    topMenuProgress.setValue(0);
-    setTopMenu(kind);
-
-    requestAnimationFrame(() => {
-      Animated.spring(topMenuProgress, {
-        toValue: 1,
-        damping: 20,
-        stiffness: 255,
-        mass: 0.72,
-        useNativeDriver: true,
-      }).start();
-    });
-  }
+  function closeTopMenu(after?: () => void) { setTopMenu(null); after?.(); }
+  function openTopMenu(kind: 'filter' | 'sort' | 'page') { setTopMenu(old => old === kind ? null : kind); }
 
   function changeSongView(type: 'songs' | 'favorites' | 'downloads') {
     const next: Page =
@@ -561,17 +513,7 @@ export default function LibraryScreen(p: Props) {
       return;
     }
 
-    Alert.alert(page.title, undefined, [
-      {
-        text: 'Ordina',
-        onPress: openSortMenu,
-      },
-      {
-        text: 'Impostazioni',
-        onPress: p.onSettings,
-      },
-      { text: 'Annulla', style: 'cancel' },
-    ]);
+    openTopMenu('page');
   }
 
   async function more() {
@@ -1018,131 +960,15 @@ export default function LibraryScreen(p: Props) {
   const dateOrderMenu = topMenu === 'dateOrder';
   const pageMenu = topMenu === 'page';
 
-  const topPopoverWidth = Math.min(244, Math.max(220, width - 132));
-
-  const filterRow = (
-    icon: SFSymbol,
-    label: string,
-    selected: boolean,
-    action: () => void
-  ) => (
-    <Pressable
-      accessibilityRole="button"
-      onPress={action}
-      style={topStyles.filterRow}
-    >
-      <View style={topStyles.checkSlot}>
-        {selected && (
-          <SymbolView
-            name="checkmark"
-            size={15}
-            weight="semibold"
-            tintColor={c.text}
-          />
-        )}
-      </View>
-
-      <View style={topStyles.menuIconSlot}>
-        <SymbolView
-          name={icon}
-          size={18}
-          weight="regular"
-          tintColor={c.text}
-        />
-      </View>
-
-      <Text
-        numberOfLines={1}
-        style={[topStyles.menuLabel, { color: c.text }]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-
-  const sortRow = (
-    label: string,
-    value: 'default' | 'title' | 'artist',
-    subtitle?: string,
-    options?: { selected?: boolean; onPress?: () => void }
-  ) => {
-    const selected = options?.selected ?? sortMode === value;
-
-    return (
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => {
-          if (options?.onPress) {
-            options.onPress();
-            return;
-          }
-          setSortMode(value);
-          closeTopMenu();
-        }}
-        style={topStyles.sortRow}
-      >
-        <View style={topStyles.sortCheckSlot}>
-          {selected && (
-            <SymbolView
-              name="checkmark"
-              size={15}
-              weight="semibold"
-              tintColor={c.text}
-            />
-          )}
-        </View>
-
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text
-            numberOfLines={1}
-            style={[topStyles.menuLabel, { color: c.text }]}
-          >
-            {label}
-          </Text>
-
-          {!!subtitle && (
-            <Text
-              numberOfLines={1}
-              style={[
-                topStyles.menuSubtitle,
-                { color: c.secondary },
-              ]}
-            >
-              {subtitle}
-            </Text>
-          )}
-        </View>
-      </Pressable>
-    );
-  };
-
-  const pageActionRow = (
-    icon: SFSymbol,
-    label: string,
-    action: () => void
-  ) => (
-    <Pressable
-      accessibilityRole="button"
-      onPress={action}
-      style={topStyles.pageActionRow}
-    >
-      <View style={topStyles.pageActionIcon}>
-        <SymbolView
-          name={icon}
-          size={18}
-          weight="regular"
-          tintColor={c.text}
-        />
-      </View>
-
-      <Text
-        numberOfLines={1}
-        style={[topStyles.menuLabel, { color: c.text }]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
+  const filterRow = (icon: SFSymbol, label: string, selected: boolean, action: () => void) =>
+    <MenuRow icon={selected ? 'checkmark.circle.fill' : icon} label={label} onPress={action} />;
+  const sortRow = (label: string, value: 'default' | 'title' | 'artist', subtitle?: string, options?: { selected?: boolean; onPress?: () => void }) =>
+    <MenuRow icon={(options?.selected ?? sortMode === value) ? 'checkmark' : 'arrow.up.arrow.down'} label={label} subtitle={subtitle} onPress={() => {
+      if (options?.onPress) { options.onPress(); return; }
+      setSortMode(value); closeTopMenu();
+    }} />;
+  const pageActionRow = (icon: SFSymbol, label: string, action: () => void) =>
+    <MenuRow icon={icon} label={label} onPress={action} />;
 
   return (
     <View style={{ flex: 1 }}>
@@ -1819,65 +1645,7 @@ export default function LibraryScreen(p: Props) {
         );
       })()}
 
-      {topMenu && (songPage || collectionPage) && (
-        <>
-          <Pressable
-            accessibilityLabel="Chiudi menu"
-            onPress={() => closeTopMenu()}
-            style={[StyleSheet.absoluteFill, topStyles.menuDismiss]}
-          />
-
-          <Animated.View
-            style={[
-              topStyles.popoverShadow,
-              {
-                top: 7,
-                right: 18,
-                width: topPopoverWidth,
-                opacity: topMenuProgress,
-                transform: [
-                  {
-                    translateX: topMenuProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [58, 0],
-                    }),
-                  },
-                  {
-                    translateY: topMenuProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-58, 0],
-                    }),
-                  },
-                  {
-                    scale: topMenuProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.26, 1],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <View
-              style={[
-                topStyles.popoverClip,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(31,31,33,0.72)'
-                    : 'rgba(246,246,248,0.78)',
-                  borderColor: isDark
-                    ? 'rgba(255,255,255,0.13)'
-                    : 'rgba(0,0,0,0.10)',
-                },
-              ]}
-            >
-              <GlassView
-                pointerEvents="none"
-                glassEffectStyle="regular"
-                isInteractive={false}
-                style={StyleSheet.absoluteFill}
-              />
-
+      {topMenu && <FloatingMenu onClose={() => closeTopMenu()}>
               {filterMenu && (
                 <>
                   {filterRow(
@@ -1958,7 +1726,7 @@ export default function LibraryScreen(p: Props) {
 
               {sortMenu && (
                 <>
-                  {songPage && (
+                  {(songPage || !collectionPage) && (
                     <>
                       {sortRow('Titolo', 'title')}
 
@@ -2039,27 +1807,12 @@ export default function LibraryScreen(p: Props) {
                 </>
               )}
 
-              {pageMenu && collectionPage && (
+              {pageMenu && (
                 <>
                   {pageActionRow(
                     'arrow.up.arrow.down',
                     'Ordina',
-                    () => {
-                      closeTopMenu(() => {
-                        topMenuProgress.setValue(0);
-                        setTopMenu('sort');
-
-                        requestAnimationFrame(() => {
-                          Animated.spring(topMenuProgress, {
-                            toValue: 1,
-                            damping: 20,
-                            stiffness: 255,
-                            mass: 0.72,
-                            useNativeDriver: true,
-                          }).start();
-                        });
-                      });
-                    }
+                    () => setTopMenu('sort')
                   )}
 
                   <View
@@ -2076,10 +1829,9 @@ export default function LibraryScreen(p: Props) {
                   )}
                 </>
               )}
-            </View>
-          </Animated.View>
-        </>
-      )}
+
+      </FloatingMenu>}
+
     </View>
   );
 }

@@ -1,3 +1,4 @@
+import { MenuQuickAction } from './MenuControls';
 import {
   createContext,
   useContext,
@@ -243,6 +244,8 @@ export function DownloadBadge({ song }: { song: Song }) {
 }
 
 type LocalDownloadActionProps = {
+  compact?: boolean;
+  disabled?: boolean;
   song: Song;
   beforeRemove?: () => void | Promise<void>;
   afterRemove?: () => void | Promise<void>;
@@ -254,6 +257,8 @@ export function LocalDownloadAction({
   beforeRemove,
   afterRemove,
   color,
+  compact = false,
+  disabled = false,
 }: LocalDownloadActionProps) {
   const store = useTrackOffline(song.id);
   const { colors: c } = useTheme();
@@ -328,8 +333,11 @@ export function LocalDownloadAction({
       );
   };
 
+  if (compact) return <MenuQuickAction disabled={disabled} icon={saved ? 'checkmark.circle.fill' : running ? 'stop.circle.fill' : 'arrow.down.circle.fill'} label={saved ? 'Rimuovi download' : running ? 'Annulla download' : 'Scarica'} onPress={act} />;
+
   return (
     <Pressable
+      disabled={disabled}
       onPress={act}
       accessibilityRole="button"
       style={{

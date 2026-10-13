@@ -6,6 +6,7 @@ import { songPlaybackSource } from './src/songPlaybackSource';
 import { rememberTrack } from './src/listeningProfile';
 import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, PanResponder, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { coverURL, streamURL, request, type Album, type HomeResponse, type Song, type SearchResponse, type Lyrics } from './src/api';
+import { ScreenInsetsProvider } from './src/ScreenInsets';
 import SearchScreen from './src/SearchScreen';
 import PersistentScreen from './src/PersistentScreen';
 import { ScreenCache } from './src/ScreenCache';
@@ -69,9 +70,9 @@ export default function App() {
   if (migration !== 'ready') return <SafeAreaView style={{ flex: 1, backgroundColor: '#111', justifyContent: 'center', padding: 28 }}><Text style={{ color: '#fff', fontSize: 30, fontWeight: '700', marginBottom: 20 }}>Metronomy</Text>{migration === 'loading' ? <ActivityIndicator color="#ff375f" /> : <><Text style={{ color: '#fff', marginBottom: 20 }}>{migrationError}</Text><Text accessibilityRole="button" onPress={() => setMigrationRetry(v => v + 1)} style={{ color: '#ff375f', paddingVertical: 16 }}>Riprova migrazione</Text></>}</SafeAreaView>;
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider>
+      <ScreenInsetsProvider><ThemeProvider>
         <AccountGate />
-      </ThemeProvider>
+      </ThemeProvider></ScreenInsetsProvider>
     </GestureHandlerRootView>
   );
 }

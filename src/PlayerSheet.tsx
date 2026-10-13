@@ -10,7 +10,8 @@ import Reanimated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { GlassView } from 'expo-glass-effect';
+import FloatingMenu from './FloatingMenu';
+import { MenuRow, MenuQuickAction, MenuQuickActions, MenuSeparator } from './MenuControls';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
 import type { AudioPlayer } from 'expo-audio';
@@ -19,7 +20,7 @@ import { usePlaybackSignals, useVisiblePlaybackStatus } from './usePlaybackSigna
 import MusicSlider from './MusicSlider';
 import { useMotionPreferences } from './motionPreferences';
 import { playbackTimeline, seekPlayback, invalidatePlaybackSeeks } from './playbackTimeline';
-import { useTheme } from './theme';
+import { DarkSurface, useTheme } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
 import NetworkActions from './NetworkActions';
 import { songCatalogItem } from './networkCatalog';
@@ -344,7 +345,6 @@ export default function PlayerSheet(p: Props) {
   const queueUnmountTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [menu, setMenu] = useState(false);
   const [networkMenu, setNetworkMenu] = useState(false);
-  const menuProgress = useRef(new Animated.Value(0)).current;
   const queueProgress = useRef(new Animated.Value(0)).current;
   const openProgress = useSharedValue(0);
   const sheetY = useSharedValue(0);
@@ -377,9 +377,6 @@ export default function PlayerSheet(p: Props) {
   const playerSecondary = 'rgba(255,255,255,0.72)';
   const playerMuted = 'rgba(255,255,255,0.30)';
   const playerTrack = 'rgba(255,255,255,0.24)';
-  const menuText = '#ffffff';
-  const menuSecondary = 'rgba(255,255,255,0.70)';
-  const menuSeparator = 'rgba(255,255,255,0.16)';
   useEffect(() => {
     mounted.current = true;
 
@@ -393,7 +390,7 @@ export default function PlayerSheet(p: Props) {
     };
   }, []);
   useEffect(() => { setStarred(!!p.song.starred); }, [p.song.id, p.song.starred]);
-  useEffect(() => { setMenu(false); setNetworkMenu(false); setPlaylists(null); menuProgress.setValue(0); }, [p.song.id]);
+  useEffect(() => { setMenu(false); setNetworkMenu(false); setPlaylists(null);  }, [p.song.id]);
   useEffect(() => {
     if (p.visible) {
       closingPlayer.current = false;
@@ -408,7 +405,7 @@ export default function PlayerSheet(p: Props) {
       });
     } else {
       setMenu(false);
-      menuProgress.setValue(0);
+
       sheetY.value = 0;
       openProgress.value = 0;
       closingPlayer.current = false;
@@ -416,7 +413,7 @@ export default function PlayerSheet(p: Props) {
       setQueueMounted(false);
       queueProgress.setValue(0);
     }
-  }, [p.visible, height, menuProgress, openProgress, queueProgress, sheetY]);
+  }, [p.visible, height, openProgress, queueProgress, sheetY]);
 
   useEffect(() => {
     if (queueUnmountTimer.current) {
@@ -468,34 +465,13 @@ export default function PlayerSheet(p: Props) {
     queueHoverIndex,
   ]);
 
-  useEffect(() => {
-    if (!menu) return;
-    menuProgress.setValue(0);
-    Animated.spring(menuProgress, {
-      toValue: 1,
-      useNativeDriver: true,
-      damping: 19,
-      stiffness: 240,
-      mass: 0.75,
-    }).start();
-  }, [menu, menuProgress]);
 
   const openMenu = () => {
     if (p.song.qobuzId) { setNetworkMenu(true); return; }
     setPlaylists(null);
     setMenu(true);
   };
-  const closeMenu = (after?: () => void) => {
-    Animated.timing(menuProgress, {
-      toValue: 0,
-      duration: 130,
-      useNativeDriver: true,
-    }).start(() => {
-      setMenu(false);
-      setPlaylists(null);
-      after?.();
-    });
-  };
+  const closeMenu = (after?: () => void) => { setMenu(false); setPlaylists(null); after?.(); };
 
   const dismissPlayer = (velocity = 0) => {
     if (closingPlayer.current) return;
@@ -732,64 +708,10 @@ export default function PlayerSheet(p: Props) {
   const unavailable = (title: string) =>
     Alert.alert(title, 'Questa azione non è ancora collegata al backend dell’app.');
 
-  const menuRow = (
-    name: SFSymbol,
-    label: string,
-    action: () => void,
-    destructive = false,
-    subtitle?: string
-  ) => (
-    <Pressable onPress={action} style={menuStyles.row}>
-      <View style={menuStyles.rowIcon}>
-        <SymbolView
-          name={name}
-          size={17}
-          weight="regular"
-          tintColor={destructive ? '#ff453a' : menuText}
-        />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text
-          numberOfLines={1}
-          style={[
-            menuStyles.rowLabel,
-            { color: destructive ? '#ff453a' : menuText },
-          ]}
-        >
-          {label}
-        </Text>
-        {!!subtitle && (
-          <Text
-            numberOfLines={1}
-            style={[menuStyles.rowSubtitle, { color: menuSecondary }]}
-          >
-            {subtitle}
-          </Text>
-        )}
-      </View>
-    </Pressable>
-  );
-
-  const menuAction = (
-    name: SFSymbol,
-    label: string,
-    action: () => void,
-    disabled = false
-  ) => (
-    <Pressable
-      disabled={disabled}
-      onPress={action}
-      style={[menuStyles.action, disabled && { opacity: 0.35 }]}
-    >
-      <SymbolView name={name} size={19} weight="medium" tintColor={menuText} />
-      <Text
-        numberOfLines={2}
-        style={[menuStyles.actionLabel, { color: menuText }]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
+  const menuRow = (name: SFSymbol, label: string, action: () => void, destructive = false, subtitle?: string) =>
+    <MenuRow icon={name} label={label} onPress={action} destructive={destructive} subtitle={subtitle} />;
+  const menuAction = (name: SFSymbol, label: string, action: () => void, disabled = false) =>
+    <MenuQuickAction icon={name} label={label} onPress={action} disabled={disabled} />;
 
   const currentCover = coverURL(p.song.coverArt) ?? p.artworkUri;
   const upNext = queueMounted ? p.queue.slice(Math.max(0, p.index + 1)) : [];
@@ -1462,93 +1384,7 @@ export default function PlayerSheet(p: Props) {
             )}
           </View>
 
-          {/* Apple Music-like contextual menu. */}
-          {menu && (
-            <>
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  playerStyles.menuBackdrop,
-                  { opacity: menuProgress },
-                ]}
-              />
-
-              <Pressable
-                accessibilityLabel="Chiudi menu"
-                onPress={() => closeMenu()}
-                style={StyleSheet.absoluteFill}
-              />
-
-              <Animated.View
-                style={[
-                  menuStyles.popover,
-                  {
-                    top: 58,
-                    right: 10,
-                    width: Math.min(248, width * 0.645),
-                    maxHeight: Math.min(650, height * 0.77),
-                    opacity: menuProgress,
-                    transform: [
-                      {
-                        translateX: menuProgress.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [78, 0],
-                        }),
-                      },
-                      {
-                        translateY: menuProgress.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [152, 0],
-                        }),
-                      },
-                      {
-                        scale: menuProgress.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0.18, 1],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                {!!uri && (
-                  <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-                    <Image
-                      source={{ uri }}
-                      blurRadius={64}
-                      resizeMode="cover"
-                      style={[StyleSheet.absoluteFill, menuStyles.menuArtwork]}
-                    />
-                  </View>
-                )}
-
-                <GlassView
-                  pointerEvents="none"
-                  style={StyleSheet.absoluteFill}
-                  glassEffectStyle="regular"
-                  isInteractive={false}
-                />
-
-                <LinearGradient
-                  pointerEvents="none"
-                  colors={[
-                    'rgba(74,31,91,0.38)',
-                    'rgba(64,29,82,0.55)',
-                    'rgba(42,22,61,0.78)',
-                  ]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-
-                <View pointerEvents="none" style={[StyleSheet.absoluteFill, menuStyles.menuBorder]} />
-
-                <ScrollView
-                  bounces={false}
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={menuStyles.scrollContent}
-                >
+          {menu && <DarkSurface><FloatingMenu onClose={() => closeMenu()} busy={playlistBusy}>
                   {playlists !== null ? (
                     <View pointerEvents={playlistBusy ? 'none' : 'auto'}>
                       {menuRow(
@@ -1556,7 +1392,7 @@ export default function PlayerSheet(p: Props) {
                         'Indietro',
                         () => setPlaylists(null)
                       )}
-                      <View style={menuStyles.separator} />
+                      <MenuSeparator />
                       {menuRow(
                         'plus.circle',
                         'Nuova playlist',
@@ -1572,7 +1408,7 @@ export default function PlayerSheet(p: Props) {
                       )}
                       {playlists.map(item => (
                         <View key={item.id}>
-                          <View style={menuStyles.separatorInset} />
+                          <MenuSeparator />
                           {menuRow(
                             'music.note.list',
                             item.name,
@@ -1583,8 +1419,9 @@ export default function PlayerSheet(p: Props) {
                     </View>
                   ) : (
                     <>
-<View style={menuStyles.actionRow}>
-                        
+                      <MenuQuickActions>
+                        <LocalDownloadAction compact song={p.song} beforeRemove={beforeRemoveLocal} afterRemove={afterRemoveLocal} />
+
                         {menuAction(
                           starred ? 'star.fill' : 'star',
                           starred
@@ -1601,22 +1438,9 @@ export default function PlayerSheet(p: Props) {
                           'Condividi',
                           () => share(p.song.title + ' — ' + p.song.artist)
                         )}
-                      </View>
+                      </MenuQuickActions>
 
-                      <View style={menuStyles.groupSeparator} />
-
-                      <View style={menuStyles.downloadSlot}>
-                        <View style={menuStyles.downloadShift}>
-                          <LocalDownloadAction
-                            song={p.song}
-                            color={menuText}
-                            beforeRemove={beforeRemoveLocal}
-                            afterRemove={afterRemoveLocal}
-                          />
-                        </View>
-                      </View>
-
-                      <View style={menuStyles.separatorInset} />
+                      <MenuSeparator />
 
                       {menuRow(
                         'pin',
@@ -1628,7 +1452,7 @@ export default function PlayerSheet(p: Props) {
                             : unavailable('Metti brano in evidenza');
                         }
                       )}
-                      <View style={menuStyles.separatorInset} />
+                      <MenuSeparator />
                       {menuRow(
                         'music.note.list',
                         'Aggiungi alla playlist',
@@ -1636,7 +1460,7 @@ export default function PlayerSheet(p: Props) {
                           if (!playlistBusy) void choosePlaylist();
                         }
                       )}
-                      <View style={menuStyles.separatorInset} />
+                      <MenuSeparator />
                       {menuRow(
                         'antenna.radiowaves.left.and.right' as SFSymbol,
                         'Crea stazione',
@@ -1647,7 +1471,7 @@ export default function PlayerSheet(p: Props) {
                             : unavailable('Crea stazione');
                         }
                       )}
-                      <View style={menuStyles.separatorInset} />
+                      <MenuSeparator />
                       {menuRow(
                         'rectangle.stack',
                         'Vai all’album',
@@ -1655,7 +1479,7 @@ export default function PlayerSheet(p: Props) {
                         false,
                         p.song.album
                       )}
-                      <View style={menuStyles.separatorInset} />
+                      <MenuSeparator />
                       {menuRow(
                         'person.crop.circle',
                         'Vai all’artista',
@@ -1663,7 +1487,7 @@ export default function PlayerSheet(p: Props) {
                         false,
                         p.song.artist
                       )}
-                      <View style={menuStyles.separatorInset} />
+                      <MenuSeparator />
                       {menuRow(
                         'info.circle',
                         'Visualizza info',
@@ -1672,7 +1496,7 @@ export default function PlayerSheet(p: Props) {
                           p.onCredits ? p.onCredits() : void info();
                         }
                       )}
-                      <View style={menuStyles.separatorInset} />
+                      <MenuSeparator />
                       {menuRow(
                         'quote.bubble',
                         'Condividi testo',
@@ -1686,7 +1510,7 @@ export default function PlayerSheet(p: Props) {
                           share(text);
                         }
                       )}
-                      <View style={menuStyles.separatorInset} />
+                      <MenuSeparator />
                       {menuRow(
                         'hand.thumbsdown',
                         'Meno suggerimenti',
@@ -1698,7 +1522,7 @@ export default function PlayerSheet(p: Props) {
                         }
                       )}
 
-                      <View style={menuStyles.groupSeparator} />
+                      <MenuSeparator />
 
                       {menuRow(
                         'trash',
@@ -1718,12 +1542,10 @@ export default function PlayerSheet(p: Props) {
                       )}
                     </>
                   )}
-                </ScrollView>
-              </Animated.View>
-            </>
-          )}
+
+          </FloatingMenu></DarkSurface>}
         </Reanimated.View>
-        {networkMenu && p.song.qobuzId && <NetworkActions item={songCatalogItem(p.song)} onClose={() => setNetworkMenu(false)} />}
+        {networkMenu && p.song.qobuzId && <DarkSurface><NetworkActions item={songCatalogItem(p.song)} onClose={() => setNetworkMenu(false)} /></DarkSurface>}
       </View>
     </Modal>
   );
@@ -2148,108 +1970,6 @@ const playerStyles = StyleSheet.create({
 
   menuBackdrop: {
     backgroundColor: 'rgba(0,0,0,0.10)',
-  },
-});
-
-const menuStyles = StyleSheet.create({
-  popover: {
-    position: 'absolute',
-    zIndex: 100,
-    borderRadius: 27,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.16)',
-    shadowColor: '#000',
-    shadowOpacity: 0.24,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 10 },
-  },
-  menuArtwork: {
-    transform: [{ scale: 1.34 }],
-    opacity: 0.96,
-  },
-  menuBorder: {
-    borderRadius: 27,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.20)',
-  },
-  scrollContent: {
-    paddingTop: 10,
-    paddingBottom: 12,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: 7,
-    paddingBottom: 8,
-  },
-  action: {
-    flex: 1,
-    minHeight: 60,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 5,
-    paddingTop: 3,
-    paddingHorizontal: 2,
-  },
-  actionLabel: {
-    textAlign: 'center',
-    fontSize: 9.5,
-    lineHeight: 12,
-    fontWeight: '500',
-  },
-  downloadSlot: {
-    minHeight: 50,
-    justifyContent: 'center',
-    overflow: 'visible',
-  },
-  downloadShift: {
-    // Same correction used by SongActions: LocalDownloadAction keeps its own
-    // logic and internal layout, but its visible row is moved onto the menu grid.
-    marginLeft: 17,
-    marginRight: 20,
-  },
-  row: {
-    minHeight: 50,
-    paddingLeft: 16,
-    paddingRight: 16,
-    paddingVertical: 7,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rowIcon: {
-    width: 24,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  rowLabel: {
-    fontSize: 14.5,
-    lineHeight: 17,
-    fontWeight: '400',
-    letterSpacing: -0.12,
-  },
-  rowSubtitle: {
-    marginTop: 1,
-    fontSize: 10.5,
-    lineHeight: 13,
-    fontWeight: '400',
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  separatorInset: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 50,
-    marginRight: 16,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-  },
-  groupSeparator: {
-    height: StyleSheet.hairlineWidth,
-    marginVertical: 4,
-    backgroundColor: 'rgba(255,255,255,0.14)',
   },
 });
 
