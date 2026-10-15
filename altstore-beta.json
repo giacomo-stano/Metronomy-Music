@@ -21,6 +21,16 @@
       "versions": [
         {
           "version": "0.2.2",
+          "buildVersion": "45.1",
+          "marketingVersion": "0.2.2 Beta (45.1)",
+          "date": "2026-10-15T17:07:15.343Z",
+          "localizedDescription": "velocizzazione app, ordinamento e carica altro",
+          "downloadURL": "https://github.com/giacomo-stano/Metronomy-Music/releases/download/v0.2.2-beta.45.1/Metronomy-Beta.ipa",
+          "size": 16736088,
+          "minOSVersion": "16.4"
+        },
+        {
+          "version": "0.2.2",
           "buildVersion": "44.1",
           "marketingVersion": "0.2.2 Beta (44.1)",
           "date": "2026-10-13T19:15:41.179Z",
