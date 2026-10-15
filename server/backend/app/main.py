@@ -14,6 +14,7 @@ from .config import settings
 from .imports import import_queue
 from .models import ImportRequest, ImportRequestCreate
 from .navidrome import navidrome
+from .library_order import ordered_songs
 from .lyrics_provider import lrclib, LyricsUnavailable
 from . import network, file_ops, album_ops, storage, settings_info
 from .sessions import authenticate as require_api_key, router as auth_router, username
@@ -63,6 +64,7 @@ def song(item: dict) -> dict:
         "track": item.get("track"), "year": item.get("year"),
         "albumId": item.get("albumId"), "artistId": item.get("artistId"),
         "starred": bool(item.get("starred")),
+        "created": item.get("created") or item.get("createdAt"),
     }
 
 
@@ -80,10 +82,29 @@ async def recent_listening(_: None = Depends(require_api_key)):
 
 
 @app.get('/library/songs')
-async def library_songs(offset: int = Query(0, ge=0), _: None = Depends(require_api_key)):
-    result = await navidrome.json('search3', {'query': '', 'songCount': '100', 'songOffset': str(offset), 'albumCount': '0', 'artistCount': '0'})
-    items = result.get('searchResult3', {}).get('song', [])
-    return {'songs': [song(item) for item in items], 'hasMore': len(items) == 100}
+async def library_songs(offset: int = Query(0, ge=0),
+                        sort: str = Query('newest', pattern='^(newest|oldest|title|artist)$'),
+                        _: None = Depends(require_api_key)):
+    if settings.multi_user:
+        # The native endpoint sorts the entire accessible library in the database.
+        # Use the current user's token, never the administrator's credentials.
+        field = 'createdAt' if sort in ('newest', 'oldest') else sort
+        items = await navidrome.native('song', {
+            '_start': offset, '_end': offset + 101,
+            '_sort': field, '_order': 'DESC' if sort == 'newest' else 'ASC',
+        })
+        if not isinstance(items, list) or any(not isinstance(i, dict) or not i.get('id') for i in items):
+            raise HTTPException(502, 'Risposta libreria non valida.')
+        items = [{**item, 'coverArt': item.get('coverArt') or item.get('albumId'),
+                  'track': item.get('trackNumber')} for item in items]
+    else:
+        # Legacy API-key installs have no native user session. Sort the complete
+        # authorized Subsonic index, not just the first search3 result page.
+        from .library_match import library
+        items = ordered_songs(await library.read(), sort)[offset:offset + 101]
+    page = items[:100]
+    return {'songs': [song(item) for item in page], 'hasMore': len(items) > 100,
+            'nextOffset': offset + len(page)}
 
 
 @app.get('/library/artists')
@@ -94,9 +115,11 @@ async def library_artists(_: None = Depends(require_api_key)):
 
 
 @app.get('/library/favorites')
-async def library_favorites(_: None = Depends(require_api_key)):
+async def library_favorites(sort: str = Query('newest', pattern='^(newest|oldest|title|artist)$'),
+                            _: None = Depends(require_api_key)):
     result = await navidrome.json('getStarred2')
-    return {'songs': [song({**item, 'starred': True}) for item in result.get('starred2', {}).get('song', [])], 'hasMore': False}
+    items = ordered_songs(result.get('starred2', {}).get('song', []), sort)
+    return {'songs': [song({**item, 'starred': True}) for item in items], 'hasMore': False}
 
 
 @app.get('/songs/{song_id}/offline-info')
@@ -251,10 +274,10 @@ def upstream_headers(response: httpx.Response) -> dict[str, str]:
 
 
 @app.get('/albums')
-async def albums(offset: int = Query(0, ge=0), sort: str = Query('alphabeticalByName', pattern='^(alphabeticalByName|newest)$'), _: None = Depends(require_api_key)) -> dict:
+async def albums(offset: int = Query(0, ge=0), sort: str = Query('alphabeticalByName', pattern='^(alphabeticalByName|alphabeticalByArtist|newest)$'), _: None = Depends(require_api_key)) -> dict:
     result = await navidrome.json('getAlbumList2', {'type': sort, 'offset': str(offset), 'size': '50'})
     items = result.get('albumList2', {}).get('album', [])
-    return {'albums': items, 'hasMore': len(items) == 50}
+    return {'albums': items, 'hasMore': len(items) == 50, 'nextOffset': offset + len(items)}
 
 
 @app.get('/albums/{album_id}')

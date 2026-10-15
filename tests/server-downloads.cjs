@@ -72,14 +72,14 @@ const job = { id: 'job1', target: 'track:1', destination: 'giacomo', status: 'qu
   visit(ast); assert(initializer);
   let memo;
   const scrollOffsets = { current: { albums: 0 } };
-  const context = { scrollOffsets, page: { endpoint: 'albums' }, grid: true, useMemo: (fn, deps) => { if (!memo || deps.some((d, i) => d !== memo.deps[i])) memo = { deps, value: fn() }; return memo.value; } };
+  const context = { scrollOffsets, listKey: 'albums', grid: true, useMemo: (fn, deps) => { if (!memo || deps.some((d, i) => d !== memo.deps[i])) memo = { deps, value: fn() }; return memo.value; } };
   const initial = vm.runInNewContext(initializer, context);
   for (let tick = 1; tick <= 100; tick++) {
     scrollOffsets.current.albums = tick * 25;
     assert.equal(vm.runInNewContext(initializer, context), initial, 'audio renders must never republish a scroll offset');
   }
-  context.page = { endpoint: 'songs' }; context.grid = false; vm.runInNewContext(initializer, context);
-  context.page = { endpoint: 'albums' }; context.grid = true;
+  context.listKey = 'songs'; context.grid = false; vm.runInNewContext(initializer, context);
+  context.listKey = 'albums'; context.grid = true;
   assert.equal(vm.runInNewContext(initializer, context).y, 2500, 'returning to the album list restores its saved position');
   assert(source.includes('contentOffset={initialScrollOffset}'));
   for (const file of ['CatalogSearchResults', 'CatalogRows', 'CatalogBrowser', 'CatalogAlbumsPage', 'NetworkActions', 'PlayerSheet']) assert(fs.readFileSync('src/' + file + '.tsx', 'utf8').includes('ServerDownloadBadge'), file);

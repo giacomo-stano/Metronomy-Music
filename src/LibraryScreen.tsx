@@ -26,6 +26,7 @@ import { DownloadBadge, useOffline } from './OfflineDownloads';
 import { preloadAlbumSongs } from './albumPrefetch';
 import NowPlayingWaves from './NowPlayingWaves';
 import { ScreenCache } from './ScreenCache';
+import { libraryEndpoint, mergeLibraryItems, nextLibraryPage, orderLocalSongs } from './libraryList';
 
 type Page = {
   title: string;
@@ -150,7 +151,7 @@ export default function LibraryScreen(p: Props) {
   const [data, setDataState] = useState<Data>({});
   const setData = (value: Data | ((previous: Data) => Data)) => setDataState(previous => {
     const next = typeof value === 'function' ? value(previous) : value;
-    cache.set(page.endpoint, next);
+    cache.set(endpoint, next);
     return next;
   });
   const [busy, setBusy] = useState(false);
@@ -158,6 +159,15 @@ export default function LibraryScreen(p: Props) {
   const [retry, setRetry] = useState(0);
   const [sortMode, setSortMode] = useState<'default' | 'title' | 'artist'>('default');
   const [dateOrder, setDateOrder] = useState<'newest' | 'oldest'>('newest');
+  const order = sortMode === 'default' ? dateOrder : sortMode;
+  const endpoint = libraryEndpoint(page.endpoint, page.type, order);
+  const listKey = page.type + ':' + endpoint + ':' + order;
+  const requestKey = listKey + ':' + p.revision + ':' + retry;
+  const [loadedKey, setLoadedKey] = useState('');
+  const [moreBusy, setMoreBusy] = useState(false);
+  const [moreError, setMoreError] = useState('');
+  const requestedOffsets = useRef(new Set<number>());
+  const failedOffset = useRef<number | null>(null);
   const [topMenu, setTopMenu] = useState<'filter' | 'sort' | 'dateOrder' | 'page' | null>(null);
   const [artistDetail, setArtistDetail] = useState<Entry | null>(null);
   const [artistData, setArtistData] = useState<Data>({});
@@ -184,13 +194,18 @@ export default function LibraryScreen(p: Props) {
   useEffect(() => {
     const version = ++generation.current;
 
+    loadingMore.current = false;
+    requestedOffsets.current.clear();
+    failedOffset.current = null;
+    setMoreBusy(false);
+    setMoreError('');
     if (!p.active) return;
-    const pageKey = page.type + ':' + page.endpoint;
+    const pageKey = listKey;
     const samePage = displayedPage.current === pageKey;
     displayedPage.current = pageKey;
     cache.useScope(String(p.revision) + ':' + retry);
-    const cached = cache.peek(page.endpoint);
-    if (cached) { setDataState(cached); setBusy(false); setError(''); return; }
+    const cached = cache.peek(endpoint);
+    if (cached) { setDataState(cached); setLoadedKey(requestKey); setBusy(false); setError(''); return; }
     if (!samePage) setDataState({});
     setBusy(true);
     setError('');
@@ -200,9 +215,10 @@ export default function LibraryScreen(p: Props) {
 
     const load = async () => {
       try {
-        const result = await cache.get(page.endpoint, () => request<Data>(page.endpoint, 60000));
+        const result = await cache.get(endpoint, () => request<Data>(endpoint, 60000));
 
         if (version !== generation.current) return;
+        setLoadedKey(requestKey);
 
         if (page.type === 'favorites') {
           setData({
@@ -232,7 +248,7 @@ export default function LibraryScreen(p: Props) {
     return () => {
       generation.current++;
     };
-  }, [page, retry, p.revision, p.active, cache]);
+  }, [page, endpoint, listKey, requestKey, retry, p.revision, p.active, cache]);
 
   const albums = useMemo(() => data.albums ?? [], [data.albums]);
   const songs = useMemo(() => page.type === 'downloads' ? Object.values(offline.tracks).sort((a, b) => b.savedAt - a.savedAt).map(t => t.song) : data.songs ?? [], [page.type, offline, offlineRevision, data.songs]);
@@ -240,7 +256,7 @@ export default function LibraryScreen(p: Props) {
   const grid = page.type === 'home' || page.type === 'albums';
   // This is an initial offset for the keyed list, not a controlled scroll value.
   // Re-publishing the last JS scroll event on each audio tick rewinds native momentum.
-  const initialScrollOffset = useMemo(() => ({ x: 0, y: scrollOffsets.current[page.endpoint] ?? 0 }), [page.endpoint, grid]);
+  const initialScrollOffset = useMemo(() => ({ x: 0, y: scrollOffsets.current[listKey] ?? 0 }), [listKey, grid]);
   const songPage =
     page.type === 'songs' ||
     page.type === 'downloads' ||
@@ -251,7 +267,11 @@ export default function LibraryScreen(p: Props) {
     page.type === 'artists' ||
     page.type === 'playlists';
 
-  const visibleSongs = useMemo(() => songPage
+  const visibleSongs = useMemo(() => page.endpoint === 'library/songs' || page.endpoint === 'library/favorites'
+    ? songs
+    : page.type === 'downloads'
+    ? orderLocalSongs(songs, order, Object.fromEntries(Object.values(offline.tracks).map(t => [t.song.id, t.savedAt])))
+    : songPage
     ? (() => {
         const ordered = [...songs];
 
@@ -274,29 +294,10 @@ export default function LibraryScreen(p: Props) {
 
         return dateOrder === 'oldest' ? ordered.reverse() : ordered;
       })()
-    : songs, [songPage, songs, sortMode, dateOrder]);
+    : songs, [page.endpoint, page.type, songPage, songs, sortMode, dateOrder, order, offline, offlineRevision]);
 
-  const visibleAlbums = useMemo(() => page.type === 'albums'
-    ? [...albums].sort((a, b) => {
-        if (sortMode === 'title') {
-          return a.name.localeCompare(b.name, 'it', { sensitivity: 'base' });
-        }
-
-        if (sortMode === 'artist') {
-          const artistA = a.artist ?? '';
-          const artistB = b.artist ?? '';
-          const artistOrder = artistA.localeCompare(artistB, 'it', {
-            sensitivity: 'base',
-          });
-
-          return artistOrder || a.name.localeCompare(b.name, 'it', {
-            sensitivity: 'base',
-          });
-        }
-
-        return 0;
-      })
-    : albums, [page.type, albums, sortMode]);
+  // Online albums are already globally ordered before pagination.
+  const visibleAlbums = albums;
 
   const visibleEntries = useMemo(() => collectionPage && page.type !== 'albums'
     ? [...entries].sort((a, b) => {
@@ -519,20 +520,26 @@ export default function LibraryScreen(p: Props) {
     openTopMenu('page');
   }
 
-  async function more() {
-    if (busy || loadingMore.current || !data.hasMore) return;
+  async function more(retryFailed = false) {
+    if (!p.active || busy || loadingMore.current || !data.hasMore ||
+        loadedKey !== requestKey || ((moreError || failedOffset.current !== null) && !retryFailed)) return;
+
+    const offset = data.nextOffset ?? (grid ? albums.length : songs.length);
+    // onEndReached can fire again before React commits an appended page.
+    if (requestedOffsets.current.has(offset)) return;
+    requestedOffsets.current.add(offset);
 
     loadingMore.current = true;
-    setBusy(true);
+    failedOffset.current = null;
+    setMoreBusy(true);
+    setMoreError('');
 
     const version = generation.current;
 
     try {
-      const offset = data.nextOffset ?? (grid ? albums.length : songs.length);
-
       const result = await request<Data>(
-        page.endpoint +
-          (page.endpoint.includes('?') ? '&' : '?') +
+        endpoint +
+          (endpoint.includes('?') ? '&' : '?') +
           'offset=' +
           offset,
         60000
@@ -541,22 +548,21 @@ export default function LibraryScreen(p: Props) {
       if (version === generation.current) {
         setData(old => ({
           ...result,
-          albums: [...(old.albums ?? []), ...(result.albums ?? [])],
-          songs: [
-            ...(old.songs ?? []),
-            ...(
+          ...nextLibraryPage(offset, grid ? (result.albums?.length ?? 0) : (result.songs?.length ?? 0), result.nextOffset, result.hasMore),
+          albums: mergeLibraryItems(old.albums ?? [], result.albums ?? []),
+          songs: mergeLibraryItems(old.songs ?? [],
               page.type === 'favorites'
                 ? (result.songs ?? []).filter(song => !!song.starred)
-                : (result.songs ?? [])
-            ),
-          ],
+                : (result.songs ?? [])),
         }));
       }
     } catch (e) {
       if (version === generation.current) {
-        setError(
+        requestedOffsets.current.delete(offset);
+        failedOffset.current = offset;
+        setMoreError(
           isConnectivityFailure(e)
-            ? ''
+            ? 'Connessione non disponibile'
             : e instanceof Error
               ? e.message
               : 'Connessione non riuscita'
@@ -564,7 +570,7 @@ export default function LibraryScreen(p: Props) {
       }
     } finally {
       if (version === generation.current) {
-        setBusy(false);
+        setMoreBusy(false);
         loadingMore.current = false;
       }
     }
@@ -976,7 +982,7 @@ export default function LibraryScreen(p: Props) {
   return (
     <View style={{ flex: 1 }}>
       <FlatList<Album | Song | Entry>
-      key={page.endpoint + ':' + grid}
+      key={listKey + ':' + grid}
       extraData={offlineRevision}
       data={grid ? visibleAlbums : songPage ? visibleSongs : visibleEntries}
       numColumns={grid ? 2 : 1}
@@ -988,10 +994,12 @@ export default function LibraryScreen(p: Props) {
         paddingBottom: 200,
       }}
       contentOffset={initialScrollOffset}
-      onScroll={event => { scrollOffsets.current[page.endpoint] = event.nativeEvent.contentOffset.y; p.onScroll(event); }}
+      onScroll={event => { scrollOffsets.current[listKey] = event.nativeEvent.contentOffset.y; p.onScroll(event); }}
       scrollEventThrottle={32}
       refreshing={busy && Object.keys(data).length > 0}
       onRefresh={() => setRetry(value => value + 1)}
+      onEndReached={() => void more()}
+      onEndReachedThreshold={0.6}
       onViewableItemsChanged={prefetchVisibleAlbums}
       viewabilityConfig={albumViewabilityConfig}
       keyExtractor={item => item.id}
@@ -1015,17 +1023,17 @@ export default function LibraryScreen(p: Props) {
       }
       ListFooterComponent={
         <View>
-          {busy && (
+          {(busy || moreBusy) && (
             <ActivityIndicator
               color={c.accent}
               style={{ margin: 18 }}
             />
           )}
 
-          {data.hasMore && (
+          {!!moreError && (
             <Pressable
-              disabled={busy}
-              onPress={() => void more()}
+              disabled={moreBusy}
+              onPress={() => void more(true)}
               style={{ paddingVertical: 14 }}
             >
               <Text
@@ -1035,7 +1043,7 @@ export default function LibraryScreen(p: Props) {
                   fontWeight: '500',
                 }}
               >
-                Carica altri
+                {moreError} · Riprova
               </Text>
             </Pressable>
           )}

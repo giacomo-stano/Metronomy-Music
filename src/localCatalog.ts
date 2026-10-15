@@ -1,5 +1,6 @@
 import type { Album, Song } from './api';
 import type { LocalTrack } from './offlineStore';
+import { orderLocalSongs, type LibraryOrder } from './libraryList';
 
 export function localCatalog(tracks: LocalTrack[], path: string, body?: unknown) {
   if (body !== undefined) throw new Error('Questa operazione richiede l’accesso online a Navidrome.');
@@ -9,9 +10,23 @@ export function localCatalog(tracks: LocalTrack[], path: string, body?: unknown)
   const albums = [...new Map(songs.map(s => [albumId(s), { id: albumId(s), name: s.album ?? s.title, artist: s.artist, coverArt: s.coverArt } as Album])).values()];
   const artists = [...new Map(songs.map(s => [s.artistId || s.artist, { id: s.artistId || s.artist, name: s.artist }])).values()];
   if (route === 'home') return { recentAlbums: albums, madeForYou: songs.slice(0, 20) };
-  if (route === 'albums' || route === 'library/recent') return { albums, hasMore: false };
-  if (route === 'library/songs') return { songs, hasMore: false };
-  if (route === 'library/favorites') return { songs: songs.filter(s => s.starred), hasMore: false };
+  if (route === 'albums' || route === 'library/recent') {
+    const sort = params.get('sort');
+    if (sort === 'alphabeticalByName' || sort === 'alphabeticalByArtist') {
+      albums.sort((a, b) => (sort === 'alphabeticalByArtist' ? (a.artist ?? '').localeCompare(b.artist ?? '', 'it', { sensitivity: 'base' }) : 0)
+        || a.name.localeCompare(b.name, 'it', { sensitivity: 'base' }) || a.id.localeCompare(b.id));
+    }
+    return { albums, hasMore: false };
+  }
+  if (route === 'library/songs' || route === 'library/favorites') {
+    const order = params.get('sort') ?? 'newest';
+    const validOrder: LibraryOrder = order === 'oldest' || order === 'title' || order === 'artist' ? order : 'newest';
+    const available = route === 'library/favorites' ? songs.filter(s => s.starred) : songs;
+    // Older offline metadata has no server-added date. Fall back to the known
+    // local download date, never the recording's release date.
+    const dates = Object.fromEntries(tracks.map(t => [t.song.id, Number.isFinite(Date.parse(t.song.created ?? '')) ? Date.parse(t.song.created!) : t.savedAt]));
+    return { songs: orderLocalSongs(available, validOrder, dates), hasMore: false };
+  }
   if (route === 'library/artists') return { artists };
   if (route === 'library/playlists' || route === 'playlists') return { playlists: [] };
   if (route === 'network/downloads') return { jobs: [] };
