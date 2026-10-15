@@ -45,6 +45,7 @@ class LibraryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(endpoint, 'song')
             self.assertEqual(params['_sort'], 'createdAt')
             self.assertEqual(params['_order'], 'DESC')
+            self.assertEqual(params['missing'], 'false')
             ordered = ordered_songs(native, 'newest')
             return ordered[params['_start']:params['_end']]
         with patch.object(main.settings, 'multi_user', True), patch.object(main.navidrome, 'native', AsyncMock(side_effect=upstream)) as call, patch.object(library, 'read', AsyncMock()) as legacy:
@@ -64,13 +65,36 @@ class LibraryTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(main.settings, 'multi_user', True), patch.object(main.navidrome, 'native', AsyncMock(return_value=[])) as call:
             for sort, field in [('oldest', 'createdAt'), ('title', 'title'), ('artist', 'artist')]:
                 await main.library_songs(offset=100, sort=sort)
-                self.assertEqual(call.call_args.args[1], {'_start': 100, '_end': 201, '_sort': field, '_order': 'ASC'})
+                self.assertEqual(call.call_args.args[1], {'_start': 100, '_end': 201, '_sort': field, '_order': 'ASC', 'missing': 'false'})
         for code in (401, 403, 502):
             with patch.object(main.settings, 'multi_user', True), patch.object(main.navidrome, 'native', AsyncMock(side_effect=HTTPException(code))), patch.object(library, 'read', AsyncMock()) as fallback:
                 with self.assertRaises(HTTPException) as caught:
                     await main.library_songs(offset=0, sort='newest')
                 self.assertEqual(caught.exception.status_code, code)
                 fallback.assert_not_called()
+
+    async def test_missing_songs_are_excluded_before_pagination_for_every_order(self):
+        # Navidrome retains deleted songs as missing entries. In particular,
+        # a missing-only first page must not hide valid tracks further down.
+        items = [{**item, 'missing': int(item['id']) >= 105} for item in self.tracks(210)]
+        for sort in ('newest', 'oldest', 'title', 'artist'):
+            async def upstream(endpoint, params):
+                self.assertEqual(endpoint, 'song')
+                self.assertEqual(params.get('missing'), 'false')
+                available = [item for item in items if not item['missing']]
+                ordered = ordered_songs(available, sort)
+                return ordered[params['_start']:params['_end']]
+            with patch.object(main.settings, 'multi_user', True), patch.object(main.navidrome, 'native', AsyncMock(side_effect=upstream)):
+                first = await main.library_songs(offset=0, sort=sort)
+                last = await main.library_songs(offset=first['nextOffset'], sort=sort)
+            self.assertEqual(len(first['songs']), 100)
+            self.assertTrue(first['hasMore'])
+            self.assertEqual(first['nextOffset'], 100)
+            self.assertEqual(len(last['songs']), 5)
+            self.assertEqual(last['nextOffset'], 105)
+            self.assertFalse(last['hasMore'])
+            ids = [item['id'] for page in (first, last) for item in page['songs']]
+            self.assertEqual(ids, [item['id'] for item in ordered_songs(items[:105], sort)])
 
     async def test_exact_full_page_is_terminal(self):
         with patch.object(main.settings, 'multi_user', True), patch.object(main.navidrome, 'native', AsyncMock(return_value=self.tracks(100))):

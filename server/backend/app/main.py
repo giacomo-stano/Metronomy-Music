@@ -92,6 +92,9 @@ async def library_songs(offset: int = Query(0, ge=0),
         items = await navidrome.native('song', {
             '_start': offset, '_end': offset + 101,
             '_sort': field, '_order': 'DESC' if sort == 'newest' else 'ASC',
+            # Native queries also expose missing DB entries unless excluded.
+            # Filter upstream, before offsets/lookahead, so pages remain full.
+            'missing': 'false',
         })
         if not isinstance(items, list) or any(not isinstance(i, dict) or not i.get('id') for i in items):
             raise HTTPException(502, 'Risposta libreria non valida.')

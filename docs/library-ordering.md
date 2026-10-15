@@ -9,6 +9,13 @@
   with DESC/ASC for date order, or title/artist with ASC. It uses the authenticated
   user's existing native token. Failed/denied native requests are not retried as
   an administrator. Only whitelisted song display/playback metadata is returned.
+- Native queries explicitly send `missing=false`: Navidrome can retain database
+  records for deleted files. Filtering those records must happen upstream before
+  pagination/lookahead, not after receiving a page. This is a read filter; it
+  does not purge the database, trash, or any offline iPhone copies.
+  A file deleted outside the app (or a scan denied to a non-admin) may still need
+  a Navidrome scan before it is marked missing. After scanning, refresh Brani to
+  invalidate its existing client cache. This fix needs only a bridge update.
 - Date means the Navidrome database entry's creation time, not the release year,
   file modification time, or the date a song was starred. A file appears only
   after Navidrome has scanned it. Existing DB dates cannot reconstruct a different
