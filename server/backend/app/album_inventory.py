@@ -2,7 +2,7 @@
 import re
 
 from fastapi import HTTPException
-from .library_match import same_recording
+from .library_match import RecordingIndex
 
 
 def total_tracks(album):
@@ -42,9 +42,10 @@ def inventory(album, local):
     if not total or len(tracks) != total:
         raise HTTPException(503, 'Elenco brani incompleto.')
     matches, missing = [], []
+    index = local if isinstance(local, RecordingIndex) else RecordingIndex(local)
     for track in tracks:
         recording = {**track, 'album': album}
-        match = next((song for song in local if same_recording(recording, song)), None)
+        match = index.match(recording)
         if match is None:
             missing.append(recording)
         else:

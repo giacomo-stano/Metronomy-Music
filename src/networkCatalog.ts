@@ -1,5 +1,5 @@
 import type { Song } from './api';
-export type CatalogItem = { id: string; kind: 'track' | 'album' | 'artist'; title: string; artist: string; album: string; albumId?: string | null; duration?: number; genre?: string; cover?: string; available: boolean; libraryMatch?: string | null; libraryComplete?: boolean; libraryPresentCount?: number; libraryTotalCount?: number; releaseDate?: string; trackCount?: number; artistId?: string | null; explicit?: boolean };
+export type CatalogItem = { id: string; kind: 'track' | 'album' | 'artist'; title: string; artist: string; album: string; albumId?: string | null; duration?: number; genre?: string; cover?: string; available: boolean; libraryMatch?: string | null; librarySong?: Song; libraryComplete?: boolean; libraryPresentCount?: number; libraryTotalCount?: number; releaseDate?: string; trackCount?: number; artistId?: string | null; explicit?: boolean };
 export type Catalog = { items: CatalogItem[]; hasMore: boolean; nextOffset?: number; libraryChecked: boolean; title?: string; personalized?: boolean; genres?: string[]; album?: CatalogItem };
 export type ArtistProfile = {
   artist: CatalogItem & { biography: string; biographySource: string };
@@ -20,6 +20,13 @@ export function searchItems(items: CatalogItem[], query: string): CatalogItem[] 
 export function catalogSong(item: CatalogItem): Song {
   return { id: 'qobuz:' + item.id, qobuzId: item.id, title: item.title, artist: item.artist,
     album: item.album, qobuzAlbumId: item.albumId ?? undefined, duration: item.duration ?? 0, coverArt: item.cover, genre: item.genre };
+}
+// The bridge already verified this copy using the current account's library.
+// Old bridges still use the single-song endpoint; never invent a local identity.
+export function matchedLibrarySong(item: CatalogItem): Song | undefined {
+  const song = item.librarySong;
+  return item.kind === 'track' && item.libraryMatch && song?.id === item.libraryMatch && !song.qobuzId
+    && typeof song.title === 'string' && typeof song.artist === 'string' && Number.isFinite(song.duration) ? song : undefined;
 }
 export function songCatalogItem(song: Song): CatalogItem {
   return { id: song.qobuzId!, kind: 'track', title: song.title, artist: song.artist,

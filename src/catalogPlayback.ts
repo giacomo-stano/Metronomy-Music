@@ -1,5 +1,5 @@
 import type { Song } from './api';
-import { catalogSong, mergeCatalog, type Catalog, type CatalogItem } from './networkCatalog';
+import { catalogSong, matchedLibrarySong, mergeCatalog, type Catalog, type CatalogItem } from './networkCatalog';
 
 type Fetch = <T>(path: string, timeout?: number) => Promise<T>;
 export async function albumTracks(id: string, fetch: Fetch, valid: () => boolean = () => true): Promise<CatalogItem[]> {
@@ -23,9 +23,9 @@ export async function catalogQueue(items: CatalogItem[], fetch: Fetch, valid: ()
     while (valid() && next < playable.length) {
       const index = next++, item = playable[index];
       // Preserve the local-library identity, including offline copies and favourites.
-      songs[index] = item.libraryMatch
+      songs[index] = matchedLibrarySong(item) ?? (item.libraryMatch
         ? (await fetch<{ song: Song }>('songs/' + encodeURIComponent(item.libraryMatch))).song
-        : catalogSong(item);
+        : catalogSong(item));
     }
   }));
   if (!valid()) return [];

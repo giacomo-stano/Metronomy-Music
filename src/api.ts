@@ -61,7 +61,7 @@ export async function probeConnectivity(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    await fetch(value.baseURL + '/home', {
+    await fetch(value.baseURL + '/health', {
       method: 'GET',
       headers: {
         Authorization: 'Bearer ' + value.token,
@@ -102,7 +102,7 @@ export async function probeAccount(value: Account, timeoutMs = 5000): Promise<bo
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(value.baseURL + '/home', {
+    const response = await fetch(value.baseURL + '/health', {
       method: 'GET',
       headers: {
         Authorization: 'Bearer ' + value.token,

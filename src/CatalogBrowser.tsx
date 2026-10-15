@@ -85,7 +85,7 @@ function CatalogPage({ item, active, revision, onBack, onOpen, onAlbums, onPlay,
     const valid = () => mounted.current && activeRef.current && generation.current === version;
     setPlayBusy(true);
     try {
-      const tracks = Array.isArray(items) ? items : items.kind === 'album' ? await albumTracks(items.id, request, valid) : [items];
+      const tracks = Array.isArray(items) ? items : items.kind === 'album' ? (items.id === item.id && album && !album.hasMore ? album.items : await albumTracks(items.id, request, valid)) : [items];
       const queue = await catalogQueue(tracks, request, valid);
       if (valid() && queue.length) onPlay(queue);
     } catch (e) { if (valid()) Alert.alert('Riproduzione', failure(e)); }

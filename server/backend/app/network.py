@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from .config import settings
 from .navidrome import navidrome
-from .library_match import library, same_recording
+from .library_match import library, same_recording, RecordingIndex
 from .sessions import current, identity, destinations, destination, refresh_access, sessions
 from .lyrics_provider import lrclib, LyricsUnavailable
 from .artist_profile import build_profile
@@ -70,16 +70,34 @@ async def application_id(cfg):
                 await process.wait()
 
 
+_catalog_client = None
+
+
+def catalog_client():
+    global _catalog_client
+    if _catalog_client is None or _catalog_client.is_closed:
+        # Connections are reused, credentials remain per request (not in defaults).
+        _catalog_client = httpx.AsyncClient(timeout=20, follow_redirects=False,
+            limits=httpx.Limits(max_connections=16, max_keepalive_connections=8, keepalive_expiry=30))
+    return _catalog_client
+
+
+async def close_catalog_client():
+    global _catalog_client
+    client, _catalog_client = _catalog_client, None
+    if client is not None:
+        await client.aclose()
+
+
 async def catalog(endpoint, params):
     cfg = credentials()
     app_id = await application_id(cfg)
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.get('https://www.qobuz.com/api.json/0.2/' + endpoint,
-                params={**params, 'app_id': app_id},
-                headers={'X-App-Id': app_id, 'X-User-Auth-Token': cfg['auth_token']})
-            response.raise_for_status()
-            return response.json()
+        response = await catalog_client().get('https://www.qobuz.com/api.json/0.2/' + endpoint,
+            params={**params, 'app_id': app_id},
+            headers={'X-App-Id': app_id, 'X-User-Auth-Token': cfg['auth_token']})
+        response.raise_for_status()
+        return response.json()
     except (httpx.HTTPError, ValueError):
         raise HTTPException(502, 'Qobuz non disponibile: verifica account qoget e riprova.') from None
 
@@ -299,11 +317,16 @@ async def checked_items(raw, kind):
     if kind == 'artist':
         return items, True
     try:
-        local = await library.read()
+        local = RecordingIndex(await library.read())
         async def check(item, original):
             if kind == 'track':
-                match = next((s for s in local if same_recording(original, s)), None)
+                match = local.match(original)
                 item['libraryMatch'] = match['id'] if match else None
+                if match:
+                    # Only playback/display fields. Never return a server path,
+                    # user account, credentials or unrestricted raw metadata.
+                    item['librarySong'] = {k: match[k] for k in ('id', 'title', 'artist', 'album', 'duration', 'coverArt', 'track', 'year', 'albumId', 'artistId', 'genre') if k in match}
+                    item['librarySong']['starred'] = bool(match.get('starred'))
                 return True
             item['libraryComplete'] = False
             try:

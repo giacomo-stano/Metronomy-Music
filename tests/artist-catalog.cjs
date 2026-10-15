@@ -24,6 +24,13 @@ function load(file, modules = {}) {
   });
   assert.equal(queue.length, 2); assert.equal(queue[0].id, 'qobuz:1'); assert.equal(queue[1].id, 'local');
   assert.equal(calls[0], 'songs/local');
+  const ready = { id: 'local-ready', title: 'Ready', artist: 'Artist', duration: 200 };
+  const fastQueue = await catalogQueue(Array.from({ length: 14 }, (_, n) => ({ ...track, id: String(n), libraryMatch: ready.id, librarySong: ready })), async () => assert.fail('embedded local metadata needs no additional request'));
+  assert.equal(fastQueue.length, 14);
+  assert(fastQueue.every(song => song === ready), 'preserve local playback/offline/favourite identity');
+  assert.equal(catalog.matchedLibrarySong({ ...track, libraryMatch: 'another', librarySong: ready }), undefined);
+  assert.equal(catalog.matchedLibrarySong({ ...track, libraryMatch: ready.id, librarySong: { ...ready, qobuzId: 'remote' } }), undefined);
+  assert.equal(catalog.matchedLibrarySong({ ...track, libraryMatch: ready.id, librarySong: { ...ready, duration: null } }), undefined);
   await assert.rejects(catalogQueue([{ ...track, available: false }], async () => {}), /Nessun brano/);
   await assert.rejects(catalogQueue([{ ...track, libraryMatch: 'private' }], async () => { throw Error('403'); }), /403/);
   assert.equal((await catalogQueue([track], async () => {}, () => false)).length, 0);
@@ -42,6 +49,7 @@ function load(file, modules = {}) {
   assert(screen.includes('useNativeDriver: true') && screen.includes('reduceMotion'));
   assert(screen.includes("accountStorageKey('catalog-artist:'"));
   assert(screen.includes('NetworkActions') && screen.includes('activeRef.current'));
+  assert(screen.includes('album && !album.hasMore ? album.items'), 'play an already loaded complete album without fetching it again');
   assert(!screen.includes('network/downloads'), 'only an explicit menu action downloads');
   assert(fs.readFileSync('App.tsx', 'utf8').includes('onPlayQueue={songs => start(songs, 0, false)}'));
   console.log('Artist catalog: mixed ranking, full album pagination, local identity, unavailable filtering, cancellation and menu wiring passed.');

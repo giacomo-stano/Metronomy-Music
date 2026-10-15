@@ -28,6 +28,33 @@ def same_recording(remote, local):
         and abs(remote['duration'] - local['duration']) <= 2)
 
 
+class RecordingIndex:
+    """Narrow candidates without changing same_recording's matching rules/order.
+
+    Constructed from the current account's snapshot, never shared between users.
+    """
+    def __init__(self, songs):
+        self.songs = songs
+        self.isrcs = {}
+        self.titles = {}
+        for position, song in enumerate(songs):
+            codes = song.get('isrc') or []
+            for code in codes if isinstance(codes, list) else [codes]:
+                self.isrcs.setdefault(text_key(code), set()).add(position)
+            key = (text_key(song.get('artist')), text_key(song.get('title')))
+            self.titles.setdefault(key, set()).add(position)
+
+    def match(self, remote):
+        artist = (remote.get('performer') or (remote.get('album') or {}).get('artist') or {}).get('name', '')
+        title = remote.get('title', '')
+        if remote.get('version'):
+            title += ' (' + remote['version'] + ')'
+        candidates = self.titles.get((text_key(artist), text_key(title)), set())
+        if remote.get('isrc'):
+            candidates = candidates | self.isrcs.get(text_key(remote['isrc']), set())
+        return next((self.songs[i] for i in sorted(candidates) if same_recording(remote, self.songs[i])), None)
+
+
 class LibraryIndex:
     def __init__(self):
         self.items = []

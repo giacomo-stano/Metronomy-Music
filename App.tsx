@@ -929,12 +929,9 @@ function MusicApp({
 
       if (!uris.length) return;
 
-      await Promise.race([
-        Promise.all(
-          uris.map(uri => Image.prefetch(uri).catch(() => false))
-        ),
-        new Promise(resolve => setTimeout(resolve, 220)),
-      ]);
+      for (let offset = 0; offset < uris.length && generation.current === version; offset += 3) {
+        await Promise.all(uris.slice(offset, offset + 3).map(uri => Image.prefetch(uri).catch(() => false)));
+      }
     };
 
     const revealCatalog = (apply: () => void) => {
@@ -967,7 +964,7 @@ function MusicApp({
         if (tab === 'Home') {
           const data = await homeCache.get('home', () => request<HomeResponse>('home'));
 
-          await warmArtwork([
+          void warmArtwork([
             ...data.recentAlbums,
             ...data.madeForYou,
           ]);
@@ -985,7 +982,7 @@ function MusicApp({
         } else {
           const data = await additionsCache.get('newest', () => request<{ albums: Album[]; hasMore: boolean }>('albums?sort=newest'));
 
-          await warmArtwork(data.albums);
+          void warmArtwork(data.albums);
 
           if (generation.current === version) {
             revealCatalog(() => {

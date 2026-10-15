@@ -1,3 +1,4 @@
+import { matchedLibrarySong } from './networkCatalog';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Keyboard, ScrollView, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Pressable from './SpringPressable';
@@ -83,6 +84,8 @@ export default function SearchScreen({ active: isActive, revision, offline, onSe
   async function openItem(item: CatalogItem) {
     remember(); input.current?.blur(); Keyboard.dismiss();
     if (item.kind !== 'track') { playGeneration.current++; setBrowser(item); return; }
+    const matched = matchedLibrarySong(item);
+    if (matched) { playGeneration.current++; onPlay(matched); return; }
     if (item.libraryMatch) {
       const version = ++playGeneration.current;
       try { const data = await request<{ song: Song }>('songs/' + encodeURIComponent(item.libraryMatch)); if (alive.current && version === playGeneration.current) onPlay(data.song); } catch (e) { if (alive.current && version === playGeneration.current) Alert.alert('Riproduzione', message(e)); }

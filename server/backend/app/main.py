@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 import asyncio
+import time
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -21,10 +22,14 @@ from .sessions import authenticate as require_api_key, router as auth_router, us
 async def lifespan(app):
     network.recover_jobs()
     task = asyncio.create_task(network.worker())
-    yield
-    task.cancel()
-    with suppress(asyncio.CancelledError):
-        await task
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        await network.close_catalog_client()
+        await navidrome.close()
 
 
 app = FastAPI(title="Metronomy Bridge", version="0.1.0", lifespan=lifespan)
@@ -38,8 +43,12 @@ async def validation_error(request, error):
 
 @app.middleware('http')
 async def private_responses(request, call_next):
+    started = time.perf_counter()
     response = await call_next(request)
     response.headers['Cache-Control'] = 'no-store'
+    # Time to response headers, not the duration of an audio transfer. No IDs,
+    # URLs or credentials are included, so slow bridge work can be distinguished.
+    response.headers['Server-Timing'] = f'bridge;dur={(time.perf_counter() - started) * 1000:.1f}'
     return response
 
 
@@ -216,7 +225,10 @@ async def health(_: None = Depends(require_api_key)) -> dict:
 
 @app.get("/home")
 async def home(_: None = Depends(require_api_key)) -> dict:
-    newest, random = await navidrome.json("getAlbumList2", {"type": "newest", "size": "12"}), await navidrome.json("getRandomSongs", {"size": "12"})
+    newest, random = await asyncio.gather(
+        navidrome.json("getAlbumList2", {"type": "newest", "size": "12"}),
+        navidrome.json("getRandomSongs", {"size": "12"}),
+    )
     return {
         "recentAlbums": newest.get("albumList2", {}).get("album", []),
         "madeForYou": [song(item) for item in random.get("randomSongs", {}).get("song", [])],

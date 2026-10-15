@@ -13,6 +13,16 @@ from .sessions import identity
 class NavidromeClient:
     def __init__(self) -> None:
         self._client = httpx.AsyncClient(timeout=30.0, follow_redirects=False)
+        # Long-lived audio responses must not compete with artwork/catalog bursts.
+        self._audio_client = httpx.AsyncClient(timeout=30.0, follow_redirects=False,
+            limits=httpx.Limits(max_connections=16, max_keepalive_connections=8))
+        self._artwork_client = httpx.AsyncClient(timeout=30.0, follow_redirects=False,
+            limits=httpx.Limits(max_connections=12, max_keepalive_connections=8))
+
+    async def close(self):
+        await self._client.aclose()
+        await self._audio_client.aclose()
+        await self._artwork_client.aclose()
 
     def _params(self, extra: dict[str, str] | None = None) -> dict[str, str]:
         salt = secrets.token_hex(12)
@@ -73,25 +83,25 @@ class NavidromeClient:
 
     async def stream(self, song_id: str, range_header: str | None) -> httpx.Response:
         headers = {"range": range_header} if range_header else {}
-        request = self._client.build_request(
+        request = self._audio_client.build_request(
             "GET",
             f"{settings.navidrome_url.rstrip('/')}/rest/stream.view",
             params=self._params({"id": song_id}),
             headers=headers,
         )
         try:
-            return await self._client.send(request, stream=True)
+            return await self._audio_client.send(request, stream=True)
         except httpx.HTTPError:
             raise HTTPException(502, 'Streaming Navidrome non disponibile.') from None
 
     async def cover(self, cover_art_id: str) -> httpx.Response:
-        request = self._client.build_request(
+        request = self._artwork_client.build_request(
             "GET",
             f"{settings.navidrome_url.rstrip('/')}/rest/getCoverArt.view",
-            params=self._params({"id": cover_art_id}),
+            params=self._params({"id": cover_art_id, "size": "1024"}),
         )
         try:
-            return await self._client.send(request, stream=True)
+            return await self._artwork_client.send(request, stream=True)
         except httpx.HTTPError:
             raise HTTPException(502, 'Copertina Navidrome non disponibile.') from None
 
