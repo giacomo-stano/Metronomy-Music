@@ -8,7 +8,7 @@ function load(name) {
   return exports;
 }
 const { collectLibrarySongs } = load('libraryDownload');
-const { TabPressTracker } = load('tabNavigation');
+const { shouldResetTab } = load('tabNavigation');
 (async () => {
   const songs = Array.from({ length: 205 }, (_, i) => ({ id: String(i), title: String(i) }));
   const calls = [], counts = [];
@@ -25,16 +25,17 @@ const { TabPressTracker } = load('tabNavigation');
   let alive = true;
   assert.equal((await collectLibrarySongs(async () => { alive = false; return { songs }; }, () => alive, () => { throw Error('stale progress'); })).length, 0);
   for (const tab of ['Home', 'Novità', 'Libreria', 'Cerca']) {
-    const taps = new TabPressTracker();
-    assert.equal(taps.press(tab, 1000), false, 'single tap restores last page immediately');
-    assert.equal(taps.press(tab, 1250), true, 'double tap resets this tab');
-    assert.equal(taps.press(tab, 1300), false, 'third tap starts a new pair');
-    assert.equal(taps.press(tab, 2000), false, 'slow repeated taps do not reset');
-    assert.equal(taps.press(tab, 2100, false), false, 'drag or long press does not reset');
-    assert.equal(taps.press(tab, 2150), false, 'drag breaks a double tap');
+    const other = tab === 'Home' ? 'Cerca' : 'Home';
+    assert.equal(shouldResetTab(other, tab), false, 'first tap on an inactive tab restores the last page');
+    for (const elapsed of [100, 350, 5000, 600000]) {
+      assert.equal(shouldResetTab(tab, tab), true, `reselect after ${elapsed} ms resets, with no timer or tap history`);
+    }
+    assert.equal(shouldResetTab(tab, tab, false), false, 'drag or long press does not reset');
+    assert.equal(shouldResetTab(tab, other, false), false, 'drag to another tab restores its last page');
   }
-  const taps = new TabPressTracker();
-  assert.equal(taps.press('Cerca', 1000), false); assert.equal(taps.press('Libreria', 1100), false); assert.equal(taps.press('Cerca', 1200), false);
+  assert.equal(shouldResetTab('Home', 'Cerca'), false);
+  assert.equal(shouldResetTab('Cerca', 'Libreria'), false);
+  assert.equal(shouldResetTab('Libreria', 'Cerca'), false);
   const app = fs.readFileSync('App.tsx', 'utf8');
   const ast = ts.createSourceFile('App.tsx', app, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let selectSource;
@@ -66,6 +67,8 @@ const { TabPressTracker } = load('tabNavigation');
   nav.exports.selectTab('Home', true);
   assert.equal(nav.generation.current, pendingGeneration, 'reset of an open root keeps its pending data load valid');
   assert(app.includes('change.current = onChange'), 'PanResponder must use the latest state callback');
+  assert(app.includes('selectedTab.current = value'), 'reselection follows the currently selected tab, not the last tap time');
+  assert(!app.includes('TabPressTracker') && !app.includes('taps.press'), 'no rapid-double-tap detector remains');
   assert(app.includes('tabAlbums.current[tab] = { album, songs: albumSongs, y: albumScrollY.current }'), 'album and offset retained per tab');
   assert(app.includes('contentOffset={albumInitialOffset}'));
   assert(app.includes('resetKey={tabResets.Libreria}') && app.includes('resetKey={tabResets.Cerca}'));
@@ -99,5 +102,5 @@ const { TabPressTracker } = load('tabNavigation');
   }
   assert(menu.includes('style: \'destructive\'') && menu.includes('store.removeAll(beforeRemove)'));
   assert(!menu.includes('/delete') && !menu.includes('/trash'), 'local menu cannot invoke server deletion');
-  console.log('Bulk library pagination and tab gestures: all pages, duplicate IDs, cancellation, malformed pages, single/double taps and drag separation passed.');
+  console.log('Bulk library pagination and tab gestures: all pages, duplicate IDs, cancellation, malformed pages, active-tab reselection and drag separation passed.');
 })().catch(e => { console.error(e); process.exitCode = 1; });

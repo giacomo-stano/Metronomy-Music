@@ -26,11 +26,12 @@
 
 - A single tap switches immediately, keeping each mounted screen's navigation
   state and remembering its open library album and scroll position.
-- Two short taps on the same icon within 350 ms reset only that tab. Home/New
+- Tapping the already-selected icon resets only that tab, even several seconds
+  or minutes after selecting it. There is no double-tap interval. Home/New
   scroll to the top and dismiss the album; Library returns to its root; Search
   clears its query/detail and returns to discovery (library when offline).
-- Dragging or holding an icon selects it without being treated as a double tap.
-  VoiceOver offers separate Open tab / Home page actions.
+- Dragging or holding an icon selects it without resetting its stack.
+  VoiceOver activation has the same active-tab behavior and also offers a Home page action.
 - The retained PanResponder calls the latest callback, avoiding stale tab/album
   state. Repeated playback renders do not republish list content offsets.
 

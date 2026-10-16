@@ -9,7 +9,7 @@ import { coverURL, streamURL, request, type Album, type HomeResponse, type Song,
 import { ScreenInsetsProvider } from './src/ScreenInsets';
 import SearchScreen from './src/SearchScreen';
 import PersistentScreen from './src/PersistentScreen';
-import { TabPressTracker } from './src/tabNavigation';
+import { shouldResetTab } from './src/tabNavigation';
 import { ScreenCache } from './src/ScreenCache';
 import PlayerSheet from './src/PlayerSheet';
 import { Ionicons } from '@expo/vector-icons';
@@ -2239,7 +2239,8 @@ function LiquidTabBar({
 }) {
   const change = useRef(onChange);
   change.current = onChange;
-  const taps = useRef(new TabPressTracker()).current;
+  const selectedTab = useRef(value);
+  selectedTab.current = value;
   const touch = useRef({ x: 0, y: 0, time: 0, moved: false });
   const [barWidth, setBarWidth] = useState(0);
   const barWidthRef = useRef(0);
@@ -2357,11 +2358,13 @@ function LiquidTabBar({
 
         // Il cambio pagina avviene SOLO quando il dito viene rilasciato.
         const tap = !touch.current.moved && Date.now() - touch.current.time < 350;
-        change.current(tabs[index].name, taps.press(tabs[index].name, Date.now(), tap));
+        const nextTab = tabs[index].name;
+        const reset = shouldResetTab(selectedTab.current, nextTab, tap);
+        selectedTab.current = nextTab;
+        change.current(nextTab, reset);
       },
 
       onPanResponderTerminate: () => {
-        taps.press(tabs[selectedIndex.current].name, Date.now(), false);
         dragging.current = false;
         hoveredIndex.current = selectedIndex.current;
         setPressed(false);
@@ -2443,9 +2446,13 @@ function LiquidTabBar({
               accessibilityRole="tab"
               accessibilityState={{ selected }}
               accessibilityLabel={item.name}
-              accessibilityHint="Attiva per tornare all’ultima pagina. Usa l’azione Pagina iniziale per tornare all’inizio."
+              accessibilityHint={selected ? 'Attiva per tornare alla pagina iniziale.' : 'Attiva per tornare all’ultima pagina visitata.'}
               accessibilityActions={[{ name: 'activate', label: 'Apri scheda' }, { name: 'reset', label: 'Pagina iniziale' }]}
-              onAccessibilityAction={event => change.current(item.name, event.nativeEvent.actionName === 'reset')}
+              onAccessibilityAction={event => {
+                const reset = event.nativeEvent.actionName === 'reset' || shouldResetTab(selectedTab.current, item.name);
+                selectedTab.current = item.name;
+                change.current(item.name, reset);
+              }}
               style={liquidTabStyles.item}
             >
               <Animated.View
