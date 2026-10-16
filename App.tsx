@@ -10,6 +10,7 @@ import { ScreenInsetsProvider } from './src/ScreenInsets';
 import SearchScreen from './src/SearchScreen';
 import PersistentScreen from './src/PersistentScreen';
 import { shouldResetTab } from './src/tabNavigation';
+import NativeMusicDock, { nativeMusicDockAvailable } from './src/NativeMusicDock';
 import { ScreenCache } from './src/ScreenCache';
 import PlayerSheet from './src/PlayerSheet';
 import { Ionicons } from '@expo/vector-icons';
@@ -2076,7 +2077,15 @@ function MusicApp({
       );
     })()}
 
-    <View pointerEvents="box-none" style={s.dock}>
+    {nativeMusicDockAvailable ? <NativeMusicDock
+      tab={tab} trackID={current?.id ?? ''} title={current?.title ?? ''} artist={current?.artist ?? ''}
+      artwork={currentArtworkUri ?? coverURL(current?.coverArt) ?? ''}
+      playing={!!status.playing} buffering={!!status.isBuffering}
+      canNext={index + 1 < queue.length || repeat === 'all' || shuffle}
+      compact={mini.hidden} dark={isDark}
+      onTab={selectTab} onOpen={() => setExpanded(true)} onToggle={toggleFromMiniPlayer}
+      onNext={next} onOptions={() => { if (current) setActionSong(current); }}
+    /> : <View pointerEvents="box-none" style={s.dock}>
     {current && (
       <Animated.View
         pointerEvents={mini.hidden ? 'none' : 'auto'}
@@ -2152,7 +2161,7 @@ function MusicApp({
       inactive={c.secondary}
       onChange={selectTab}
     />
-    </View>
+    </View>}
 
     {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} connectivityBanner={connectivityBanner} connectivityBannerOpacity={connectivityBannerOpacity} connectivityBannerScale={connectivityBannerScale} connectivityBannerY={connectivityBannerY} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => player.currentTime > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
     </SafeAreaView>

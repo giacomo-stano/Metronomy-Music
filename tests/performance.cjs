@@ -17,6 +17,9 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
     prev = next;
   }
   assert.equal(changes, 2, '240 progress events produce only start and history-threshold state changes');
+  const buffering = playbackSignals({ playing: true, didJustFinish: false, currentTime: 60, isBuffering: true });
+  assert(!samePlaybackSignals(prev, buffering), 'dock receives buffering state without subscribing to elapsed time');
+  assert(samePlaybackSignals(buffering, playbackSignals({ playing: true, didJustFinish: false, currentTime: 61, isBuffering: true })));
   assert(!samePlaybackSignals(prev, playbackSignals({ playing: false, didJustFinish: true, currentTime: 60 })));
   let account = {}, inflight = 0, peak = 0;
   const calls = [], work = [];

@@ -66,6 +66,9 @@ jobs:
           node tests/precise-audio-timing.cjs
           node tests/network-search.cjs
           node tests/server-downloads.cjs
+          node tests/native-music-dock.cjs
+          node tests/library-bulk-navigation.cjs
+          node tests/performance.cjs
           node tests/altstore-release.cjs
           python3 -m unittest discover -s tests -p 'test_ipa_manifest.py' -v
 
