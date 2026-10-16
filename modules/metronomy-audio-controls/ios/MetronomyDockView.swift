@@ -11,7 +11,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
   private let titleLabel = UILabel()
   private let artistLabel = UILabel()
   private let play = UIButton(type: .system)
-  private let next = UIButton(type: .system)
+  private let nextButton = UIButton(type: .system)
   private let more = UIButton(type: .system)
   private let spinner = UIActivityIndicatorView(style: .medium)
   private let names = ["Home", "Novità", "Libreria", "Cerca"]
@@ -46,7 +46,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     addSubview(glass)
     glass.clipsToBounds = true
     glass.layer.cornerCurve = .continuous
-    let controls: [UIView] = [open, play, next, more, spinner]
+    let controls: [UIView] = [open, play, nextButton, more, spinner]
     for view in controls { glass.contentView.addSubview(view) }
     open.addSubview(artwork)
     open.addSubview(titleLabel)
@@ -64,11 +64,11 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     }
     open.addTarget(self, action: #selector(openPlayer), for: .touchUpInside)
     play.addTarget(self, action: #selector(togglePlayback), for: .touchUpInside)
-    next.addTarget(self, action: #selector(nextTrack), for: .touchUpInside)
+    nextButton.addTarget(self, action: #selector(nextTrack), for: .touchUpInside)
     more.setImage(UIImage(systemName: "ellipsis"), for: .normal)
     more.accessibilityLabel = "Opzioni del brano in riproduzione"
     more.showsMenuAsPrimaryAction = true
-    next.accessibilityLabel = "Brano successivo"
+    nextButton.accessibilityLabel = "Brano successivo"
     spinner.isUserInteractionEnabled = false
     NotificationCenter.default.addObserver(self, selector: #selector(accessibilityChanged), name: UIAccessibility.reduceTransparencyStatusDidChangeNotification, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(accessibilityChanged), name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
@@ -104,8 +104,8 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     let playing = value["playing"] as? Bool ?? false
     play.setImage(UIImage(systemName: playing ? "pause.fill" : "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .semibold)), for: .normal)
     play.accessibilityLabel = playing ? "Pausa" : "Riproduci"
-    next.setImage(UIImage(systemName: "forward.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)), for: .normal)
-    next.isEnabled = value["canNext"] as? Bool ?? false
+    nextButton.setImage(UIImage(systemName: "forward.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)), for: .normal)
+    nextButton.isEnabled = value["canNext"] as? Bool ?? false
     let buffering = value["buffering"] as? Bool ?? false
     if buffering { spinner.startAnimating() } else { spinner.stopAnimating() }
     play.imageView?.isHidden = buffering
@@ -113,7 +113,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     if previous["dark"] as? Bool != value["dark"] as? Bool { refreshAppearance() }
     updateArtwork(value["artwork"] as? String ?? "")
     // Keep the menu stable during scroll/layout updates; actions retain the original track ID.
-    if previous["trackID"] as? String != trackID || previous["playing"] as? Bool != playing || previous["canNext"] as? Bool != next.isEnabled || more.menu == nil {
+    if previous["trackID"] as? String != trackID || previous["playing"] as? Bool != playing || previous["canNext"] as? Bool != nextButton.isEnabled || more.menu == nil {
       updateMenu(playing: playing)
     }
     let targetCompact = value["compact"] as? Bool ?? false
@@ -128,7 +128,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     bar.tintColor = .systemPink
     titleLabel.textColor = .label
     artistLabel.textColor = .secondaryLabel
-    for button in [play, next, more] { button.tintColor = .label }
+    for button in [play, nextButton, more] { button.tintColor = .label }
     glass.backgroundColor = .clear
     if UIAccessibility.isReduceTransparencyEnabled {
       glass.effect = nil
@@ -197,8 +197,8 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     artistLabel.isHidden = small
     play.frame = CGRect(x: mainWidth, y: 0, width: 44, height: height)
     spinner.center = play.center
-    next.frame = CGRect(x: mainWidth + 44, y: 0, width: 44, height: height)
-    next.isHidden = small
+    nextButton.frame = CGRect(x: mainWidth + 44, y: 0, width: 44, height: height)
+    nextButton.isHidden = small
     more.frame = CGRect(x: width - 52, y: 0, width: 44, height: height)
   }
 
@@ -240,7 +240,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
   }
   @objc private func openPlayer() { emit("open") }
   @objc private func togglePlayback() { emit("toggle") }
-  @objc private func nextTrack() { if next.isEnabled { emit("next") } }
+  @objc private func nextTrack() { if nextButton.isEnabled { emit("next") } }
 
   private func updateMenu(playing: Bool) {
     let track = trackID
@@ -251,7 +251,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     }
     more.menu = UIMenu(children: [
       action(playing ? "Pausa" : "Riproduci", playing ? "pause.fill" : "play.fill", "toggle"),
-      action("Brano successivo", "forward.fill", "next", disabled: !next.isEnabled),
+      action("Brano successivo", "forward.fill", "next", disabled: !nextButton.isEnabled),
       UIMenu(options: .displayInline, children: [
         action("Apri riproduzione", "music.note", "open"),
         action("Altre opzioni del brano…", "ellipsis.circle", "options")
