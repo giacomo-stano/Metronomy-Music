@@ -9,6 +9,7 @@ import { coverURL, streamURL, request, type Album, type HomeResponse, type Song,
 import { ScreenInsetsProvider } from './src/ScreenInsets';
 import SearchScreen from './src/SearchScreen';
 import PersistentScreen from './src/PersistentScreen';
+import { TabPressTracker } from './src/tabNavigation';
 import { ScreenCache } from './src/ScreenCache';
 import PlayerSheet from './src/PlayerSheet';
 import { Ionicons } from '@expo/vector-icons';
@@ -367,6 +368,12 @@ function MusicApp({
   const [actionSong, setActionSong] = useState<Song | null>(null);
   const [actionAlbum, setActionAlbum] = useState<Album | null>(null);
   const [tab, setTab] = useState<Tab>('Home');
+  const [tabResets, setTabResets] = useState<Record<Tab, number>>({ Home: 0, 'Novità': 0, Libreria: 0, Cerca: 0 });
+  const tabAlbums = useRef<Partial<Record<Tab, { album: Album | null; songs: Song[]; y: number }>>>({});
+  const rootLists = useRef<Partial<Record<Tab, FlatList<Album> | null>>>({});
+  const albumScrollY = useRef(0);
+  const [albumInitialOffset, setAlbumInitialOffset] = useState({ x: 0, y: 0 });
+  const restoringAlbum = useRef(false);
   const [home, setHome] = useState<HomeResponse | null>(null);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -650,6 +657,10 @@ function MusicApp({
     albumOpenAnimation.current?.stop();
     albumCloseAnimation.current?.stop();
 
+    restoringAlbum.current = false;
+    albumScrollY.current = 0;
+    setAlbumInitialOffset({ x: 0, y: 0 });
+
     setAlbumOrigin(origin ?? null);
     setAlbumSongs(cachedSongs ?? []);
     setError('');
@@ -676,6 +687,13 @@ function MusicApp({
     }
 
     albumClosing.current = false;
+    if (restoringAlbum.current) {
+      restoringAlbum.current = false;
+      albumOpenProgress.setValue(1);
+      albumCloseOpacity.setValue(1);
+      setAlbumMotionDone(true);
+      return;
+    }
     setAlbumMotionDone(false);
     albumOpenProgress.setValue(0);
     albumCloseOpacity.setValue(1);
@@ -724,7 +742,44 @@ function MusicApp({
       albumOpenAnimation.current?.stop();
       albumOpenAnimation.current = null;
     };
-  }, [album?.id, albumCloseOpacity, albumOpenProgress]);
+  }, [album?.id, tab, albumCloseOpacity, albumOpenProgress]);
+
+  function selectTab(nextTab: Tab, reset = false) {
+    if (nextTab === tab && !reset) return;
+    // The data effect invalidates requests when tab/album changes. Resetting
+    // an already-open root must not abandon its in-flight load.
+    albumOpenAnimation.current?.stop(); albumCloseAnimation.current?.stop();
+    if (albumOpenFrame.current !== null) { cancelAnimationFrame(albumOpenFrame.current); albumOpenFrame.current = null; }
+    tabAlbums.current[tab] = { album, songs: albumSongs, y: albumScrollY.current };
+    if (reset) {
+      delete tabAlbums.current[nextTab];
+      setTabResets(old => ({ ...old, [nextTab]: old[nextTab] + 1 }));
+      rootLists.current[nextTab]?.scrollToOffset({ offset: 0, animated: false });
+      if (nextTab === 'Cerca') setQuery('');
+    }
+    const saved = tabAlbums.current[nextTab];
+    restoringAlbum.current = !!saved?.album;
+    albumScrollY.current = saved?.y ?? 0;
+    setAlbumInitialOffset({ x: 0, y: saved?.y ?? 0 });
+    setAlbum(saved?.album ?? null); setAlbumSongs(saved?.songs ?? []); setAlbumOrigin(null);
+    setActionSong(null); setActionAlbum(null); setError(''); setBusy(false);
+    setTab(nextTab);
+  }
+
+  async function beforeRemoveAllLocal(ids: string[]) {
+    const now = playback.current;
+    const selected = now.queue[now.index];
+    if (selected && ids.includes(selected.id)) {
+      audioGeneration.current++;
+      await invalidatePlaybackSeeks(player);
+      player.pause();
+      setExpanded(false);
+      // Clear the paused local source from UI/queue; it can be played again
+      // from the server online. Never delete or mutate server library entries.
+      setQueue([]); setIndex(-1);
+      try { player.setActiveForLockScreen(false); } catch {}
+    }
+  }
 
   function closeAlbum() {
     if (!album || albumClosing.current) return;
@@ -829,7 +884,7 @@ function MusicApp({
   }
   function browseSong(song: Song, type: 'album' | 'artist') {
     if (type === 'album' && song.albumId) openAlbum({ id: song.albumId, name: song.album ?? song.title, artist: song.artist, coverArt: song.coverArt });
-    else { setAlbum(null); setQuery(type === 'artist' ? song.artist : song.album ?? song.title); setTab('Cerca'); }
+    else { selectTab('Cerca'); setAlbum(null); setQuery(type === 'artist' ? song.artist : song.album ?? song.title); }
   }
 
   useEffect(() => {
@@ -1116,6 +1171,7 @@ function MusicApp({
   }, [current?.id, isOffline, offlineStore]);
 
   async function start(list: Song[], position: number, _open = false) {
+    if (offlineStore.removingAll) { Alert.alert('Download locali', 'Attendi il completamento della rimozione dei download.'); return; }
     const next = list[position];
     if (!next) return;
 
@@ -1259,7 +1315,7 @@ function MusicApp({
     if (!current) return;
     setExpanded(false);
     if (type === 'album' && current.albumId) openAlbum({ id: current.albumId, name: current.album ?? current.title, artist: current.artist, coverArt: current.coverArt });
-    else { setAlbum(null); setQuery(type === 'artist' ? current.artist : current.album ?? current.title); setTab('Cerca'); }
+    else { selectTab('Cerca'); setAlbum(null); setQuery(type === 'artist' ? current.artist : current.album ?? current.title); }
   }
 
   async function more() {
@@ -1411,6 +1467,8 @@ function MusicApp({
     {actionSong && <SongActions key={actionSong.id} song={actionSong} onClose={() => setActionSong(null)} onPlay={() => start([actionSong], 0, false)} onQueue={() => { if (!current) start([actionSong], 0, false); else setQueue(old => [...old, actionSong]); }} onBrowse={type => browseSong(actionSong, type)} onDeleted={deleted} onFavorite={(id, starred) => { setQueue(old => old.map(song => song.id === id ? { ...song, starred } : song)); setReload(v => v + 1); }} />}
     <PersistentScreen active={tab === 'Libreria'}>
         <LibraryScreen
+          resetKey={tabResets.Libreria}
+          onRemoveLocal={beforeRemoveAllLocal}
           active={tab === 'Libreria' && !album && !expanded && !settingsOpen}
           revision={reload}
           onSettings={() => setSettingsOpen(true)}
@@ -1426,6 +1484,7 @@ function MusicApp({
 
     <PersistentScreen active={tab === 'Cerca'}>
       <SearchScreen
+        resetKey={tabResets.Cerca}
         active={tab === 'Cerca' && !album && !expanded && !settingsOpen}
         revision={reload}
         offline={isOffline}
@@ -1444,6 +1503,7 @@ function MusicApp({
     {(['Home', 'Novità'] as const).map(screenTab => (
       <PersistentScreen key={screenTab} active={tab === screenTab}>
       <FlatList<Album>
+        ref={node => { rootLists.current[screenTab] = node; }}
         data={screenTab === 'Novità' ? albums : []}
         numColumns={2}
         keyExtractor={item => item.id}
@@ -1728,9 +1788,11 @@ function MusicApp({
 
           <SafeAreaView style={s.albumDetailSafeArea}>
             <ScrollView
+              key={tab + ':' + album.id}
+              contentOffset={albumInitialOffset}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={s.albumDetailContent}
-              onScroll={mini.onScroll}
+              onScroll={event => { albumScrollY.current = event.nativeEvent.contentOffset.y; mini.onScroll(event); }}
               scrollEventThrottle={32}
             >
               <View style={s.albumTopBar}>
@@ -2088,11 +2150,7 @@ function MusicApp({
       value={tab}
       accent={c.accent}
       inactive={c.secondary}
-      onChange={nextTab => {
-        setAlbum(null);
-        setAlbumOrigin(null);
-        setTab(nextTab);
-      }}
+      onChange={selectTab}
     />
     </View>
 
@@ -2177,8 +2235,12 @@ function LiquidTabBar({
   value: Tab;
   accent: string;
   inactive: string;
-  onChange: (tab: Tab) => void;
+  onChange: (tab: Tab, reset?: boolean) => void;
 }) {
+  const change = useRef(onChange);
+  change.current = onChange;
+  const taps = useRef(new TabPressTracker()).current;
+  const touch = useRef({ x: 0, y: 0, time: 0, moved: false });
   const [barWidth, setBarWidth] = useState(0);
   const barWidthRef = useRef(0);
   const dragging = useRef(false);
@@ -2272,6 +2334,7 @@ function LiquidTabBar({
 
       onPanResponderGrant: event => {
         dragging.current = true;
+        touch.current = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY, time: Date.now(), moved: false };
         const x = event.nativeEvent.locationX;
         hoveredIndex.current = indexForX(x);
         moveLensToFinger(x);
@@ -2279,6 +2342,7 @@ function LiquidTabBar({
       },
 
       onPanResponderMove: event => {
+        if (Math.abs(event.nativeEvent.pageX - touch.current.x) > 8 || Math.abs(event.nativeEvent.pageY - touch.current.y) > 8) touch.current.moved = true;
         moveLensToFinger(event.nativeEvent.locationX);
       },
 
@@ -2292,10 +2356,12 @@ function LiquidTabBar({
         snapToIndex(index);
 
         // Il cambio pagina avviene SOLO quando il dito viene rilasciato.
-        onChange(tabs[index].name);
+        const tap = !touch.current.moved && Date.now() - touch.current.time < 350;
+        change.current(tabs[index].name, taps.press(tabs[index].name, Date.now(), tap));
       },
 
       onPanResponderTerminate: () => {
+        taps.press(tabs[selectedIndex.current].name, Date.now(), false);
         dragging.current = false;
         hoveredIndex.current = selectedIndex.current;
         setPressed(false);
@@ -2377,6 +2443,9 @@ function LiquidTabBar({
               accessibilityRole="tab"
               accessibilityState={{ selected }}
               accessibilityLabel={item.name}
+              accessibilityHint="Attiva per tornare all’ultima pagina. Usa l’azione Pagina iniziale per tornare all’inizio."
+              accessibilityActions={[{ name: 'activate', label: 'Apri scheda' }, { name: 'reset', label: 'Pagina iniziale' }]}
+              onAccessibilityAction={event => change.current(item.name, event.nativeEvent.actionName === 'reset')}
               style={liquidTabStyles.item}
             >
               <Animated.View

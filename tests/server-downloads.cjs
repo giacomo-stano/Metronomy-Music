@@ -72,7 +72,7 @@ const job = { id: 'job1', target: 'track:1', destination: 'giacomo', status: 'qu
   visit(ast); assert(initializer);
   let memo;
   const scrollOffsets = { current: { albums: 0 } };
-  const context = { scrollOffsets, listKey: 'albums', grid: true, useMemo: (fn, deps) => { if (!memo || deps.some((d, i) => d !== memo.deps[i])) memo = { deps, value: fn() }; return memo.value; } };
+  const context = { scrollOffsets, listKey: 'albums', grid: true, p: { resetKey: 0 }, useMemo: (fn, deps) => { if (!memo || deps.some((d, i) => d !== memo.deps[i])) memo = { deps, value: fn() }; return memo.value; } };
   const initial = vm.runInNewContext(initializer, context);
   for (let tick = 1; tick <= 100; tick++) {
     scrollOffsets.current.albums = tick * 25;
@@ -81,6 +81,8 @@ const job = { id: 'job1', target: 'track:1', destination: 'giacomo', status: 'qu
   context.listKey = 'songs'; context.grid = false; vm.runInNewContext(initializer, context);
   context.listKey = 'albums'; context.grid = true;
   assert.equal(vm.runInNewContext(initializer, context).y, 2500, 'returning to the album list restores its saved position');
+  scrollOffsets.current = {}; context.p.resetKey++;
+  assert.equal(vm.runInNewContext(initializer, context).y, 0, 'explicit double tap resets saved offset');
   assert(source.includes('contentOffset={initialScrollOffset}'));
   for (const file of ['CatalogSearchResults', 'CatalogRows', 'CatalogBrowser', 'CatalogAlbumsPage', 'NetworkActions', 'PlayerSheet']) assert(fs.readFileSync('src/' + file + '.tsx', 'utf8').includes('ServerDownloadBadge'), file);
   const browser = fs.readFileSync('src/CatalogBrowser.tsx', 'utf8');

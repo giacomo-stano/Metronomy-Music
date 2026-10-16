@@ -18,11 +18,11 @@ import { catalogSong, mergeCatalog, type Catalog, type CatalogItem } from './net
 import { useServerDownloads } from './ServerDownloads';
 
 type Detail = { endpoint: string; title: string };
-type Props = { active: boolean; revision: number; offline: boolean; onSettings: () => void; onDetailChange: (open: boolean) => void; onPlay: (song: Song) => void; onPlayQueue: (songs: Song[]) => void; onAlbum: (album: Album) => void; onAlbumActions: (album: Album) => void; initialQuery: string; onActions: (song: Song) => void; onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void };
+type Props = { active: boolean; resetKey: number; revision: number; offline: boolean; onSettings: () => void; onDetailChange: (open: boolean) => void; onPlay: (song: Song) => void; onPlayQueue: (songs: Song[]) => void; onAlbum: (album: Album) => void; onAlbumActions: (album: Album) => void; initialQuery: string; onActions: (song: Song) => void; onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void };
 const labels: Record<string, string> = { queued: 'In coda', downloading: 'Download in corso', completed: 'Scaricato', failed: 'Non completato' };
 const message = (e: unknown) => isConnectivityFailure(e) ? 'Connessione non disponibile.' : e instanceof Error ? e.message : 'Connessione non riuscita';
 
-export default function SearchScreen({ active: isActive, revision, offline, onSettings, onDetailChange, onPlay, onPlayQueue, onAlbum, onAlbumActions, initialQuery, onActions, onScroll }: Props) {
+export default function SearchScreen({ active: isActive, resetKey, revision, offline, onSettings, onDetailChange, onPlay, onPlayQueue, onAlbum, onAlbumActions, initialQuery, onActions, onScroll }: Props) {
   const { colors: c } = useTheme();
   const [query, setQuery] = useState(initialQuery), [scope, setScope] = useState<'qobuz' | 'library'>(initialQuery || offline ? 'library' : 'qobuz');
   const [searchStorageKey] = useState(() => accountStorageKey('searches'));
@@ -48,6 +48,13 @@ export default function SearchScreen({ active: isActive, revision, offline, onSe
   function remember() { if (query.trim()) saveRecent([query.trim(), ...recent.filter(q => q !== query.trim())].slice(0, 10)); }
   function changeQuery(value: string) { playGeneration.current++; setDetail([]); setBrowser(null); setQuery(value); }
   function closeSearch() { generation.current++; playGeneration.current++; changeQuery(''); setCatalog(null); setLocal(null); setError(''); setBusy(false); setFocused(false); setDictationHelp(false); input.current?.blur(); Keyboard.dismiss(); }
+  const lastReset = useRef(resetKey);
+  useEffect(() => {
+    if (lastReset.current === resetKey) return;
+    lastReset.current = resetKey;
+    closeSearch(); setAction(null); setScope(offline ? 'library' : 'qobuz');
+    scroll.current?.scrollTo({ y: 0, animated: false });
+  }, [resetKey]);
   useEffect(() => { if (!isActive) { playGeneration.current++; input.current?.blur(); setFocused(false); } }, [isActive]);
   useEffect(() => { changeQuery(initialQuery); if (initialQuery) setScope('library'); }, [initialQuery]);
   useEffect(() => { if (offline) { setScope('library'); setDetail([]); setBrowser(null); setAction(null); } }, [offline]);

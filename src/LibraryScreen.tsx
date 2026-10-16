@@ -27,6 +27,7 @@ import { preloadAlbumSongs } from './albumPrefetch';
 import NowPlayingWaves from './NowPlayingWaves';
 import { ScreenCache } from './ScreenCache';
 import { libraryEndpoint, mergeLibraryItems, nextLibraryPage, orderLocalSongs } from './libraryList';
+import LibraryDownloadActions, { LibraryDownloadStatus } from './LibraryDownloadActions';
 
 type Page = {
   title: string;
@@ -59,6 +60,8 @@ type AlbumOpenOrigin = {
 
 type Props = {
   active: boolean;
+  resetKey: number;
+  onRemoveLocal: (ids: string[]) => Promise<void>;
   onSettings: () => void;
   onPlay: (songs: Song[], index: number) => void;
   onAlbum: (album: Album, origin?: AlbumOpenOrigin) => void;
@@ -96,6 +99,7 @@ export default function LibraryScreen(p: Props) {
   const { width } = useWindowDimensions();
   const albumArtworkRefs = useRef<Record<string, any>>({});
   const scrollOffsets = useRef<Record<string, number>>({});
+  const list = useRef<FlatList<Album | Song | Entry>>(null);
 
   function measureAlbumOrigin(
     album: Album,
@@ -182,6 +186,17 @@ export default function LibraryScreen(p: Props) {
   useEffect(() => () => { artistGeneration.current++; }, []);
   const loadingMore = useRef(false);
   const displayedPage = useRef('');
+  const lastReset = useRef(p.resetKey);
+  useEffect(() => {
+    if (lastReset.current === p.resetKey) return;
+    lastReset.current = p.resetKey;
+    artistGeneration.current++;
+    artistProgress.stopAnimation(); artistClosing.current = false;
+    setArtistDetail(null); setTopMenu(null); setStack([root]);
+    scrollOffsets.current = {};
+    list.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [p.resetKey]);
+  useEffect(() => { if (!p.active) setTopMenu(null); }, [p.active]);
 
   const push = (next: Page) => setStack(old => [...old, next]);
 
@@ -256,7 +271,7 @@ export default function LibraryScreen(p: Props) {
   const grid = page.type === 'home' || page.type === 'albums';
   // This is an initial offset for the keyed list, not a controlled scroll value.
   // Re-publishing the last JS scroll event on each audio tick rewinds native momentum.
-  const initialScrollOffset = useMemo(() => ({ x: 0, y: scrollOffsets.current[listKey] ?? 0 }), [listKey, grid]);
+  const initialScrollOffset = useMemo(() => ({ x: 0, y: scrollOffsets.current[listKey] ?? 0 }), [listKey, grid, p.resetKey]);
   const songPage =
     page.type === 'songs' ||
     page.type === 'downloads' ||
@@ -982,6 +997,7 @@ export default function LibraryScreen(p: Props) {
   return (
     <View style={{ flex: 1 }}>
       <FlatList<Album | Song | Entry>
+      ref={list}
       key={listKey + ':' + grid}
       extraData={offlineRevision}
       data={grid ? visibleAlbums : songPage ? visibleSongs : visibleEntries}
@@ -1007,7 +1023,7 @@ export default function LibraryScreen(p: Props) {
       maxToRenderPerBatch={8}
       windowSize={7}
       updateCellsBatchingPeriod={40}
-      ListHeaderComponent={header}
+      ListHeaderComponent={<>{header}{(page.endpoint === 'library/songs' || page.type === 'downloads') && <LibraryDownloadStatus />}</>}
       ListEmptyComponent={
         !busy && !error ? (
           <Text
@@ -1820,6 +1836,7 @@ export default function LibraryScreen(p: Props) {
 
               {pageMenu && (
                 <>
+                  {(page.endpoint === 'library/songs' || page.type === 'downloads') && <LibraryDownloadActions onClose={() => closeTopMenu()} beforeRemove={p.onRemoveLocal} />}
                   {pageActionRow(
                     'arrow.up.arrow.down',
                     'Ordina',

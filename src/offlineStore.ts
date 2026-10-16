@@ -2,9 +2,11 @@ import * as FS from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { accountStorageKey, currentAccount, request, type Song, type Lyrics } from './api';
 import { localCatalog } from './localCatalog';
+import { collectLibrarySongs } from './libraryDownload';
 
 export type LocalTrack = { song: Song; file: string; bytes: number; savedAt: number; cover?: string; lyrics?: { lyrics: Lyrics[]; source?: string; instrumental?: boolean }; info?: Record<string, unknown> };
 export type Transfer = { state: 'queued' | 'downloading' | 'error'; progress: number | null; error?: string };
+export type BulkDownload = { state: 'reading' | 'downloading' | 'completed' | 'cancelled' | 'error'; total: number; completed: number; skipped: number; failed: number; error?: string };
 type Job = { cancelled: boolean; task?: FS.DownloadResumable };
 const safeFile = /^[a-z0-9-]+\.(flac|mp3|m4a|aac|wav|aiff|ogg|opus|alac)$/;
 const uid = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
@@ -27,6 +29,11 @@ export class OfflineStore {
   ready = false;
   syncing = false;
   syncMessage = '';
+  bulk: BulkDownload | null = null;
+  removingAll = false;
+  private bulkToken: { cancelled: boolean; currentId?: string } | null = null;
+  private bulkWork: Promise<void> | null = null;
+  private downloadEpoch = 0;
   private folder = '';
   private stopped = false;
   private version = 0;
@@ -111,15 +118,18 @@ export class OfflineStore {
     if (info.exists && !info.isDirectory && info.size === entry.bytes) return this.file(entry.file);
     delete this.tracks[songId]; await this.save(); this.emit();
   }
-  async download(song: Song) {
+  async download(song: Song, shouldContinue: () => boolean = () => true) {
+    const epoch = this.downloadEpoch;
     await this.loading;
     const account = this.onlineAccount();
 
-    if (this.stopped) return;
+    if (this.stopped || !shouldContinue()) return;
+    if (this.removingAll || epoch !== this.downloadEpoch) throw new Error('Rimozione dei download in corso.');
     if (!account) throw new Error('Accedi online per scaricare altri brani.');
     if (this.error) throw new Error(this.error);
     if (this.jobs.has(song.id) || await this.source(song.id)) return;
-    if (this.jobs.has(song.id) || this.stopped) return;
+    if (this.jobs.has(song.id) || this.stopped || !shouldContinue()) return;
+    if (this.removingAll || epoch !== this.downloadEpoch) throw new Error('Rimozione dei download in corso.');
     const job: Job = { cancelled: false };
     this.jobs.set(song.id, job); this.transfers[song.id] = { state: 'queued', progress: null }; this.emit();
     const work = this.queue.then(async () => {
@@ -129,6 +139,7 @@ export class OfflineStore {
 
         return (
           !job.cancelled &&
+          shouldContinue() &&
           !this.stopped &&
           !!active &&
           active.token === account.token
@@ -256,11 +267,11 @@ export class OfflineStore {
   }
   async syncExtras() {
     await this.loading;
-    if (!this.onlineAccount() || this.syncing || this.stopped) return;
+    if (!this.onlineAccount() || this.syncing || this.stopped || this.removingAll) return;
     this.syncing = true; this.syncMessage = 'Salvataggio copertine e testi…'; this.emit();
     const work = this.queue.then(async () => {
       for (const id of Object.keys(this.tracks)) {
-        if (this.stopped || !this.onlineAccount()) break;
+        if (this.stopped || !this.onlineAccount() || this.removingAll) break;
         const job: Job = { cancelled: false }; this.jobs.set('extras:' + id, job);
         try { await this.enrich(id, job); } finally { this.jobs.delete('extras:' + id); }
       }
@@ -273,6 +284,82 @@ export class OfflineStore {
     const job = this.jobs.get(id);
     if (job) { job.cancelled = true; delete this.transfers[id]; this.emit(); await job.task?.cancelAsync(); }
   }
+  downloadLibrary(): Promise<void> {
+    if (this.bulkWork) return this.bulkWork;
+    if (this.removingAll) return Promise.reject(new Error('Rimozione dei download in corso.'));
+    const token = { cancelled: false } as { cancelled: boolean; currentId?: string };
+    this.bulkToken = token;
+    this.bulk = { state: 'reading', total: 0, completed: 0, skipped: 0, failed: 0 }; this.emit();
+    const account = this.onlineAccount();
+    const alive = () => !token.cancelled && !this.stopped && !!account && this.onlineAccount()?.token === account.token;
+    const work = (async () => {
+      try {
+        await this.loading;
+        if (!account) throw new Error('Accedi online per scaricare la libreria.');
+        if (this.error) throw new Error(this.error);
+        const songs = await collectLibrarySongs(path => request(path, 60000), alive, count => {
+          this.bulk = { ...this.bulk!, total: count }; this.emit();
+        });
+        if (!alive()) return;
+        this.bulk = { ...this.bulk!, state: 'downloading' }; this.emit();
+        for (const song of songs) {
+          if (!alive()) break;
+          // An individually queued download owns its job. Wait rather than
+          // starting another copy or cancelling somebody else's transfer.
+          if (this.jobs.has(song.id)) await this.queue;
+          if (!alive()) break;
+          if (await this.source(song.id)) {
+            this.bulk = { ...this.bulk!, skipped: this.bulk!.skipped + 1 }; this.emit(); continue;
+          }
+          if (!alive()) break;
+          token.currentId = song.id;
+          await this.download(song, alive);
+          token.currentId = undefined;
+          if (!alive()) break;
+          const saved = !!this.tracks[song.id];
+          this.bulk = { ...this.bulk!, completed: this.bulk!.completed + Number(saved), failed: this.bulk!.failed + Number(!saved) }; this.emit();
+          // Do not hammer every remaining file after storage/network failure.
+          if (!saved) throw new Error(this.transfers[song.id]?.error ?? 'Download non completato. Riprova per scaricare i brani mancanti.');
+        }
+      } catch (e) {
+        if (!token.cancelled && !this.stopped) this.bulk = { ...this.bulk!, state: 'error', error: e instanceof Error ? e.message : 'Download non riuscito.' };
+      } finally {
+        if (this.bulk?.state !== 'error') this.bulk = { ...this.bulk!, state: alive() ? 'completed' : 'cancelled' };
+        this.bulkToken = null; this.bulkWork = null; this.emit();
+      }
+    })();
+    this.bulkWork = work;
+    return work;
+  }
+  async cancelLibraryDownload() {
+    const token = this.bulkToken;
+    if (!token) return;
+    token.cancelled = true;
+    if (token.currentId) await this.cancel(token.currentId);
+  }
+  async removeAll(beforeRemove?: (ids: string[]) => Promise<void>) {
+    if (this.removingAll || this.stopped) return;
+    this.removingAll = true; this.downloadEpoch++; this.emit();
+    try {
+      await this.loading;
+      await this.cancelLibraryDownload();
+      // Cancel audio AND enrichment before taking the snapshot, so a late
+      // completion cannot recreate a download after removal.
+      await Promise.all([...this.jobs.keys()].map(id => this.cancel(id).catch(() => {})));
+      await this.bulkWork;
+      await this.queue;
+      if (this.stopped || !this.activeAccount()) return;
+      const ids = Object.keys(this.tracks);
+      await beforeRemove?.(ids);
+      let failed = 0;
+      for (const id of ids) {
+        if (this.stopped || !this.activeAccount()) break;
+        try { await this.remove(id); } catch { failed++; }
+      }
+      this.transfers = {}; this.bulk = null;
+      if (failed) throw new Error(`${failed} download non rimossi. Riprova.`);
+    } finally { this.removingAll = false; this.emit(); }
+  }
   async remove(id: string) {
     await this.loading;
     const entry = this.tracks[id]; if (!entry) return;
@@ -282,6 +369,7 @@ export class OfflineStore {
   }
   dispose() {
     this.stopped = true;
+    if (this.bulkToken) this.bulkToken.cancelled = true;
     for (const job of this.jobs.values()) { job.cancelled = true; void job.task?.cancelAsync().catch(() => {}); }
     this.listeners.clear();
   }
