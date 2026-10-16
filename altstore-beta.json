@@ -21,6 +21,16 @@
       "versions": [
         {
           "version": "0.2.2",
+          "buildVersion": "47.1",
+          "marketingVersion": "0.2.2 Beta (47.1)",
+          "date": "2026-10-16T09:30:19.469Z",
+          "localizedDescription": "Sistemato doppio tocco e download brani",
+          "downloadURL": "https://github.com/giacomo-stano/Metronomy-Music/releases/download/v0.2.2-beta.47.1/Metronomy-Beta.ipa",
+          "size": 16747179,
+          "minOSVersion": "16.4"
+        },
+        {
+          "version": "0.2.2",
           "buildVersion": "46.1",
           "marketingVersion": "0.2.2 Beta (46.1)",
           "date": "2026-10-16T07:05:18.207Z",
