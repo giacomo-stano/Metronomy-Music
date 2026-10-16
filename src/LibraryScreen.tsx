@@ -522,16 +522,6 @@ export default function LibraryScreen(p: Props) {
   }
 
   function openPageMenu() {
-    if (songPage) {
-      openTopMenu('sort');
-      return;
-    }
-
-    if (collectionPage) {
-      openTopMenu('page');
-      return;
-    }
-
     openTopMenu('page');
   }
 
@@ -781,11 +771,7 @@ export default function LibraryScreen(p: Props) {
 
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={
-                  songPage
-                    ? 'Ordina brani'
-                    : 'Altre opzioni'
-                }
+                accessibilityLabel={'Opzioni per ' + page.title}
                 onPress={openPageMenu}
                 style={topStyles.controlButton}
               >

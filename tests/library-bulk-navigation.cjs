@@ -71,6 +71,32 @@ const { TabPressTracker } = load('tabNavigation');
   assert(app.includes('resetKey={tabResets.Libreria}') && app.includes('resetKey={tabResets.Cerca}'));
   assert(!app.includes('key={tabResets.'), 'single tab selection must not remount screens');
   const menu = fs.readFileSync('src/LibraryDownloadActions.tsx', 'utf8');
+  // Exercise the actual ellipsis handler AND its conditional menu content.
+  // The actions existed previously but were unreachable because Songs opened sort.
+  const librarySource = fs.readFileSync('src/LibraryScreen.tsx', 'utf8');
+  const libraryAst = ts.createSourceFile('LibraryScreen.tsx', librarySource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let pageHandler, pageContent;
+  function visitLibrary(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === 'openPageMenu') pageHandler = node.getText(libraryAst);
+    if (ts.isJsxExpression(node) && node.expression?.getText(libraryAst).startsWith('pageMenu &&')) pageContent = node.expression.getText(libraryAst);
+    ts.forEachChild(node, visitLibrary);
+  }
+  visitLibrary(libraryAst); assert(pageHandler && pageContent);
+  assert(librarySource.includes('onPress={openPageMenu}'));
+  const jsx = { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'Fragment' };
+  const code = ts.transpileModule(pageHandler + '\nexports.openPageMenu = openPageMenu; exports.render = () => (' + pageContent + ');', { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  for (const [type, endpoint, expected] of [['songs', 'library/songs', true], ['downloads', '', true], ['favorites', 'library/favorites', false], ['albums', 'albums', false]]) {
+    const context = {
+      exports: {}, require: () => jsx, songPage: type !== 'albums', collectionPage: type === 'albums', page: { type, endpoint }, pageMenu: false,
+      openTopMenu: kind => { context.opened = kind; context.pageMenu = kind === 'page'; },
+      LibraryDownloadActions: 'LibraryDownloadActions', View: 'View', topStyles: {}, c: {}, p: { onRemoveLocal() {} },
+      closeTopMenu() {}, pageActionRow: () => null,
+    };
+    vm.runInNewContext(code, context); context.exports.openPageMenu();
+    assert.equal(context.opened, 'page', type + ' ellipsis opens page actions, not sort');
+    const rendered = JSON.stringify(context.exports.render());
+    assert.equal(rendered.includes('LibraryDownloadActions'), expected, type + ' exposes the correct local actions');
+  }
   assert(menu.includes('style: \'destructive\'') && menu.includes('store.removeAll(beforeRemove)'));
   assert(!menu.includes('/delete') && !menu.includes('/trash'), 'local menu cannot invoke server deletion');
   console.log('Bulk library pagination and tab gestures: all pages, duplicate IDs, cancellation, malformed pages, single/double taps and drag separation passed.');
