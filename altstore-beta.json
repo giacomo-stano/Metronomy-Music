@@ -21,6 +21,16 @@
       "versions": [
         {
           "version": "0.2.2",
+          "buildVersion": "53.1",
+          "marketingVersion": "0.2.2 Beta (53.1)",
+          "date": "2026-10-17T21:35:37.568Z",
+          "localizedDescription": "Barra fissa e titolo che scompare scorrendo. Apertura della ricerca e comparsa della X animate. Selettore Qobuz / Libreria animato. Griglia a due colonne e ricerche recenti con copertine.",
+          "downloadURL": "https://github.com/giacomo-stano/Metronomy-Music/releases/download/v0.2.2-beta.53.1/Metronomy-Beta.ipa",
+          "size": 16785283,
+          "minOSVersion": "16.4"
+        },
+        {
+          "version": "0.2.2",
           "buildVersion": "52.1",
           "marketingVersion": "0.2.2 Beta (52.1)",
           "date": "2026-10-17T16:47:18.622Z",
