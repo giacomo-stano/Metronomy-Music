@@ -21,6 +21,16 @@
       "versions": [
         {
           "version": "0.2.2",
+          "buildVersion": "50.1",
+          "marketingVersion": "0.2.2 Beta (50.1)",
+          "date": "2026-10-17T09:18:45.487Z",
+          "localizedDescription": "Redesign gui player",
+          "downloadURL": "https://github.com/giacomo-stano/Metronomy-Music/releases/download/v0.2.2-beta.50.1/Metronomy-Beta.ipa",
+          "size": 16774731,
+          "minOSVersion": "16.4"
+        },
+        {
+          "version": "0.2.2",
           "buildVersion": "49.1",
           "marketingVersion": "0.2.2 Beta (49.1)",
           "date": "2026-10-16T13:01:48.627Z",
