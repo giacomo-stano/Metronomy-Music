@@ -124,8 +124,9 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     configuration = value
     selected = max(0, min(3, value["selected"] as? Int ?? 0))
     bar.selectedItem = bar.items?[selected]
-    sectionButton.setImage(bar.items?[selected].image, for: .normal)
-    sectionButton.accessibilityValue = names[selected]
+    sectionButton.setImage(bar.items?[compactNavigationIndex].image, for: .normal)
+    sectionButton.accessibilityValue = names[compactNavigationIndex]
+    sectionButton.tintColor = selected == 3 ? .label : .systemPink
     searchButton.tintColor = selected == 3 ? .systemPink : .label
     trackID = value["trackID"] as? String ?? ""
     hasTrack = !trackID.isEmpty
@@ -166,7 +167,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     titleLabel.textColor = .label
     artistLabel.textColor = .secondaryLabel
     for button in [play, nextButton] { button.tintColor = .label }
-    sectionButton.tintColor = .systemPink
+    sectionButton.tintColor = selected == 3 ? .label : .systemPink
     searchButton.tintColor = selected == 3 ? .systemPink : .label
     glass.backgroundColor = .clear
     if UIAccessibility.isReduceTransparencyEnabled {
@@ -204,6 +205,10 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
       }
     }
   }
+
+  // Search already has a dedicated button on the right. Keep the library
+  // navigation glyph on the left instead of rendering two magnifying glasses.
+  private var compactNavigationIndex: Int { selected == 3 ? 2 : selected }
 
   private var shouldCompact: Bool {
     compact && hasTrack && !UIAccessibility.isVoiceOverRunning && !UIAccessibility.isReduceMotionEnabled
@@ -250,7 +255,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     barContainer.layer.cornerRadius = small ? 24 : barHeight / 2
     // Keep UIKit's tab items and native tracking lens; only clip/translate the
     // container during collapse. Never stretch its labels or replace its gestures.
-    let selectedCenter = bounds.width * (CGFloat(selected) + 0.5) / CGFloat(names.count)
+    let selectedCenter = bounds.width * (CGFloat(compactNavigationIndex) + 0.5) / CGFloat(names.count)
     bar.frame = CGRect(x: small ? circle / 2 - selectedCenter : 0, y: small ? -compactInset : 0, width: bounds.width, height: barHeight)
     barContainer.isUserInteractionEnabled = !small
     barContainer.accessibilityElementsHidden = small

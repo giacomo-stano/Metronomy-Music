@@ -16,6 +16,7 @@ from .models import ImportRequest, ImportRequestCreate
 from .navidrome import navidrome
 from .library_order import ordered_songs
 from .library_visibility import native_song_page, available_songs
+from .library_search import search_page
 from .lyrics_provider import lrclib, LyricsUnavailable
 from . import network, file_ops, album_ops, storage, settings_info
 from .sessions import authenticate as require_api_key, router as auth_router, username
@@ -101,6 +102,19 @@ async def library_songs(offset: int = Query(0, ge=0),
     page = items[:100]
     return {'songs': [song(item) for item in page], 'hasMore': has_more,
             'nextOffset': next_offset}
+
+
+@app.get('/library/search')
+async def library_search(q: str = Query(..., min_length=1, max_length=200),
+                         kind: str = Query('songs', pattern='^(songs|albums)$'),
+                         offset: int = Query(0, ge=0),
+                         _: None = Depends(require_api_key)):
+    query = q.strip()
+    if not query:
+        raise HTTPException(422, 'Inserisci un termine di ricerca.')
+    items, has_more, next_offset = await search_page(navidrome, kind, query, offset)
+    return {kind: [song(item) for item in items] if kind == 'songs' else items,
+            'hasMore': has_more, 'nextOffset': next_offset}
 
 
 @app.get('/library/artists')

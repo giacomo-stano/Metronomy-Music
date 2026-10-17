@@ -51,7 +51,7 @@ const compiled = ts.transpileModule(more, { compilerOptions: { target: ts.Script
 function harness() {
   let resolve, reject, calls = [];
   const context = {
-    ...helpers, p: { active: true }, busy: false, moreBusy: false, moreError: '',
+    ...helpers, p: { active: true }, busy: false, moreBusy: false, moreError: '', searchPending: false,
     loadingMore: { current: false }, requestedOffsets: { current: new Set() }, failedOffset: { current: null },
     generation: { current: 1 }, loadedKey: 'songs:newest', requestKey: 'songs:newest',
     data: { songs: [rows[0]], hasMore: true, nextOffset: 100 }, grid: false,
@@ -96,7 +96,7 @@ function harness() {
     assert.deepEqual(ids(stale.context.data.songs), ['u'], 'late page ignored after ' + change);
   }
   for (const mutate of [
-    c => { c.p.active = false; }, c => { c.busy = true; },
+    c => { c.p.active = false; }, c => { c.busy = true; }, c => { c.searchPending = true; },
     c => { c.loadedKey = 'previous sort'; }, c => { c.data.hasMore = false; },
     c => { c.requestedOffsets.current.add(100); },
     c => { c.failedOffset.current = 100; },

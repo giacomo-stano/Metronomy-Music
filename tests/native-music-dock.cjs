@@ -33,6 +33,10 @@ assert.deepEqual(events.pop(), ['onExpand'], 'compact section button expands wit
 dispatch({ action: 'open', trackID: 'song-a', x: 70, y: 770, width: 220, height: 48 });
 assert.equal(JSON.stringify(events.pop()), JSON.stringify(['onOpen', { x: 70, y: 770, width: 220, height: 48 }]));
 const native = fs.readFileSync('modules/metronomy-audio-controls/ios/MetronomyDockView.swift', 'utf8');
+assert(native.includes('private var compactNavigationIndex: Int { selected == 3 ? 2 : selected }'),
+  'Search keeps the library symbol on the left, never two magnifying glasses');
+assert(native.includes('bar.items?[compactNavigationIndex].image'));
+assert(native.includes('sectionButton.accessibilityValue = names[compactNavigationIndex]'));
 assert(!/\b(?:let|var)\s+next\s*[:=]/.test(native), 'next is inherited from UIResponder and cannot be a stored button property');
 assert(!/\bnext\./.test(native), 'button references must use nextButton, not UIResponder.next');
 assert(native.includes('private let nextButton = UIButton') && native.includes('if nextButton.isEnabled { emit("next") }'), 'rename the control without changing the next command protocol');

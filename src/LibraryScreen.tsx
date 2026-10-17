@@ -9,10 +9,12 @@ import {
   Easing,
   FlatList,
   Image,
+  Keyboard,
   ScrollView,
   SafeAreaView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
   type NativeScrollEvent,
@@ -29,6 +31,8 @@ import NowPlayingWaves from './NowPlayingWaves';
 import { ScreenCache } from './ScreenCache';
 import { libraryEndpoint, mergeLibraryItems, nextLibraryPage, orderLocalSongs } from './libraryList';
 import LibraryDownloadActions, { LibraryDownloadStatus } from './LibraryDownloadActions';
+import GlassBackground from './GlassBackground';
+import { filterLibraryItems, librarySearchEndpoint, supportsRemoteLibrarySearch } from './librarySearch';
 
 type Page = {
   title: string;
@@ -138,6 +142,18 @@ export default function LibraryScreen(p: Props) {
 
   const [stack, setStack] = useState<Page[]>([root]);
   const page = stack[stack.length - 1];
+  const searchKey = page.endpoint || page.type;
+  const [searchValues, setSearchValues] = useState<Record<string, string>>({});
+  const searchQuery = page.type === 'home' ? '' : searchValues[searchKey] ?? '';
+  const [settledSearch, setSettledSearch] = useState({ key: '', query: '' });
+  const remoteSearch = !p.offline && supportsRemoteLibrarySearch(page.endpoint, page.type);
+  const searchPending = remoteSearch && !!searchQuery.trim() &&
+    (settledSearch.key !== searchKey || settledSearch.query !== searchQuery.trim());
+  const appliedQuery = searchQuery.trim() && settledSearch.key === searchKey ? settledSearch.query : '';
+  useEffect(() => {
+    const timer = setTimeout(() => setSettledSearch({ key: searchKey, query: searchQuery.trim() }), 220);
+    return () => clearTimeout(timer);
+  }, [searchKey, searchQuery]);
 
   const prefetchVisibleAlbums = useCallback(
     ({ viewableItems }: { viewableItems: Array<{ item: Album | Song | Entry }> }) => {
@@ -166,10 +182,11 @@ export default function LibraryScreen(p: Props) {
   const [sortMode, setSortMode] = useState<'default' | 'title' | 'artist'>('default');
   const [dateOrder, setDateOrder] = useState<'newest' | 'oldest'>('newest');
   const order = sortMode === 'default' ? dateOrder : sortMode;
-  const endpoint = libraryEndpoint(page.endpoint, page.type, order);
-  const listKey = page.type + ':' + endpoint + ':' + order;
+  const endpoint = librarySearchEndpoint(page.endpoint, page.type, order, appliedQuery, p.offline);
+  // Query changes must NOT remount the TextInput inside the list header.
+  const listKey = page.type + ':' + libraryEndpoint(page.endpoint, page.type, order) + ':' + order;
   const catalogScope = String(p.offline) + ':' + p.revision + ':' + retry + (p.offline ? ':' + offlineRevision : '');
-  const requestKey = listKey + ':' + catalogScope;
+  const requestKey = listKey + ':' + endpoint + ':' + catalogScope;
   const [loadedKey, setLoadedKey] = useState('');
   const [moreBusy, setMoreBusy] = useState(false);
   const [moreError, setMoreError] = useState('');
@@ -195,7 +212,7 @@ export default function LibraryScreen(p: Props) {
     lastReset.current = p.resetKey;
     artistGeneration.current++;
     artistProgress.stopAnimation(); artistClosing.current = false;
-    setArtistDetail(null); setTopMenu(null); setStack([root]);
+    setArtistDetail(null); setTopMenu(null); setStack([root]); setSearchValues({});
     scrollOffsets.current = {};
     list.current?.scrollToOffset({ offset: 0, animated: false });
   }, [p.resetKey]);
@@ -225,8 +242,8 @@ export default function LibraryScreen(p: Props) {
     failedOffset.current = null;
     setMoreBusy(false);
     setMoreError('');
-    if (!p.active) return;
-    const pageKey = listKey;
+    if (!p.active || searchPending) { setBusy(false); return; }
+    const pageKey = listKey + ':' + endpoint;
     const samePage = displayedPage.current === pageKey;
     displayedPage.current = pageKey;
     cache.useScope(catalogScope);
@@ -274,7 +291,9 @@ export default function LibraryScreen(p: Props) {
     return () => {
       generation.current++;
     };
-  }, [page, endpoint, listKey, requestKey, retry, p.revision, p.active, catalogScope, cache]);
+  }, [page, endpoint, listKey, requestKey, retry, p.revision, p.active, catalogScope, searchPending, cache]);
+
+  useEffect(() => { list.current?.scrollToOffset({ offset: 0, animated: false }); }, [searchQuery]);
 
   const albums = useMemo(() => data.albums ?? [], [data.albums]);
   const songs = useMemo(() => page.type === 'downloads' ? Object.values(offline.tracks).sort((a, b) => b.savedAt - a.savedAt).map(t => t.song) : data.songs ?? [], [page.type, offline, offlineRevision, data.songs]);
@@ -293,7 +312,7 @@ export default function LibraryScreen(p: Props) {
     page.type === 'artists' ||
     page.type === 'playlists';
 
-  const visibleSongs = useMemo(() => page.endpoint === 'library/songs' || page.endpoint === 'library/favorites'
+  const orderedSongs = useMemo(() => page.endpoint === 'library/songs' || page.endpoint === 'library/favorites'
     ? songs
     : page.type === 'downloads'
     ? orderLocalSongs(songs, order, Object.fromEntries(Object.values(offline.tracks).map(t => [t.song.id, t.savedAt])))
@@ -323,9 +342,13 @@ export default function LibraryScreen(p: Props) {
     : songs, [page.endpoint, page.type, songPage, songs, sortMode, dateOrder, order, offline, offlineRevision]);
 
   // Online albums are already globally ordered before pagination.
-  const visibleAlbums = albums;
+  const hideSearchResults = searchPending || (remoteSearch && !!searchQuery.trim() && loadedKey !== requestKey);
+  const visibleSongs = useMemo(() => hideSearchResults ? [] : remoteSearch && searchQuery.trim()
+    ? orderedSongs : filterLibraryItems(orderedSongs, searchQuery), [hideSearchResults, remoteSearch, searchQuery, orderedSongs]);
+  const visibleAlbums = useMemo(() => hideSearchResults ? [] : remoteSearch && searchQuery.trim()
+    ? albums : filterLibraryItems(albums, searchQuery), [hideSearchResults, remoteSearch, searchQuery, albums]);
 
-  const visibleEntries = useMemo(() => collectionPage && page.type !== 'albums'
+  const orderedEntries = useMemo(() => collectionPage && page.type !== 'albums'
     ? [...entries].sort((a, b) => {
         if (sortMode === 'title' || sortMode === 'artist') {
           return a.name.localeCompare(b.name, 'it', { sensitivity: 'base' });
@@ -334,6 +357,7 @@ export default function LibraryScreen(p: Props) {
         return 0;
       })
     : entries, [collectionPage, page.type, entries, sortMode]);
+  const visibleEntries = useMemo(() => filterLibraryItems(orderedEntries, searchQuery), [orderedEntries, searchQuery]);
 
   function playAll() {
     if (visibleSongs.length) p.onPlay(visibleSongs, 0);
@@ -537,7 +561,7 @@ export default function LibraryScreen(p: Props) {
   }
 
   async function more(retryFailed = false) {
-    if (!p.active || busy || loadingMore.current || !data.hasMore ||
+    if (!p.active || searchPending || busy || loadingMore.current || !data.hasMore ||
         loadedKey !== requestKey || ((moreError || failedOffset.current !== null) && !retryFailed)) return;
 
     const offset = data.nextOffset ?? (grid ? albums.length : songs.length);
@@ -811,6 +835,25 @@ export default function LibraryScreen(p: Props) {
         </>
       )}
 
+      {page.type !== 'home' && <View style={{ marginBottom: 18, borderRadius: 24, overflow: 'hidden', borderWidth: 0.5, borderColor: c.border, minHeight: 48, flexDirection: 'row', alignItems: 'center', paddingLeft: 14 }}>
+        <GlassBackground />
+        <Ionicons name="search" size={21} color={c.secondary} />
+        <TextInput
+          value={searchQuery}
+          onChangeText={value => setSearchValues(old => ({ ...old, [searchKey]: value }))}
+          placeholder={'Cerca in ' + page.title.toLowerCase()}
+          accessibilityLabel={'Cerca in ' + page.title}
+          placeholderTextColor={c.secondary}
+          selectionColor={c.accent}
+          style={{ flex: 1, minWidth: 0, color: c.text, fontSize: 17, paddingHorizontal: 10, paddingVertical: 12 }}
+          maxLength={200} autoCorrect={false} autoCapitalize="none" returnKeyType="search"
+          onSubmitEditing={() => Keyboard.dismiss()}
+        />
+        {!!searchQuery && <Pressable accessibilityRole="button" accessibilityLabel="Cancella ricerca nella libreria" onPress={() => setSearchValues(old => ({ ...old, [searchKey]: '' }))} style={{ width: 44, height: 48, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="close-circle" size={22} color={c.secondary} />
+        </Pressable>}
+      </View>}
+
       {page.type === 'home' && (
         <>
           <View style={{ marginTop: 1 }}>
@@ -1001,6 +1044,8 @@ export default function LibraryScreen(p: Props) {
       numColumns={grid ? 2 : 1}
       columnWrapperStyle={grid ? { gap: 12 } : undefined}
       style={{ flex: 1 }}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       contentContainerStyle={{
         paddingHorizontal: 18,
         paddingTop: 6,
@@ -1022,7 +1067,7 @@ export default function LibraryScreen(p: Props) {
       updateCellsBatchingPeriod={40}
       ListHeaderComponent={<>{header}{(page.endpoint === 'library/songs' || page.type === 'downloads') && <LibraryDownloadStatus />}</>}
       ListEmptyComponent={
-        !busy && !error ? (
+        !busy && !searchPending && !error ? (
           <Text
             style={{
               color: c.secondary,
@@ -1030,13 +1075,13 @@ export default function LibraryScreen(p: Props) {
               marginVertical: 18,
             }}
           >
-            {page.type === 'downloads' ? !offline.ready ? 'Verifica dei download locali…' : offline.error || 'Nessun brano su questo iPhone. Usa ⋯ → Scarica su iPhone.' : page.type === 'favorites' ? 'I brani contrassegnati con la stella appariranno qui.' : 'Nessun elemento disponibile.'}
+            {searchQuery.trim() ? 'Nessun risultato in ' + page.title.toLowerCase() + '.' : page.type === 'downloads' ? !offline.ready ? 'Verifica dei download locali…' : offline.error || 'Nessun brano su questo iPhone. Usa ⋯ → Scarica su iPhone.' : page.type === 'favorites' ? 'I brani contrassegnati con la stella appariranno qui.' : 'Nessun elemento disponibile.'}
           </Text>
         ) : null
       }
       ListFooterComponent={
         <View>
-          {(busy || moreBusy) && (
+          {(busy || moreBusy || searchPending) && (
             <ActivityIndicator
               color={c.accent}
               style={{ margin: 18 }}
