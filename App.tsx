@@ -565,7 +565,7 @@ function MusicApp({
     setReload(n => n + 1);
   }
   const { width, height } = useWindowDimensions();
-  const mini = useMiniMotion(nativeMusicDockAvailable ? tab : tab + ':' + expanded, width + 80, nativeMusicDockAvailable);
+  const mini = useMiniMotion((nativeMusicDockAvailable ? tab : tab + ':' + expanded) + ':' + isOffline, width + 80, nativeMusicDockAvailable);
   const [playerOrigin, setPlayerOrigin] = useState<PlayerOrigin | undefined>();
 
   // Elastic deformation of the whole mini-player capsule.
@@ -1476,6 +1476,7 @@ function MusicApp({
           onRemoveLocal={beforeRemoveAllLocal}
           active={tab === 'Libreria' && !album && !expanded && !settingsOpen}
           revision={reload}
+          offline={isOffline}
           onSettings={() => setSettingsOpen(true)}
           onPlay={start}
           onAlbum={openAlbum}
@@ -2267,10 +2268,9 @@ function LiquidTabBar({
   const itemScales = useRef(tabs.map(() => new Animated.Value(1))).current;
 
   const tabWidth = barWidth > 0 ? barWidth / tabs.length : 0;
-  // La lente resta quasi larga quanto una sezione e ha la stessa curvatura
-  // della barra esterna: 54 px di altezza -> raggio 27 px.
+  // Keep icons/labels inside the selection even during the 1.10x press animation.
   const lensWidth = tabWidth > 0 ? Math.max(70, tabWidth - 8) : 76;
-  const lensHeight = 54;
+  const lensHeight = 62;
 
   const indexForX = (x: number) => {
     const w = barWidthRef.current / tabs.length;
@@ -2945,16 +2945,16 @@ const makeStyles = (c: Palette) => StyleSheet.create({
 
 const liquidTabStyles = StyleSheet.create({
   bar: {
-    height: 64,
+    height: 72,
     marginTop: 8,
     marginHorizontal: 10,
-    borderRadius: 32,
+    borderRadius: 36,
     overflow: 'hidden',
     backgroundColor: 'transparent',
   },
   barGlass: {
     ...StyleSheet.absoluteFill,
-    borderRadius: 32,
+    borderRadius: 36,
   },
   lens: {
     position: 'absolute',
@@ -2973,7 +2973,7 @@ const liquidTabStyles = StyleSheet.create({
   },
   item: {
     flex: 1,
-    height: 64,
+    height: 72,
     alignItems: 'center',
     justifyContent: 'center',
   },

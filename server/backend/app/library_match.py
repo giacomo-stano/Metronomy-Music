@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from .navidrome import navidrome
 from .config import settings
 from .sessions import identity
+from .library_visibility import available_songs
 
 
 def text_key(value):
@@ -78,7 +79,7 @@ class LibraryIndex:
                         if 'searchResult3' not in result:
                             raise RuntimeError('Missing library response')
                         batch = result.get('searchResult3', {}).get('song', [])
-                        items.extend(batch)
+                        items.extend(await available_songs(batch))
                         if len(batch) < 500:
                             self.items, self.expires = items, time.monotonic() + 20
                             return items

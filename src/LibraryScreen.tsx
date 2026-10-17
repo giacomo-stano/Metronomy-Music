@@ -3,6 +3,7 @@ import { MenuRow } from './MenuControls';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Alert,
   Animated,
   Easing,
@@ -60,6 +61,7 @@ type AlbumOpenOrigin = {
 
 type Props = {
   active: boolean;
+  offline: boolean;
   resetKey: number;
   onRemoveLocal: (ids: string[]) => Promise<void>;
   onSettings: () => void;
@@ -166,7 +168,8 @@ export default function LibraryScreen(p: Props) {
   const order = sortMode === 'default' ? dateOrder : sortMode;
   const endpoint = libraryEndpoint(page.endpoint, page.type, order);
   const listKey = page.type + ':' + endpoint + ':' + order;
-  const requestKey = listKey + ':' + p.revision + ':' + retry;
+  const catalogScope = String(p.offline) + ':' + p.revision + ':' + retry + (p.offline ? ':' + offlineRevision : '');
+  const requestKey = listKey + ':' + catalogScope;
   const [loadedKey, setLoadedKey] = useState('');
   const [moreBusy, setMoreBusy] = useState(false);
   const [moreError, setMoreError] = useState('');
@@ -197,6 +200,14 @@ export default function LibraryScreen(p: Props) {
     list.current?.scrollToOffset({ offset: 0, animated: false });
   }, [p.resetKey]);
   useEffect(() => { if (!p.active) setTopMenu(null); }, [p.active]);
+  useEffect(() => {
+    let previous = AppState.currentState;
+    const subscription = AppState.addEventListener('change', next => {
+      if (previous !== 'active' && next === 'active' && p.active && !p.offline) setRetry(value => value + 1);
+      previous = next;
+    });
+    return () => subscription.remove();
+  }, [p.active, p.offline]);
 
   const push = (next: Page) => setStack(old => [...old, next]);
 
@@ -218,7 +229,7 @@ export default function LibraryScreen(p: Props) {
     const pageKey = listKey;
     const samePage = displayedPage.current === pageKey;
     displayedPage.current = pageKey;
-    cache.useScope(String(p.revision) + ':' + retry);
+    cache.useScope(catalogScope);
     const cached = cache.peek(endpoint);
     if (cached) { setDataState(cached); setLoadedKey(requestKey); setBusy(false); setError(''); return; }
     if (!samePage) setDataState({});
@@ -263,7 +274,7 @@ export default function LibraryScreen(p: Props) {
     return () => {
       generation.current++;
     };
-  }, [page, endpoint, listKey, requestKey, retry, p.revision, p.active, cache]);
+  }, [page, endpoint, listKey, requestKey, retry, p.revision, p.active, catalogScope, cache]);
 
   const albums = useMemo(() => data.albums ?? [], [data.albums]);
   const songs = useMemo(() => page.type === 'downloads' ? Object.values(offline.tracks).sort((a, b) => b.savedAt - a.savedAt).map(t => t.song) : data.songs ?? [], [page.type, offline, offlineRevision, data.songs]);

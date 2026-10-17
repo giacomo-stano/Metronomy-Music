@@ -346,7 +346,7 @@ export default function PlayerSheet(p: Props) {
   const { width, height } = useWindowDimensions();
   const { bottom } = useScreenInsets();
   const { reduceMotion } = useMotionPreferences();
-  const morphOrigin = p.openOrigin ?? { x: 18, y: height - Math.max(10, bottom - 10) - 124, width: width - 36, height: 52 };
+  const morphOrigin = p.openOrigin ?? { x: 18, y: height - Math.max(10, bottom - 10) - 132, width: width - 36, height: 52 };
   const [mode, setMode] = useState<'cover' | 'lyrics' | 'queue'>('cover');
   const [queueMounted, setQueueMounted] = useState(false);
   const queueUnmountTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

@@ -15,6 +15,7 @@ from .imports import import_queue
 from .models import ImportRequest, ImportRequestCreate
 from .navidrome import navidrome
 from .library_order import ordered_songs
+from .library_visibility import native_song_page, available_songs
 from .lyrics_provider import lrclib, LyricsUnavailable
 from . import network, file_ops, album_ops, storage, settings_info
 from .sessions import authenticate as require_api_key, router as auth_router, username
@@ -88,16 +89,7 @@ async def library_songs(offset: int = Query(0, ge=0),
     if settings.multi_user:
         # The native endpoint sorts the entire accessible library in the database.
         # Use the current user's token, never the administrator's credentials.
-        field = 'createdAt' if sort in ('newest', 'oldest') else sort
-        items = await navidrome.native('song', {
-            '_start': offset, '_end': offset + 101,
-            '_sort': field, '_order': 'DESC' if sort == 'newest' else 'ASC',
-            # Native queries also expose missing DB entries unless excluded.
-            # Filter upstream, before offsets/lookahead, so pages remain full.
-            'missing': 'false',
-        })
-        if not isinstance(items, list) or any(not isinstance(i, dict) or not i.get('id') for i in items):
-            raise HTTPException(502, 'Risposta libreria non valida.')
+        items, has_more, next_offset = await native_song_page(navidrome, offset, sort)
         items = [{**item, 'coverArt': item.get('coverArt') or item.get('albumId'),
                   'track': item.get('trackNumber')} for item in items]
     else:
@@ -105,9 +97,10 @@ async def library_songs(offset: int = Query(0, ge=0),
         # authorized Subsonic index, not just the first search3 result page.
         from .library_match import library
         items = ordered_songs(await library.read(), sort)[offset:offset + 101]
+        has_more, next_offset = len(items) > 100, offset + min(len(items), 100)
     page = items[:100]
-    return {'songs': [song(item) for item in page], 'hasMore': len(items) > 100,
-            'nextOffset': offset + len(page)}
+    return {'songs': [song(item) for item in page], 'hasMore': has_more,
+            'nextOffset': next_offset}
 
 
 @app.get('/library/artists')
@@ -121,7 +114,7 @@ async def library_artists(_: None = Depends(require_api_key)):
 async def library_favorites(sort: str = Query('newest', pattern='^(newest|oldest|title|artist)$'),
                             _: None = Depends(require_api_key)):
     result = await navidrome.json('getStarred2')
-    items = ordered_songs(result.get('starred2', {}).get('song', []), sort)
+    items = ordered_songs(await available_songs(result.get('starred2', {}).get('song', [])), sort)
     return {'songs': [song({**item, 'starred': True}) for item in items], 'hasMore': False}
 
 

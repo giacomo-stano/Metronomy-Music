@@ -37,6 +37,9 @@ assert(!/\b(?:let|var)\s+next\s*[:=]/.test(native), 'next is inherited from UIRe
 assert(!/\bnext\./.test(native), 'button references must use nextButton, not UIResponder.next');
 assert(native.includes('private let nextButton = UIButton') && native.includes('if nextButton.isEnabled { emit("next") }'), 'rename the control without changing the next command protocol');
 assert(native.includes('UITabBarDelegate') && native.includes('let reselected = selected == item.tag'));
+assert(native.includes('barHeight: CGFloat = 72') && native.includes('height: barHeight'));
+assert(native.includes('override var safeAreaInsets: UIEdgeInsets { .zero }'), 'floating bar must not deduct the home inset twice');
+assert(native.includes('pointSize: 23, weight: .regular, scale: .medium'), 'bound symbol sizes inside the native selection');
 assert(native.includes('open.showsMenuAsPrimaryAction = false') && native.includes('open.menu = UIMenu(children:'));
 assert(native.includes('sectionGlass') && native.includes('searchGlass') && !native.includes('private let more ='));
 assert(native.includes('self.barContainer.clipsToBounds = self.shouldCompact'), 'native tracking lens must not be clipped when expanded');
@@ -54,6 +57,10 @@ const config = JSON.parse(fs.readFileSync('modules/metronomy-audio-controls/expo
 assert(config.apple.modules.includes('MetronomyDockModule'));
 const app = fs.readFileSync('App.tsx', 'utf8');
 assert(app.includes('nativeMusicDockAvailable ? <NativeMusicDock') && app.includes('<LiquidTabBar'));
+assert(app.includes("+ ':' + isOffline, width + 80, nativeMusicDockAvailable"), 'same native dock in both modes, reset only scroll geometry when mode changes');
+assert(app.includes('const lensHeight = 62;'), 'fallback selection is taller too');
+const libraryScreen = fs.readFileSync('src/LibraryScreen.tsx', 'utf8');
+assert(libraryScreen.includes('String(p.offline)') && libraryScreen.includes('cache.useScope(catalogScope)'));
 assert(app.includes('onTab={selectTab}') && app.includes('onToggle={toggleFromMiniPlayer}'));
 // Execute the real React wrapper with hook stubs: no new native configuration on
 // parent rerenders, but events must always reach the most recent JS callbacks.
@@ -86,7 +93,7 @@ for (const available of [true, false]) {
   const surface = second.type(second.props);
   assert.equal(result.nativeMusicDockAvailable, available);
   assert.equal(nativeLoads, available ? 1 : 0, 'old binaries never require a missing native view');
-  if (available) { assert.equal(surface.props.style.bottom, 24); assert.equal(surface.type, 'NativeDock'); }
+  if (available) { assert.equal(surface.props.style.bottom, 24); assert.equal(surface.props.style.height, 140); assert.equal(surface.type, 'NativeDock'); }
   else assert.equal(surface, null);
 }
 console.log('Native dock: navigation/reselection, stale menu guards, audio isolation, fallback and native registration passed (device rendering requires iOS build).');

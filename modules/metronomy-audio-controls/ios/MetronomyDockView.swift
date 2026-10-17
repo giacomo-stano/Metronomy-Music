@@ -1,10 +1,17 @@
 import ExpoModulesCore
 import UIKit
 
+// The floating dock already clears the home indicator in React Native. Do not
+// subtract the window's bottom inset again from the icon/selection layout.
+private final class FloatingTabBar: UITabBar {
+  override var safeAreaInsets: UIEdgeInsets { .zero }
+}
+
 // UI only: audio ownership, queues and navigation remain in MusicApp.
 public final class MetronomyDockView: ExpoView, UITabBarDelegate {
   let onCommand = EventDispatcher()
-  private let bar = UITabBar()
+  private let bar = FloatingTabBar()
+  private let barHeight: CGFloat = 72
   private let barContainer = UIView()
   private let sectionGlass = UIVisualEffectView()
   private let searchGlass = UIVisualEffectView()
@@ -41,9 +48,10 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     super.init(appContext: appContext)
     backgroundColor = .clear
     bar.delegate = self
+    bar.itemPositioning = .fill
     let symbols = ["house.fill", "square.grid.2x2.fill", "music.note.house.fill", "magnifyingglass"]
     bar.items = names.enumerated().map { index, name in
-      UITabBarItem(title: name, image: UIImage(systemName: symbols[index]), tag: index)
+      UITabBarItem(title: name, image: UIImage(systemName: symbols[index], withConfiguration: UIImage.SymbolConfiguration(pointSize: 23, weight: .regular, scale: .medium)), tag: index)
     }
     bar.selectedItem = bar.items?.first
     for surface in [sectionGlass, searchGlass] {
@@ -218,16 +226,17 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
 
   public override func layoutSubviews() {
     super.layoutSubviews()
-    guard bounds.width >= 160, bounds.height >= 124 else { return }
+    guard bounds.width >= 160, bounds.height >= barHeight + 60 else { return }
     let small = shouldCompact
-    let barY = bounds.height - 64
+    let barY = bounds.height - barHeight
+    let compactInset = (barHeight - 48) / 2
     let circle: CGFloat = 48
     let gap: CGFloat = 8
     let inset: CGFloat = 8
     sectionGlass.bounds = CGRect(x: 0, y: 0, width: circle, height: circle)
     searchGlass.bounds = sectionGlass.bounds
-    sectionGlass.center = CGPoint(x: inset + circle / 2, y: barY + 32)
-    searchGlass.center = CGPoint(x: bounds.width - inset - circle / 2, y: barY + 32)
+    sectionGlass.center = CGPoint(x: inset + circle / 2, y: barY + barHeight / 2)
+    searchGlass.center = CGPoint(x: bounds.width - inset - circle / 2, y: barY + barHeight / 2)
     sectionButton.frame = sectionGlass.bounds
     searchButton.frame = searchGlass.bounds
     sectionGlass.transform = small ? .identity : CGAffineTransform(scaleX: 0.01, y: 0.01)
@@ -236,18 +245,18 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     searchGlass.isUserInteractionEnabled = small
     sectionGlass.accessibilityElementsHidden = !small
     searchGlass.accessibilityElementsHidden = !small
-    barContainer.frame = small ? CGRect(x: inset, y: barY + 8, width: circle, height: circle)
-      : CGRect(x: 0, y: barY, width: bounds.width, height: 64)
-    barContainer.layer.cornerRadius = small ? 24 : 32
+    barContainer.frame = small ? CGRect(x: inset, y: barY + compactInset, width: circle, height: circle)
+      : CGRect(x: 0, y: barY, width: bounds.width, height: barHeight)
+    barContainer.layer.cornerRadius = small ? 24 : barHeight / 2
     // Keep UIKit's tab items and native tracking lens; only clip/translate the
     // container during collapse. Never stretch its labels or replace its gestures.
     let selectedCenter = bounds.width * (CGFloat(selected) + 0.5) / CGFloat(names.count)
-    bar.frame = CGRect(x: small ? circle / 2 - selectedCenter : 0, y: small ? -8 : 0, width: bounds.width, height: 64)
+    bar.frame = CGRect(x: small ? circle / 2 - selectedCenter : 0, y: small ? -compactInset : 0, width: bounds.width, height: barHeight)
     barContainer.isUserInteractionEnabled = !small
     barContainer.accessibilityElementsHidden = small
     let width = small ? bounds.width - 2 * (inset + circle + gap) : bounds.width - 16
     let height: CGFloat = small ? 48 : 52
-    glass.frame = CGRect(x: small ? inset + circle + gap : inset, y: small ? barY + 8 : barY - gap - height, width: width, height: height)
+    glass.frame = CGRect(x: small ? inset + circle + gap : inset, y: small ? barY + compactInset : barY - gap - height, width: width, height: height)
     glass.layer.cornerRadius = height / 2
     glass.isHidden = !hasTrack
     // All controls keep at least a 44pt touch target, including the compact player.
