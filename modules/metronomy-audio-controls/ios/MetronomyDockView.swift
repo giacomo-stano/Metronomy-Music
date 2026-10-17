@@ -5,6 +5,11 @@ import UIKit
 public final class MetronomyDockView: ExpoView, UITabBarDelegate {
   let onCommand = EventDispatcher()
   private let bar = UITabBar()
+  private let barContainer = UIView()
+  private let sectionGlass = UIVisualEffectView()
+  private let searchGlass = UIVisualEffectView()
+  private let sectionButton = UIButton(type: .system)
+  private let searchButton = UIButton(type: .system)
   private let glass = UIVisualEffectView()
   private let open = UIButton(type: .system)
   private let artwork = UIImageView()
@@ -12,7 +17,6 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
   private let artistLabel = UILabel()
   private let play = UIButton(type: .system)
   private let nextButton = UIButton(type: .system)
-  private let more = UIButton(type: .system)
   private let spinner = UIActivityIndicatorView(style: .medium)
   private let names = ["Home", "Novità", "Libreria", "Cerca"]
   private var configuration: [String: Any] = [:]
@@ -42,11 +46,26 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
       UITabBarItem(title: name, image: UIImage(systemName: symbols[index]), tag: index)
     }
     bar.selectedItem = bar.items?.first
-    addSubview(bar)
+    for surface in [sectionGlass, searchGlass] {
+      surface.clipsToBounds = true
+      surface.layer.cornerRadius = 24
+      addSubview(surface)
+    }
+    sectionGlass.contentView.addSubview(sectionButton)
+    searchGlass.contentView.addSubview(searchButton)
+    sectionButton.accessibilityLabel = "Mostra barra di navigazione"
+    sectionButton.addTarget(self, action: #selector(expandNavigation), for: .touchUpInside)
+    searchButton.setImage(UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 23, weight: .regular)), for: .normal)
+    searchButton.accessibilityLabel = "Cerca"
+    searchButton.addTarget(self, action: #selector(selectSearch), for: .touchUpInside)
+    barContainer.clipsToBounds = false
+    barContainer.layer.cornerCurve = .continuous
+    addSubview(barContainer)
+    barContainer.addSubview(bar)
     addSubview(glass)
     glass.clipsToBounds = true
     glass.layer.cornerCurve = .continuous
-    let controls: [UIView] = [open, play, nextButton, more, spinner]
+    let controls: [UIView] = [open, play, nextButton, spinner]
     for view in controls { glass.contentView.addSubview(view) }
     open.addSubview(artwork)
     open.addSubview(titleLabel)
@@ -65,9 +84,10 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     open.addTarget(self, action: #selector(openPlayer), for: .touchUpInside)
     play.addTarget(self, action: #selector(togglePlayback), for: .touchUpInside)
     nextButton.addTarget(self, action: #selector(nextTrack), for: .touchUpInside)
-    more.setImage(UIImage(systemName: "ellipsis"), for: .normal)
-    more.accessibilityLabel = "Opzioni del brano in riproduzione"
-    more.showsMenuAsPrimaryAction = true
+    // The reference has only play/next in the mini-player. Keep its native menu
+    // on long press, without adding an extra visible button or losing actions.
+    open.showsMenuAsPrimaryAction = false
+    open.accessibilityHint = "Tocca per aprire; tieni premuto per le opzioni del brano"
     nextButton.accessibilityLabel = "Brano successivo"
     spinner.isUserInteractionEnabled = false
     NotificationCenter.default.addObserver(self, selector: #selector(accessibilityChanged), name: UIAccessibility.reduceTransparencyStatusDidChangeNotification, object: nil)
@@ -96,6 +116,9 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     configuration = value
     selected = max(0, min(3, value["selected"] as? Int ?? 0))
     bar.selectedItem = bar.items?[selected]
+    sectionButton.setImage(bar.items?[selected].image, for: .normal)
+    sectionButton.accessibilityValue = names[selected]
+    searchButton.tintColor = selected == 3 ? .systemPink : .label
     trackID = value["trackID"] as? String ?? ""
     hasTrack = !trackID.isEmpty
     titleLabel.text = value["title"] as? String ?? ""
@@ -113,14 +136,20 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     if previous["dark"] as? Bool != value["dark"] as? Bool { refreshAppearance() }
     updateArtwork(value["artwork"] as? String ?? "")
     // Keep the menu stable during scroll/layout updates; actions retain the original track ID.
-    if previous["trackID"] as? String != trackID || previous["playing"] as? Bool != playing || previous["canNext"] as? Bool != nextButton.isEnabled || more.menu == nil {
+    if previous["trackID"] as? String != trackID || previous["playing"] as? Bool != playing || previous["canNext"] as? Bool != nextButton.isEnabled || open.menu == nil {
       updateMenu(playing: playing)
     }
     let targetCompact = value["compact"] as? Bool ?? false
     if targetCompact != compact {
       compact = targetCompact
       animateLayout()
-    } else { setNeedsLayout() }
+    } else {
+      setNeedsLayout()
+      if layoutAnimator == nil {
+        barContainer.isHidden = shouldCompact
+        barContainer.clipsToBounds = shouldCompact
+      }
+    }
   }
 
   private func refreshAppearance() {
@@ -128,11 +157,17 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     bar.tintColor = .systemPink
     titleLabel.textColor = .label
     artistLabel.textColor = .secondaryLabel
-    for button in [play, nextButton, more] { button.tintColor = .label }
+    for button in [play, nextButton] { button.tintColor = .label }
+    sectionButton.tintColor = .systemPink
+    searchButton.tintColor = selected == 3 ? .systemPink : .label
     glass.backgroundColor = .clear
     if UIAccessibility.isReduceTransparencyEnabled {
       glass.effect = nil
       glass.backgroundColor = .secondarySystemBackground
+      for surface in [sectionGlass, searchGlass] {
+        surface.effect = nil
+        surface.backgroundColor = .secondarySystemBackground
+      }
       let appearance = UITabBarAppearance()
       appearance.configureWithOpaqueBackground()
       bar.standardAppearance = appearance
@@ -155,11 +190,15 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
       #else
       glass.effect = UIBlurEffect(style: .systemMaterial)
       #endif
+      for surface in [sectionGlass, searchGlass] {
+        surface.backgroundColor = .clear
+        surface.effect = glass.effect
+      }
     }
   }
 
   private var shouldCompact: Bool {
-    compact && !UIAccessibility.isVoiceOverRunning && !UIAccessibility.isReduceMotionEnabled
+    compact && hasTrack && !UIAccessibility.isVoiceOverRunning && !UIAccessibility.isReduceMotionEnabled
       && !traitCollection.preferredContentSizeCategory.isAccessibilityCategory
   }
 
@@ -173,46 +212,87 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     super.traitCollectionDidChange(previousTraitCollection)
     if previousTraitCollection?.preferredContentSizeCategory != traitCollection.preferredContentSizeCategory {
       updateFonts()
-      setNeedsLayout()
+      animateLayout()
     }
   }
 
   public override func layoutSubviews() {
     super.layoutSubviews()
-    bar.frame = CGRect(x: 0, y: bounds.height - 64, width: bounds.width, height: 64)
+    guard bounds.width >= 160, bounds.height >= 124 else { return }
     let small = shouldCompact
-    let width = small ? min(bounds.width - 16, 280) : bounds.width - 16
-    let height: CGFloat = small ? 48 : 60
-    glass.frame = CGRect(x: bounds.width - width - 8, y: bounds.height - 72 - height, width: width, height: height)
+    let barY = bounds.height - 64
+    let circle: CGFloat = 48
+    let gap: CGFloat = 8
+    let inset: CGFloat = 8
+    sectionGlass.bounds = CGRect(x: 0, y: 0, width: circle, height: circle)
+    searchGlass.bounds = sectionGlass.bounds
+    sectionGlass.center = CGPoint(x: inset + circle / 2, y: barY + 32)
+    searchGlass.center = CGPoint(x: bounds.width - inset - circle / 2, y: barY + 32)
+    sectionButton.frame = sectionGlass.bounds
+    searchButton.frame = searchGlass.bounds
+    sectionGlass.transform = small ? .identity : CGAffineTransform(scaleX: 0.01, y: 0.01)
+    searchGlass.transform = small ? .identity : CGAffineTransform(scaleX: 0.01, y: 0.01)
+    sectionGlass.isUserInteractionEnabled = small
+    searchGlass.isUserInteractionEnabled = small
+    sectionGlass.accessibilityElementsHidden = !small
+    searchGlass.accessibilityElementsHidden = !small
+    barContainer.frame = small ? CGRect(x: inset, y: barY + 8, width: circle, height: circle)
+      : CGRect(x: 0, y: barY, width: bounds.width, height: 64)
+    barContainer.layer.cornerRadius = small ? 24 : 32
+    // Keep UIKit's tab items and native tracking lens; only clip/translate the
+    // container during collapse. Never stretch its labels or replace its gestures.
+    let selectedCenter = bounds.width * (CGFloat(selected) + 0.5) / CGFloat(names.count)
+    bar.frame = CGRect(x: small ? circle / 2 - selectedCenter : 0, y: small ? -8 : 0, width: bounds.width, height: 64)
+    barContainer.isUserInteractionEnabled = !small
+    barContainer.accessibilityElementsHidden = small
+    let width = small ? bounds.width - 2 * (inset + circle + gap) : bounds.width - 16
+    let height: CGFloat = small ? 48 : 52
+    glass.frame = CGRect(x: small ? inset + circle + gap : inset, y: small ? barY + 8 : barY - gap - height, width: width, height: height)
     glass.layer.cornerRadius = height / 2
     glass.isHidden = !hasTrack
     // All controls keep at least a 44pt touch target, including the compact player.
-    let trailing: CGFloat = small ? 88 : 132
+    let trailing: CGFloat = small ? 44 : 88
     let mainWidth = max(44, width - trailing - 8)
     open.frame = CGRect(x: 0, y: 0, width: mainWidth, height: height)
-    artwork.frame = CGRect(x: 10, y: (height - 36) / 2, width: 36, height: 36)
-    let textWidth = max(0, mainWidth - 55)
-    titleLabel.frame = CGRect(x: 54, y: small ? (height - 24) / 2 : 10, width: textWidth, height: 24)
-    artistLabel.frame = CGRect(x: 54, y: 33, width: textWidth, height: 18)
-    artistLabel.isHidden = small
+    let artSize: CGFloat = small ? 30 : 36
+    artwork.frame = CGRect(x: 9, y: (height - artSize) / 2, width: artSize, height: artSize)
+    let textX = artSize + 17
+    let textWidth = max(0, mainWidth - textX - 4)
+    titleLabel.frame = CGRect(x: textX, y: (height - 37) / 2, width: textWidth, height: 22)
+    artistLabel.frame = CGRect(x: textX, y: (height - 37) / 2 + 21, width: textWidth, height: 16)
+    artistLabel.isHidden = false
     play.frame = CGRect(x: mainWidth, y: 0, width: 44, height: height)
     spinner.center = play.center
     nextButton.frame = CGRect(x: mainWidth + 44, y: 0, width: 44, height: height)
     nextButton.isHidden = small
-    more.frame = CGRect(x: width - 52, y: 0, width: 44, height: height)
   }
 
   // The transparent space around the compact player must remain scrollable/tappable.
   public override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
     guard !keyboardVisible else { return false }
-    return bar.frame.contains(point) || (hasTrack && glass.frame.contains(point))
+    let navigation = shouldCompact ? sectionGlass.frame.contains(point) || searchGlass.frame.contains(point) : barContainer.frame.contains(point)
+    return navigation || (hasTrack && glass.frame.contains(point))
   }
 
   private func animateLayout() {
-    layoutAnimator?.stopAnimation(true)
+    if let animator = layoutAnimator {
+      animator.stopAnimation(false)
+      animator.finishAnimation(at: .current)
+      layoutAnimator = nil
+    }
+    barContainer.isHidden = false
+    barContainer.clipsToBounds = true
     setNeedsLayout()
-    guard window != nil, !UIAccessibility.isReduceMotionEnabled else { layoutIfNeeded(); return }
-    let animator = UIViewPropertyAnimator(duration: 0.32, dampingRatio: 0.88) { [weak self] in self?.layoutIfNeeded() }
+    guard window != nil, !UIAccessibility.isReduceMotionEnabled else {
+      layoutIfNeeded(); barContainer.isHidden = shouldCompact; barContainer.clipsToBounds = shouldCompact; return
+    }
+    let animator = UIViewPropertyAnimator(duration: 0.38, dampingRatio: 0.9) { [weak self] in self?.layoutIfNeeded() }
+    animator.addCompletion { [weak self] _ in
+      guard let self else { return }
+      self.barContainer.isHidden = self.shouldCompact
+      self.barContainer.clipsToBounds = self.shouldCompact
+      self.layoutAnimator = nil
+    }
     layoutAnimator = animator
     animator.startAnimation()
   }
@@ -226,15 +306,25 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
   }
   @objc private func keyboardHidden() { keyboardVisible = false; isHidden = false }
 
+  @objc private func expandNavigation() {
+    compact = false
+    animateLayout()
+    onCommand(["action": "expand"])
+  }
+  @objc private func selectSearch() {
+    onCommand(["action": "tab", "index": 3, "reset": selected == 3])
+  }
+
   public func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
     let reselected = selected == item.tag
     selected = item.tag
+    searchButton.tintColor = selected == 3 ? .systemPink : .label
     onCommand(["action": "tab", "index": selected, "reset": reselected])
   }
 
   private func emit(_ action: String, track: String? = nil) {
     guard hasTrack else { return }
-    let anchor = more.convert(more.bounds, to: window)
+    let anchor = glass.convert(glass.bounds, to: window)
     onCommand(["action": action, "trackID": track ?? trackID,
                "x": anchor.minX, "y": anchor.minY, "width": anchor.width, "height": anchor.height])
   }
@@ -249,7 +339,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
         self?.emit(command, track: track)
       }
     }
-    more.menu = UIMenu(children: [
+    open.menu = UIMenu(children: [
       action(playing ? "Pausa" : "Riproduci", playing ? "pause.fill" : "play.fill", "toggle"),
       action("Brano successivo", "forward.fill", "next", disabled: !nextButton.isEnabled),
       UIMenu(options: .displayInline, children: [

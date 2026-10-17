@@ -11,6 +11,7 @@ import SearchScreen from './src/SearchScreen';
 import PersistentScreen from './src/PersistentScreen';
 import { shouldResetTab } from './src/tabNavigation';
 import NativeMusicDock, { nativeMusicDockAvailable } from './src/NativeMusicDock';
+import type { PlayerOrigin } from './src/dockMotion';
 import { ScreenCache } from './src/ScreenCache';
 import PlayerSheet from './src/PlayerSheet';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +23,8 @@ import GlassBackground from './src/GlassBackground';
 import LibraryScreen from './src/LibraryScreen';
 import { ServerDownloadsProvider, useServerCompletion } from './src/ServerDownloads';
 import SongActions from './src/SongActions';
+import NetworkActions from './src/NetworkActions';
+import { songCatalogItem } from './src/networkCatalog';
 import AlbumActions from './src/AlbumActions';
 import { usePlaybackSignals } from './src/usePlaybackSignals';
 import { useMiniMotion } from './src/useMiniMotion';
@@ -562,7 +565,8 @@ function MusicApp({
     setReload(n => n + 1);
   }
   const { width, height } = useWindowDimensions();
-  const mini = useMiniMotion(tab + ':' + expanded, width + 80);
+  const mini = useMiniMotion(nativeMusicDockAvailable ? tab : tab + ':' + expanded, width + 80, nativeMusicDockAvailable);
+  const [playerOrigin, setPlayerOrigin] = useState<PlayerOrigin | undefined>();
 
   // Elastic deformation of the whole mini-player capsule.
   const miniBubbleScaleX = useRef(new Animated.Value(1)).current;
@@ -1465,7 +1469,7 @@ function MusicApp({
       />
     )}
     {actionAlbum && <AlbumActions key={actionAlbum.id} album={actionAlbum} onClose={() => setActionAlbum(null)} onOpen={() => openAlbum(actionAlbum)} onPlay={songs => start(songs, 0, false)} onQueue={songs => { if (!current) start(songs, 0, false); else setQueue(old => [...old, ...songs]); }} onDeleted={(ids, complete) => { deletedSongs(ids); if (complete && album?.id === actionAlbum.id) setAlbum(null); }} />}
-    {actionSong && <SongActions key={actionSong.id} song={actionSong} onClose={() => setActionSong(null)} onPlay={() => start([actionSong], 0, false)} onQueue={() => { if (!current) start([actionSong], 0, false); else setQueue(old => [...old, actionSong]); }} onBrowse={type => browseSong(actionSong, type)} onDeleted={deleted} onFavorite={(id, starred) => { setQueue(old => old.map(song => song.id === id ? { ...song, starred } : song)); setReload(v => v + 1); }} />}
+    {actionSong && (actionSong.qobuzId ? <NetworkActions item={songCatalogItem(actionSong)} onClose={() => setActionSong(null)} onPlay={() => start([actionSong], 0, false)} /> : <SongActions key={actionSong.id} song={actionSong} onClose={() => setActionSong(null)} onPlay={() => start([actionSong], 0, false)} onQueue={() => { if (!current) start([actionSong], 0, false); else setQueue(old => [...old, actionSong]); }} onBrowse={type => browseSong(actionSong, type)} onDeleted={deleted} onFavorite={(id, starred) => { setQueue(old => old.map(song => song.id === id ? { ...song, starred } : song)); setReload(v => v + 1); }} />)}
     <PersistentScreen active={tab === 'Libreria'}>
         <LibraryScreen
           resetKey={tabResets.Libreria}
@@ -2083,7 +2087,7 @@ function MusicApp({
       playing={!!status.playing} buffering={!!status.isBuffering}
       canNext={index + 1 < queue.length || repeat === 'all' || shuffle}
       compact={mini.hidden} dark={isDark}
-      onTab={selectTab} onOpen={() => setExpanded(true)} onToggle={toggleFromMiniPlayer}
+      onTab={selectTab} onExpand={mini.expand} onOpen={origin => { setPlayerOrigin(origin); setExpanded(true); }} onToggle={toggleFromMiniPlayer}
       onNext={next} onOptions={() => { if (current) setActionSong(current); }}
     /> : <View pointerEvents="box-none" style={s.dock}>
     {current && (
@@ -2163,7 +2167,7 @@ function MusicApp({
     />
     </View>}
 
-    {current && <PlayerSheet visible={expanded} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} connectivityBanner={connectivityBanner} connectivityBannerOpacity={connectivityBannerOpacity} connectivityBannerScale={connectivityBannerScale} connectivityBannerY={connectivityBannerY} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => player.currentTime > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
+    {current && <PlayerSheet visible={expanded} openOrigin={playerOrigin} onClose={() => setExpanded(false)} song={current} artworkUri={currentArtworkUri} connectivityBanner={connectivityBanner} connectivityBannerOpacity={connectivityBannerOpacity} connectivityBannerScale={connectivityBannerScale} connectivityBannerY={connectivityBannerY} player={player} queue={queue} index={index} onSelect={i => start(queue, i, false)} onMoveQueueItem={moveQueueItem} onNext={next} onPrevious={() => player.currentTime > 3 ? seek(0) : start(queue, Math.max(0, index - 1), false)} onToggle={toggle} lyrics={lyrics} lyricsMessage={lyricsMessage} lyricsSource={lyricsSource} repeat={repeat} onRepeat={() => setRepeat(v => v === 'off' ? 'all' : v === 'all' ? 'one' : 'off')} shuffle={shuffle} onShuffle={() => setShuffle(v => !v)} onBrowse={browse} onFavorite={starred => setQueue(old => old.map(song => song.id === current.id ? { ...song, starred } : song))} onSleep={sleep} sleepMinutes={sleepMinutes} onDeleted={deleted} />}
     </SafeAreaView>
   );
 }

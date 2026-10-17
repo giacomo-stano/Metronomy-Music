@@ -19,6 +19,8 @@ import { coverURL, streamURL, request, type Song, type Lyrics } from './api';
 import { usePlaybackSignals, useVisiblePlaybackStatus } from './usePlaybackSignals';
 import MusicSlider from './MusicSlider';
 import { useMotionPreferences } from './motionPreferences';
+import { playerMorph, type PlayerOrigin } from './dockMotion';
+import { useScreenInsets } from './ScreenInsets';
 import { playbackTimeline, seekPlayback, invalidatePlaybackSeeks } from './playbackTimeline';
 import { DarkSurface, useTheme } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
@@ -30,6 +32,7 @@ import { AirPlayButton, SystemVolumeSlider, nativeAirPlayAvailable, nativeSystem
 
 type Props = {
   visible: boolean;
+  openOrigin?: PlayerOrigin;
   onClose: () => void;
   song: Song;
   artworkUri?: string;
@@ -341,6 +344,9 @@ export default function PlayerSheet(p: Props) {
   const status = usePlaybackSignals(p.player);
   const { colors: c, isDark } = useTheme();
   const { width, height } = useWindowDimensions();
+  const { bottom } = useScreenInsets();
+  const { reduceMotion } = useMotionPreferences();
+  const morphOrigin = p.openOrigin ?? { x: 18, y: height - Math.max(10, bottom - 10) - 124, width: width - 36, height: 52 };
   const [mode, setMode] = useState<'cover' | 'lyrics' | 'queue'>('cover');
   const [queueMounted, setQueueMounted] = useState(false);
   const queueUnmountTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -397,13 +403,9 @@ export default function PlayerSheet(p: Props) {
       closingPlayer.current = false;
       sheetY.value = 0;
 
-      // First modal frame is already visible; then a short UI-thread spring.
-      openProgress.value = 0.08;
-      openProgress.value = withSpring(1, {
-        damping: 29,
-        stiffness: 390,
-        mass: 0.60,
-      });
+      // Wait for native Modal.onShow: animating before presentation loses the
+      // opening frames on slower phones and makes the player appear abruptly.
+      openProgress.value = reduceMotion ? 1 : 0;
     } else {
       setMenu(false);
 
@@ -414,7 +416,12 @@ export default function PlayerSheet(p: Props) {
       setQueueMounted(false);
       queueProgress.setValue(0);
     }
-  }, [p.visible, height, openProgress, queueProgress, sheetY]);
+  }, [p.visible, openProgress, queueProgress, sheetY]);
+
+  const animatePlayerOpen = () => {
+    if (!p.visible || closingPlayer.current) return;
+    openProgress.value = reduceMotion ? 1 : withSpring(1, { damping: 30, stiffness: 280, mass: 0.85, overshootClamping: true });
+  };
 
   useEffect(() => {
     if (queueUnmountTimer.current) {
@@ -479,8 +486,8 @@ export default function PlayerSheet(p: Props) {
     closingPlayer.current = true;
     setMenu(false);
 
-    const duration = velocity > 900 ? 180 : 245;
-    sheetY.value = withTiming(height * 0.36, { duration });
+    const duration = reduceMotion ? 0 : velocity > 900 ? 240 : 320;
+    sheetY.value = withTiming(0, { duration });
     openProgress.value = withTiming(
       0,
       { duration },
@@ -499,7 +506,7 @@ export default function PlayerSheet(p: Props) {
   };
 
   const playerPan = Gesture.Pan()
-    .enabled(!menu)
+    .enabled(!menu && !networkMenu)
     .activeOffsetY(4)
     .failOffsetX([-28, 28])
     .onUpdate(event => {
@@ -512,8 +519,8 @@ export default function PlayerSheet(p: Props) {
         event.velocityY > 820;
 
       if (shouldClose) {
-        const duration = event.velocityY > 1200 ? 165 : 225;
-        sheetY.value = withTiming(height * 0.36, { duration });
+        const duration = reduceMotion ? 0 : event.velocityY > 1200 ? 240 : 320;
+        sheetY.value = withTiming(0, { duration });
         openProgress.value = withTiming(
           0,
           { duration },
@@ -528,10 +535,13 @@ export default function PlayerSheet(p: Props) {
           mass: 0.82,
         });
       }
+    })
+    .onFinalize((_event, success) => {
+      if (!success) sheetY.value = withSpring(0, { damping: 28, stiffness: 280 });
     });
 
   const playerTap = Gesture.Tap()
-    .enabled(!menu)
+    .enabled(!menu && !networkMenu)
     .maxDistance(8)
     .onEnd((_, success) => {
       if (success) runOnJS(dismissPlayer)();
@@ -541,23 +551,16 @@ export default function PlayerSheet(p: Props) {
 
   const playerAnimatedStyle = useAnimatedStyle(() => {
     const open = Math.min(1, Math.max(0, openProgress.value));
-    const drag = Math.min(
-      1,
-      Math.max(0, sheetY.value / Math.max(1, height * 0.48))
-    );
-
-    // The reference player grows out of the mini-player instead of simply
-    // sliding up. At progress 0 this is a small rounded card near the bottom.
-    const openingScale = 0.22 + 0.78 * open;
-    const dragScale = 1 - drag * 0.055;
-    const openingY = (1 - open) * height * 0.36;
+    const geometry = playerMorph(width, height, morphOrigin, open, sheetY.value);
 
     return {
-      opacity: 0.62 + 0.38 * open,
-      borderRadius: 34 * (1 - open) + 30 * drag,
+      opacity: reduceMotion ? 1 : Math.min(1, open * 3),
+      borderRadius: geometry.radius,
       transform: [
-        { translateY: openingY + sheetY.value },
-        { scale: openingScale * dragScale },
+        { translateX: geometry.translateX },
+        { translateY: geometry.translateY },
+        { scaleX: geometry.scaleX },
+        { scaleY: geometry.scaleY },
       ],
     };
   });
@@ -761,6 +764,7 @@ export default function PlayerSheet(p: Props) {
       transparent
       animationType="none"
       presentationStyle="overFullScreen"
+      onShow={animatePlayerOpen}
       onRequestClose={() => dismissPlayer()}
     >
       <View style={playerStyles.modalRoot}>

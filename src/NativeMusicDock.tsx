@@ -16,7 +16,7 @@ export const nativeMusicDockAvailable = Platform.OS === 'ios' && !!requireOption
 const NativeView = nativeMusicDockAvailable ? requireNativeViewManager<NativeProps>('MetronomyDock') : null;
 const DockSurface = memo(function DockSurface(props: NativeProps) {
   const { bottom } = useScreenInsets();
-  return NativeView ? <NativeView {...props} style={{ position: 'absolute', left: 10, right: 10, bottom: Math.max(12, bottom + 4), height: 142, zIndex: 60 }} /> : null;
+  return NativeView ? <NativeView {...props} style={{ position: 'absolute', left: 10, right: 10, bottom: Math.max(10, bottom - 10), height: 132, zIndex: 60 }} /> : null;
 });
 
 type Props = Omit<Configuration, 'selected'> & DockHandlers & { tab: MusicTab };

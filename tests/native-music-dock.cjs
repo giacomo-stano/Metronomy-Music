@@ -3,9 +3,11 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
 const api = {};
-vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/nativeDockCommands.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: api });
+const motion = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/dockMotion.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: motion });
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/nativeDockCommands.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: api, require: () => motion });
 const events = [];
-const handlers = Object.fromEntries(['onTab', 'onOpen', 'onToggle', 'onNext', 'onOptions'].map(name => [name, (...args) => events.push([name, ...args])]));
+const handlers = Object.fromEntries(['onTab', 'onExpand', 'onOpen', 'onToggle', 'onNext', 'onOptions'].map(name => [name, (...args) => events.push([name, ...args])]));
 const dispatch = (command, id = 'song-a', canNext = true) => api.dispatchDockCommand(command, id, canNext, handlers);
 for (let index = 0; index < 4; index++) {
   dispatch({ action: 'tab', index, reset: false });
@@ -26,12 +28,19 @@ for (const [action, handler] of [['open', 'onOpen'], ['toggle', 'onToggle'], ['n
 dispatch({ action: 'next', trackID: 'song-a' }, 'song-a', false);
 dispatch({ action: 'unknown', trackID: 'song-a' });
 assert.equal(events.length, 0);
+dispatch({ action: 'expand' });
+assert.deepEqual(events.pop(), ['onExpand'], 'compact section button expands without resetting navigation');
+dispatch({ action: 'open', trackID: 'song-a', x: 70, y: 770, width: 220, height: 48 });
+assert.equal(JSON.stringify(events.pop()), JSON.stringify(['onOpen', { x: 70, y: 770, width: 220, height: 48 }]));
 const native = fs.readFileSync('modules/metronomy-audio-controls/ios/MetronomyDockView.swift', 'utf8');
 assert(!/\b(?:let|var)\s+next\s*[:=]/.test(native), 'next is inherited from UIResponder and cannot be a stored button property');
 assert(!/\bnext\./.test(native), 'button references must use nextButton, not UIResponder.next');
 assert(native.includes('private let nextButton = UIButton') && native.includes('if nextButton.isEnabled { emit("next") }'), 'rename the control without changing the next command protocol');
 assert(native.includes('UITabBarDelegate') && native.includes('let reselected = selected == item.tag'));
-assert(native.includes('more.showsMenuAsPrimaryAction = true') && native.includes('UIMenu(children:'));
+assert(native.includes('open.showsMenuAsPrimaryAction = false') && native.includes('open.menu = UIMenu(children:'));
+assert(native.includes('sectionGlass') && native.includes('searchGlass') && !native.includes('private let more ='));
+assert(native.includes('self.barContainer.clipsToBounds = self.shouldCompact'), 'native tracking lens must not be clipped when expanded');
+assert(/updateFonts\(\)\s+animateLayout\(\)/.test(native), 'changing accessibility text size must restore the expanded bar immediately');
 assert(native.includes('UIAccessibility.isReduceTransparencyEnabled') && native.includes('UIAccessibility.isReduceMotionEnabled'));
 assert(native.includes('UIAccessibility.isVoiceOverRunning') && native.includes('keyboardWillHideNotification'));
 assert(native.includes('artworkGeneration == generation') && native.includes('artworkTask?.cancel()'));
@@ -40,7 +49,7 @@ assert(!native.includes('AVPlayer') && !native.includes('MPNowPlayingInfoCenter'
 const wrapper = fs.readFileSync('src/NativeMusicDock.tsx', 'utf8');
 assert(wrapper.includes("requireOptionalNativeModule('MetronomyDock')") && wrapper.includes("Platform.OS === 'ios'"));
 assert(wrapper.includes('const DockSurface = memo') && wrapper.includes('latest.current = props'));
-assert(wrapper.includes('rememberMenuTrigger') && wrapper.includes('bottom + 4'));
+assert(wrapper.includes('rememberMenuTrigger') && wrapper.includes('bottom - 10'));
 const config = JSON.parse(fs.readFileSync('modules/metronomy-audio-controls/expo-module.config.json', 'utf8'));
 assert(config.apple.modules.includes('MetronomyDockModule'));
 const app = fs.readFileSync('App.tsx', 'utf8');
@@ -77,7 +86,7 @@ for (const available of [true, false]) {
   const surface = second.type(second.props);
   assert.equal(result.nativeMusicDockAvailable, available);
   assert.equal(nativeLoads, available ? 1 : 0, 'old binaries never require a missing native view');
-  if (available) { assert.equal(surface.props.style.bottom, 38); assert.equal(surface.type, 'NativeDock'); }
+  if (available) { assert.equal(surface.props.style.bottom, 24); assert.equal(surface.type, 'NativeDock'); }
   else assert.equal(surface, null);
 }
 console.log('Native dock: navigation/reselection, stale menu guards, audio isolation, fallback and native registration passed (device rendering requires iOS build).');
