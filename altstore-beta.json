@@ -21,6 +21,16 @@
       "versions": [
         {
           "version": "0.2.2",
+          "buildVersion": "52.1",
+          "marketingVersion": "0.2.2 Beta (52.1)",
+          "date": "2026-10-17T16:47:18.622Z",
+          "localizedDescription": "Corretta la doppia lente: nella barra compatta di Cerca, a sinistra compare l’icona Libreria. Aggiunta ricerca in Playlist, Artisti, Album, Brani, Preferiti e Scaricati, anche offline. Brani e Album vengono cercati nell’intera libreria, non solo negli elementi già caricati.",
+          "downloadURL": "https://github.com/giacomo-stano/Metronomy-Music/releases/download/v0.2.2-beta.52.1/Metronomy-Beta.ipa",
+          "size": 16779299,
+          "minOSVersion": "16.4"
+        },
+        {
+          "version": "0.2.2",
           "buildVersion": "51.1",
           "marketingVersion": "0.2.2 Beta (51.1)",
           "date": "2026-10-17T15:52:11.856Z",
