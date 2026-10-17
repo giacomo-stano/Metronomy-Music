@@ -21,6 +21,16 @@
       "versions": [
         {
           "version": "0.2.2",
+          "buildVersion": "51.1",
+          "marketingVersion": "0.2.2 Beta (51.1)",
+          "date": "2026-10-17T15:52:11.856Z",
+          "localizedDescription": "Barra più alta, icone ridimensionate e spazio della selezione corretto, anche offline. Libreria: controllo dei file effettivamente presenti, senza dipendere solo dalla scansione Navidrome. Copie scaricate sull’iPhone preservate anche dopo l’eliminazione dal server.",
+          "downloadURL": "https://github.com/giacomo-stano/Metronomy-Music/releases/download/v0.2.2-beta.51.1/Metronomy-Beta.ipa",
+          "size": 16775506,
+          "minOSVersion": "16.4"
+        },
+        {
+          "version": "0.2.2",
           "buildVersion": "50.1",
           "marketingVersion": "0.2.2 Beta (50.1)",
           "date": "2026-10-17T09:18:45.487Z",
