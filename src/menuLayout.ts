@@ -1,6 +1,7 @@
-export function menuLayout(width: number, height: number, topInset: number, bottomInset: number, anchor: { x: number; y: number } | null, contentHeight: number) {
+export function menuLayout(width: number, height: number, topInset: number, bottomInset: number, anchor: { x: number; y: number } | null, contentHeight: number, fontScale = 1) {
   const margin = 12;
-  const menuWidth = Math.min(340, Math.max(250, width * 0.64), width - margin * 2);
+  const scale = Math.max(1, Math.min(1.5, fontScale));
+  const menuWidth = Math.min(340 * scale, Math.max(250, width * 0.64 * scale), width - margin * 2);
   const safeTop = Math.max(margin, topInset + 4);
   const bottom = height - Math.max(margin, bottomInset + 4);
   const available = Math.max(1, bottom - safeTop);

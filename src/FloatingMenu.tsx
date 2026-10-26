@@ -9,7 +9,7 @@ import { menuLayout } from './menuLayout';
 
 export default function FloatingMenu({ children, onClose, busy = false }: { children: ReactNode; onClose: () => void; busy?: boolean }) {
   const { isDark } = useTheme();
-  const { width, height } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
   const insets = useScreenInsets();
   const { reduceMotion, reduceTransparency } = useMotionPreferences();
   const [anchor, setAnchor] = useState<MenuAnchor | null>(null);
@@ -18,7 +18,7 @@ export default function FloatingMenu({ children, onClose, busy = false }: { chil
   const progress = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
   const scroll = useRef<ScrollView>(null);
   const closing = useRef(false);
-  const layout = menuLayout(width, height, insets.top, insets.bottom, anchor, contentHeight);
+  const layout = menuLayout(width, height, insets.top, insets.bottom, anchor, contentHeight, fontScale);
   const ready = anchorReady && contentHeight > 0;
   useEffect(() => {
     Keyboard.dismiss();

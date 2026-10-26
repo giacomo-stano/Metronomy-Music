@@ -7,6 +7,7 @@ import { rememberTrack } from './src/listeningProfile';
 import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, PanResponder, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { coverURL, streamURL, request, type Album, type HomeResponse, type Song, type SearchResponse, type Lyrics } from './src/api';
 import { ScreenInsetsProvider } from './src/ScreenInsets';
+import { tabLensWidth } from './src/responsiveLayout';
 import SearchScreen from './src/SearchScreen';
 import PersistentScreen from './src/PersistentScreen';
 import { shouldResetTab } from './src/tabNavigation';
@@ -2219,6 +2220,7 @@ function AppleMusicTabIcon({
         >
           <SymbolView
             name="music.note"
+            style={{ width: 10, height: 10 }}
             size={10}
             weight="semibold"
             tintColor={selected ? '#ffffff' : '#ffffff'}
@@ -2233,6 +2235,7 @@ function AppleMusicTabIcon({
   return (
     <SymbolView
       name={item.icon}
+      style={{ width: 24, height: 24 }}
       size={item.size}
       weight={tab === 'Cerca' ? 'medium' : 'regular'}
       tintColor={color}
@@ -2269,7 +2272,7 @@ function LiquidTabBar({
 
   const tabWidth = barWidth > 0 ? barWidth / tabs.length : 0;
   // Keep icons/labels inside the selection even during the 1.10x press animation.
-  const lensWidth = tabWidth > 0 ? Math.max(70, tabWidth - 8) : 76;
+  const lensWidth = tabWidth > 0 ? tabLensWidth(tabWidth) : 76;
   const lensHeight = 62;
 
   const indexForX = (x: number) => {
@@ -2280,7 +2283,7 @@ function LiquidTabBar({
 
   const restLeftForIndex = (index: number) => {
     const w = barWidthRef.current / tabs.length;
-    const lw = w > 0 ? Math.max(70, w - 8) : 76;
+    const lw = w > 0 ? tabLensWidth(w) : 76;
     return index * w + (w - lw) / 2;
   };
 
@@ -2305,7 +2308,7 @@ function LiquidTabBar({
     if (!width) return;
 
     const w = width / tabs.length;
-    const lw = Math.max(70, w - 8);
+    const lw = tabLensWidth(w);
     const minLeft = 4;
     const maxLeft = width - lw - 4;
     const left = Math.max(minLeft, Math.min(maxLeft, x - lw / 2));
@@ -2407,7 +2410,7 @@ function LiquidTabBar({
         selectedIndex.current = index;
         hoveredIndex.current = index;
         const w = width / tabs.length;
-        const lw = Math.max(70, w - 8);
+        const lw = tabLensWidth(w);
         lensX.setValue(index * w + (w - lw) / 2);
       }}
       {...responder.panHandlers}
@@ -2474,14 +2477,13 @@ function LiquidTabBar({
                   { transform: [{ scale: itemScales[index] }] },
                 ]}
               >
-                <AppleMusicTabIcon
-                  tab={item.name}
-                  selected={selected}
-                  accent={accent}
-                  inactive={inactive}
-                />
+                <View style={{ width: 28, height: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}>
+                  <AppleMusicTabIcon tab={item.name} selected={selected} accent={accent} inactive={inactive} />
+                </View>
                 <Text
                   numberOfLines={1}
+                  maxFontSizeMultiplier={1.2}
+                  adjustsFontSizeToFit
                   style={[
                     liquidTabStyles.label,
                     { color: selected ? accent : inactive },
@@ -2980,14 +2982,15 @@ const liquidTabStyles = StyleSheet.create({
   itemContent: {
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 58,
+    minWidth: 0,
+    width: '100%',
   },
   label: {
     fontSize: 10,
-    lineHeight: 11,
+    lineHeight: 14,
     fontWeight: '500',
     letterSpacing: -0.15,
-    marginTop: 2,
+    marginTop: 4,
   },
   labelSelected: {
     fontWeight: '600',

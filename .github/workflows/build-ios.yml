@@ -72,6 +72,7 @@ jobs:
           node tests/library-pagination.cjs
           node tests/library-search.cjs
           node tests/search-presentation.cjs
+          node tests/responsive-layout.cjs
           node tests/performance.cjs
           node tests/altstore-release.cjs
           python3 -m unittest discover -s tests -p 'test_ipa_manifest.py' -v

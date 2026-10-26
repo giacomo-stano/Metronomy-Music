@@ -11,7 +11,7 @@ private final class FloatingTabBar: UITabBar {
 public final class MetronomyDockView: ExpoView, UITabBarDelegate {
   let onCommand = EventDispatcher()
   private let bar = FloatingTabBar()
-  private let barHeight: CGFloat = 72
+  private let barHeight: CGFloat = 76
   private let barContainer = UIView()
   private let sectionGlass = UIVisualEffectView()
   private let searchGlass = UIVisualEffectView()
@@ -51,7 +51,10 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     bar.itemPositioning = .fill
     let symbols = ["house.fill", "square.grid.2x2.fill", "music.note.house.fill", "magnifyingglass"]
     bar.items = names.enumerated().map { index, name in
-      UITabBarItem(title: name, image: UIImage(systemName: symbols[index], withConfiguration: UIImage.SymbolConfiguration(pointSize: 23, weight: .regular, scale: .medium)), tag: index)
+      let item = UITabBarItem(title: name, image: Self.tabImage(symbols[index]), tag: index)
+      // Keep the glyph clear of its caption on both classic and Liquid Glass tabs.
+      item.imageInsets = UIEdgeInsets(top: -2, left: 0, bottom: 2, right: 0)
+      return item
     }
     bar.selectedItem = bar.items?.first
     for surface in [sectionGlass, searchGlass] {
@@ -179,13 +182,11 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
       }
       let appearance = UITabBarAppearance()
       appearance.configureWithOpaqueBackground()
-      bar.standardAppearance = appearance
-      bar.scrollEdgeAppearance = appearance
+      applyTabAppearance(appearance)
     } else {
       let appearance = UITabBarAppearance()
       appearance.configureWithDefaultBackground()
-      bar.standardAppearance = appearance
-      bar.scrollEdgeAppearance = appearance
+      applyTabAppearance(appearance)
       #if compiler(>=6.2)
       if #available(iOS 26.0, *),
          let type = NSClassFromString("UIGlassEffect") as? NSObject.Type,
@@ -206,6 +207,33 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     }
   }
 
+  private static func tabImage(_ name: String) -> UIImage? {
+    guard let symbol = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 23, weight: .regular, scale: .medium)) else { return nil }
+    // Point size is not the glyph's bounding box. Give UIKit an actual 24pt
+    // template so individual SF Symbols cannot expand into the caption/lens.
+    let side: CGFloat = 24
+    let ratio = min(side / symbol.size.width, side / symbol.size.height)
+    let size = CGSize(width: symbol.size.width * ratio, height: symbol.size.height * ratio)
+    return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
+      symbol.draw(in: CGRect(x: (side - size.width) / 2, y: (side - size.height) / 2, width: size.width, height: size.height))
+    }.withRenderingMode(.alwaysTemplate)
+  }
+
+  private func applyTabAppearance(_ appearance: UITabBarAppearance) {
+    let font = UIFontMetrics(forTextStyle: .caption2).scaledFont(for: .systemFont(ofSize: 10, weight: .medium), maximumPointSize: 12)
+    for layout in [appearance.stackedLayoutAppearance, appearance.inlineLayoutAppearance, appearance.compactInlineLayoutAppearance] {
+      for state in [layout.normal, layout.selected, layout.disabled, layout.focused] {
+        state.titleTextAttributes = [.font: font]
+      }
+    }
+    for state in [appearance.stackedLayoutAppearance.normal, appearance.stackedLayoutAppearance.selected,
+                  appearance.stackedLayoutAppearance.disabled, appearance.stackedLayoutAppearance.focused] {
+      state.titlePositionAdjustment = UIOffset(horizontal: 0, vertical: 2)
+    }
+    bar.standardAppearance = appearance
+    bar.scrollEdgeAppearance = appearance
+  }
+
   // Search already has a dedicated button on the right. Keep the library
   // navigation glyph on the left instead of rendering two magnifying glasses.
   private var compactNavigationIndex: Int { selected == 3 ? 2 : selected }
@@ -213,6 +241,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
   private var shouldCompact: Bool {
     compact && hasTrack && !UIAccessibility.isVoiceOverRunning && !UIAccessibility.isReduceMotionEnabled
       && !traitCollection.preferredContentSizeCategory.isAccessibilityCategory
+      && bounds.width >= 350
   }
 
   private func updateFonts() {
@@ -225,6 +254,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     super.traitCollectionDidChange(previousTraitCollection)
     if previousTraitCollection?.preferredContentSizeCategory != traitCollection.preferredContentSizeCategory {
       updateFonts()
+      refreshAppearance()
       animateLayout()
     }
   }
@@ -233,6 +263,11 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     super.layoutSubviews()
     guard bounds.width >= 160, bounds.height >= barHeight + 60 else { return }
     let small = shouldCompact
+    // Resizing / Display Zoom can change eligibility without a JS prop change.
+    if layoutAnimator == nil {
+      barContainer.isHidden = small
+      barContainer.clipsToBounds = small
+    }
     let barY = bounds.height - barHeight
     let compactInset = (barHeight - 48) / 2
     let circle: CGFloat = 48
@@ -260,7 +295,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     barContainer.isUserInteractionEnabled = !small
     barContainer.accessibilityElementsHidden = small
     let width = small ? bounds.width - 2 * (inset + circle + gap) : bounds.width - 16
-    let height: CGFloat = small ? 48 : 52
+    let height: CGFloat = small ? 48 : 60
     glass.frame = CGRect(x: small ? inset + circle + gap : inset, y: small ? barY + compactInset : barY - gap - height, width: width, height: height)
     glass.layer.cornerRadius = height / 2
     glass.isHidden = !hasTrack
@@ -272,8 +307,11 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     artwork.frame = CGRect(x: 9, y: (height - artSize) / 2, width: artSize, height: artSize)
     let textX = artSize + 17
     let textWidth = max(0, mainWidth - textX - 4)
-    titleLabel.frame = CGRect(x: textX, y: (height - 37) / 2, width: textWidth, height: 22)
-    artistLabel.frame = CGRect(x: textX, y: (height - 37) / 2 + 21, width: textWidth, height: 16)
+    let titleHeight = ceil(titleLabel.font.lineHeight)
+    let artistHeight = ceil(artistLabel.font.lineHeight)
+    let textTop = (height - titleHeight - artistHeight - 2) / 2
+    titleLabel.frame = CGRect(x: textX, y: textTop, width: textWidth, height: titleHeight)
+    artistLabel.frame = CGRect(x: textX, y: textTop + titleHeight + 2, width: textWidth, height: artistHeight)
     artistLabel.isHidden = false
     play.frame = CGRect(x: mainWidth, y: 0, width: 44, height: height)
     spinner.center = play.center

@@ -21,6 +21,7 @@ import MusicSlider from './MusicSlider';
 import { useMotionPreferences } from './motionPreferences';
 import { playerMorph, type PlayerOrigin } from './dockMotion';
 import { useScreenInsets } from './ScreenInsets';
+import { playerLayout } from './responsiveLayout';
 import { playbackTimeline, seekPlayback, invalidatePlaybackSeeks } from './playbackTimeline';
 import { DarkSurface, useTheme } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
@@ -344,7 +345,9 @@ export default function PlayerSheet(p: Props) {
   const status = usePlaybackSignals(p.player);
   const { colors: c, isDark } = useTheme();
   const { width, height } = useWindowDimensions();
-  const { bottom } = useScreenInsets();
+  const { top, bottom } = useScreenInsets();
+  const [controlsHeight, setControlsHeight] = useState(303);
+  const [metadataHeight, setMetadataHeight] = useState(52);
   const { reduceMotion } = useMotionPreferences();
   const morphOrigin = p.openOrigin ?? { x: 18, y: height - Math.max(10, bottom - 10) - 132, width: width - 36, height: 52 };
   const [mode, setMode] = useState<'cover' | 'lyrics' | 'queue'>('cover');
@@ -720,14 +723,11 @@ export default function PlayerSheet(p: Props) {
   const currentCover = coverURL(p.song.coverArt) ?? p.artworkUri;
   const upNext = queueMounted ? p.queue.slice(Math.max(0, p.index + 1)) : [];
 
-  // Proportions measured from the supplied Apple Music reference screenshot
-  // (735 x 1600). Keeping them as screen ratios makes the layout scale cleanly
-  // across iPhone sizes.
-  const referenceArtworkSize = Math.min(width * 0.705, height * 0.325);
+  // Reserve measured controls and metadata before sizing the artwork.
+  const { artworkSize: referenceArtworkSize, artworkTop: referenceArtworkTop,
+    metadataTop: referenceMetaTop, controlsTop: referenceControlsTop } =
+    playerLayout(width, height, top, bottom, controlsHeight, metadataHeight);
   const referenceArtworkLeft = (width - referenceArtworkSize) / 2;
-  const referenceArtworkTop = height * 0.164;
-  const referenceMetaTop = height * 0.565;
-  const referenceControlsTop = height * 0.642;
   const referenceSideInset = width * 0.067;
 
   const coverOpacity = queueProgress.interpolate({
@@ -859,14 +859,14 @@ export default function PlayerSheet(p: Props) {
 
           {/* The grabber stays in the same position in cover and queue mode. */}
           <GestureDetector gesture={playerGesture}>
-            <View style={[playerStyles.grabberHitArea, { top: height * 0.063 }]}>
+            <View style={[playerStyles.grabberHitArea, { top: Math.max(top, height * 0.063) }]}>
               <View style={playerStyles.grabber} />
             </View>
           </GestureDetector>
 
           <View style={playerStyles.screen}>
             {mode === 'lyrics' ? (
-              <View style={playerStyles.lyricsPane}>
+              <View style={[playerStyles.lyricsPane, { paddingTop: top + 38 }]}>
                 <View style={playerStyles.lyricsHeader}>
                   <Pressable
                     accessibilityLabel="Torna al player"
@@ -954,6 +954,7 @@ export default function PlayerSheet(p: Props) {
                     />
 
                     <View
+                      onLayout={e => setMetadataHeight(e.nativeEvent.layout.height)}
                       style={[
                         playerStyles.coverMeta,
                         {
@@ -966,12 +967,14 @@ export default function PlayerSheet(p: Props) {
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text
                           numberOfLines={1}
+                          maxFontSizeMultiplier={1.5}
                           style={playerStyles.coverTitle}
                         >
                           {p.song.title}
                         </Text>
                         <Text
                           numberOfLines={1}
+                          maxFontSizeMultiplier={1.5}
                           style={playerStyles.coverArtist}
                         >
                           {p.song.artist}
@@ -1023,6 +1026,7 @@ export default function PlayerSheet(p: Props) {
                       StyleSheet.absoluteFill,
                       playerStyles.queuePane,
                       {
+                        paddingTop: top + 40,
                         opacity: queueOpacity,
                         transform: [{ translateY: queueTranslateY }],
                       },
@@ -1241,6 +1245,7 @@ export default function PlayerSheet(p: Props) {
 
                 {/* Common lower controls remain fixed while cover/queue morphs. */}
                 <View
+                  onLayout={e => setControlsHeight(e.nativeEvent.layout.height)}
                   style={[
                     playerStyles.controlStack,
                     {
@@ -1251,7 +1256,7 @@ export default function PlayerSheet(p: Props) {
                 >
                   <PlaybackProgress key={p.song.id} player={p.player} song={p.song} visible={p.visible} />
 
-                  <View style={playerStyles.transportRow}>
+                  <View style={[playerStyles.transportRow, height < 700 && { height: 96, paddingHorizontal: 16 }]}>
                     <Pressable
                       accessibilityLabel="Brano precedente"
                       onPress={p.onPrevious}
@@ -1301,7 +1306,7 @@ export default function PlayerSheet(p: Props) {
                     </Pressable>
                   </View>
 
-                  <View style={playerStyles.volumeRow}>
+                  <View style={[playerStyles.volumeRow, height < 700 && { height: 48 }]}>
                     <SymbolView
                       name="speaker.fill"
                       size={11}
@@ -1854,7 +1859,7 @@ const playerStyles = StyleSheet.create({
     right: 0,
   },
   progressArea: {
-    height: 47,
+    minHeight: 60,
   },
   timeRow: {
     minHeight: 16,
@@ -2001,8 +2006,8 @@ const PlaybackProgress = memo(function PlaybackProgress({ player, song, visible 
   return <View style={playerStyles.progressArea}>
     <MusicSlider value={preview ?? timeline.progress} onChange={commit} onPreview={onPreview} enabled={timeline.duration > 0} color="rgba(255,255,255,0.86)" track="rgba(255,255,255,0.22)" label="Posizione del brano" height={4} />
     <View style={playerStyles.timeRow}>
-      <Text style={playerStyles.timeText}>{clock(position)}</Text>
-      <Text style={playerStyles.timeText}>−{clock(Math.max(0, timeline.duration - position))}</Text>
+      <Text maxFontSizeMultiplier={1.5} style={playerStyles.timeText}>{clock(position)}</Text>
+      <Text maxFontSizeMultiplier={1.5} style={playerStyles.timeText}>−{clock(Math.max(0, timeline.duration - position))}</Text>
     </View>
   </View>;
 });

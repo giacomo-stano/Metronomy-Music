@@ -41,13 +41,13 @@ assert(!/\b(?:let|var)\s+next\s*[:=]/.test(native), 'next is inherited from UIRe
 assert(!/\bnext\./.test(native), 'button references must use nextButton, not UIResponder.next');
 assert(native.includes('private let nextButton = UIButton') && native.includes('if nextButton.isEnabled { emit("next") }'), 'rename the control without changing the next command protocol');
 assert(native.includes('UITabBarDelegate') && native.includes('let reselected = selected == item.tag'));
-assert(native.includes('barHeight: CGFloat = 72') && native.includes('height: barHeight'));
+assert(native.includes('barHeight: CGFloat = 76') && native.includes('height: barHeight'));
 assert(native.includes('override var safeAreaInsets: UIEdgeInsets { .zero }'), 'floating bar must not deduct the home inset twice');
 assert(native.includes('pointSize: 23, weight: .regular, scale: .medium'), 'bound symbol sizes inside the native selection');
 assert(native.includes('open.showsMenuAsPrimaryAction = false') && native.includes('open.menu = UIMenu(children:'));
 assert(native.includes('sectionGlass') && native.includes('searchGlass') && !native.includes('private let more ='));
 assert(native.includes('self.barContainer.clipsToBounds = self.shouldCompact'), 'native tracking lens must not be clipped when expanded');
-assert(/updateFonts\(\)\s+animateLayout\(\)/.test(native), 'changing accessibility text size must restore the expanded bar immediately');
+assert(/updateFonts\(\)\s+refreshAppearance\(\)\s+animateLayout\(\)/.test(native), 'changing accessibility text size must restore the expanded bar immediately');
 assert(native.includes('UIAccessibility.isReduceTransparencyEnabled') && native.includes('UIAccessibility.isReduceMotionEnabled'));
 assert(native.includes('UIAccessibility.isVoiceOverRunning') && native.includes('keyboardWillHideNotification'));
 assert(native.includes('artworkGeneration == generation') && native.includes('artworkTask?.cancel()'));
@@ -97,7 +97,7 @@ for (const available of [true, false]) {
   const surface = second.type(second.props);
   assert.equal(result.nativeMusicDockAvailable, available);
   assert.equal(nativeLoads, available ? 1 : 0, 'old binaries never require a missing native view');
-  if (available) { assert.equal(surface.props.style.bottom, 24); assert.equal(surface.props.style.height, 140); assert.equal(surface.type, 'NativeDock'); }
+  if (available) { assert.equal(surface.props.style.bottom, 24); assert.equal(surface.props.style.height, 152); assert.equal(surface.type, 'NativeDock'); }
   else assert.equal(surface, null);
 }
 console.log('Native dock: navigation/reselection, stale menu guards, audio isolation, fallback and native registration passed (device rendering requires iOS build).');
