@@ -62,9 +62,9 @@ function updateSource(source, plan, manifest, notes, date = new Date().toISOStri
   return { ...source, apps: [{
     developerName: 'Giacomo Stano', subtitle: 'La tua musica, sul tuo server.',
     localizedDescription: 'Client Navidrome con ascolto offline e integrazione Qobuz.' + (plan.channel === 'beta' ? ' Versione di test: dati locali separati dalla stabile. Le operazioni sul server restano reali.' : ''),
-    iconURL: `https://raw.githubusercontent.com/${plan.repository}/${plan.sha}/assets/metronomy-icon-v1.png`,
     tintColor: plan.channel === 'beta' ? '#AF52DE' : '#111111',
     ...previous, name: plan.name, bundleIdentifier: plan.bundleIdentifier,
+    iconURL: `https://raw.githubusercontent.com/${plan.repository}/${plan.sha}/assets/metronomy-icon-v2.png`,
     appPermissions: manifest.appPermissions, versions: [entry, ...versions],
   }] };
 }

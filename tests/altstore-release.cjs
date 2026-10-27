@@ -61,6 +61,9 @@ const manifest = { name: plan.name, bundleIdentifier: plan.bundleIdentifier, ver
   };
   const result = await publish({ plan, manifest, ipa, notes: 'Beta', api });
   assert.equal(result.sourceURL, betaSource.sourceURL);
+  const updatedIcon = updateSource({ ...betaSource, apps: [{ ...betaSource.apps[0], bundleIdentifier: plan.bundleIdentifier, iconURL: 'https://old.test/icon.png' }] }, plan, manifest, 'New icon');
+  assert.equal(updatedIcon.apps[0].iconURL, `https://raw.githubusercontent.com/${plan.repository}/${plan.sha}/assets/metronomy-icon-v2.png`);
+  assert.equal(require('../app.json').expo.icon, './assets/metronomy-icon-v2.png');
   const release = operations.find(o => o.method === 'POST' && o.path.endsWith('/releases'));
   assert.equal(release.body.draft, true); assert.equal(release.body.prerelease, true); assert.equal(release.body.make_latest, 'false');
   const publicIndex = operations.findIndex(o => o.method === 'PATCH');

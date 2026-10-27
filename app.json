@@ -4,23 +4,17 @@
     "slug": "metronomy",
     "version": "0.2.2",
     "orientation": "portrait",
-    "icon": "./assets/metronomy-icon-v1.png",
+    "icon": "./assets/metronomy-icon-v2.png",
     "userInterfaceStyle": "automatic",
     "plugins": [["expo-audio", { "enableBackgroundPlayback": true }], "./plugins/withPreciseAudioTiming"],
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/metronomy-icon-v2.png"
     }
   }
 }
