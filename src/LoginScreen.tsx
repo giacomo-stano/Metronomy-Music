@@ -60,7 +60,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (account: Account) =
       <View style={[s.content, { paddingVertical: keyboardOpen ? 6 : 16 }]}>
         <View style={s.body}>
           {!keyboardOpen && <View style={[s.hero, { marginBottom: compact ? 16 : 28 }]}>
-            {!small && <View style={[s.iconShadow, { shadowColor: '#ba2448' }]}><Image source={require('../assets/metronomy-icon-v1.png')} accessibilityLabel="Icona Metronomy" style={{ width: compact ? 64 : 100, height: compact ? 64 : 100, borderRadius: compact ? 16 : 25 }} /></View>}
+            {!small && <View style={[s.iconShadow, { shadowColor: '#ba2448' }]}><Image source={require('../assets/metronomy-icon-v2.png')} accessibilityLabel="Icona Metronomy" style={{ width: compact ? 64 : 100, height: compact ? 64 : 100, borderRadius: compact ? 16 : 25 }} /></View>}
             <Text accessibilityRole="header" style={[s.brand, { color: c.text }, compact && { fontSize: 32, marginTop: small ? 0 : 10 }]}>Metronomy</Text>
             {!small && <Text style={[s.tagline, { color: c.secondary }]}>La tua musica. Il tuo ritmo.</Text>}
           </View>}

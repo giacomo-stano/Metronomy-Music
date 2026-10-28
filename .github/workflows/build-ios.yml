@@ -61,6 +61,7 @@ jobs:
 
       - name: Playback timeline regression tests
         run: |
+          node tests/playback-completion.cjs
           node tests/playback-timeline.cjs
           node tests/playback-source.cjs
           node tests/precise-audio-timing.cjs

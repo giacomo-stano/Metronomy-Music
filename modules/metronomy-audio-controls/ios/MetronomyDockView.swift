@@ -24,7 +24,6 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
   private let artistLabel = UILabel()
   private let play = UIButton(type: .system)
   private let nextButton = UIButton(type: .system)
-  private let spinner = UIActivityIndicatorView(style: .medium)
   private let names = ["Home", "Novità", "Libreria", "Cerca"]
   private var configuration: [String: Any] = [:]
   private var selected = 0
@@ -76,7 +75,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     addSubview(glass)
     glass.clipsToBounds = true
     glass.layer.cornerCurve = .continuous
-    let controls: [UIView] = [open, play, nextButton, spinner]
+    let controls: [UIView] = [open, play, nextButton]
     for view in controls { glass.contentView.addSubview(view) }
     open.addSubview(artwork)
     open.addSubview(titleLabel)
@@ -100,7 +99,6 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     open.showsMenuAsPrimaryAction = false
     open.accessibilityHint = "Tocca per aprire; tieni premuto per le opzioni del brano"
     nextButton.accessibilityLabel = "Brano successivo"
-    spinner.isUserInteractionEnabled = false
     NotificationCenter.default.addObserver(self, selector: #selector(accessibilityChanged), name: UIAccessibility.reduceTransparencyStatusDidChangeNotification, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(accessibilityChanged), name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(accessibilityChanged), name: UIAccessibility.voiceOverStatusDidChangeNotification, object: nil)
@@ -142,8 +140,6 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     nextButton.setImage(UIImage(systemName: "forward.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)), for: .normal)
     nextButton.isEnabled = value["canNext"] as? Bool ?? false
     let buffering = value["buffering"] as? Bool ?? false
-    if buffering { spinner.startAnimating() } else { spinner.stopAnimating() }
-    play.imageView?.isHidden = buffering
     play.accessibilityValue = buffering ? "Caricamento" : nil
     if previous["dark"] as? Bool != value["dark"] as? Bool { refreshAppearance() }
     updateArtwork(value["artwork"] as? String ?? "")
@@ -314,7 +310,6 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     artistLabel.frame = CGRect(x: textX, y: textTop + titleHeight + 2, width: textWidth, height: artistHeight)
     artistLabel.isHidden = false
     play.frame = CGRect(x: mainWidth, y: 0, width: 44, height: height)
-    spinner.center = play.center
     nextButton.frame = CGRect(x: mainWidth + 44, y: 0, width: 44, height: height)
     nextButton.isHidden = small
   }

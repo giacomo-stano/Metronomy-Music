@@ -28,6 +28,7 @@ import NetworkActions from './src/NetworkActions';
 import { songCatalogItem } from './src/networkCatalog';
 import AlbumActions from './src/AlbumActions';
 import { usePlaybackSignals } from './src/usePlaybackSignals';
+import { observePlaybackCompletion } from './src/playbackCompletion';
 import { useMiniMotion } from './src/useMiniMotion';
 import { ThemeProvider, useTheme, type Palette } from './src/theme';
 import SettingsScreen from './src/SettingsScreen';
@@ -507,6 +508,7 @@ function MusicApp({
   const [expanded, setExpanded] = useState(false);
   const audioReady = useRef<Promise<void> | null>(null);
   const audioGeneration = useRef(0);
+  const activeAudioGeneration = useRef<number | null>(null);
   const remembered = useRef('');
   const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off');
   const [shuffle, setShuffle] = useState(false);
@@ -525,7 +527,9 @@ function MusicApp({
     return () => clearTimeout(timer);
   }, [serverCompletion]);
   const generation = useRef(0);
-  const player = useAudioPlayer(null, { updateInterval: 250 });
+  // Expo otherwise schedules session deactivation after EOF. A buffering next
+  // track is not yet "playing", so that delayed task can silence its startup.
+  const player = useAudioPlayer(null, { updateInterval: 250, keepAudioSessionActive: true });
   const status = usePlaybackSignals(player);
   const current = queue[index];
 
@@ -776,7 +780,7 @@ function MusicApp({
     const now = playback.current;
     const selected = now.queue[now.index];
     if (selected && ids.includes(selected.id)) {
-      audioGeneration.current++;
+      audioGeneration.current++; activeAudioGeneration.current = null;
       await invalidatePlaybackSeeks(player);
       player.pause();
       setExpanded(false);
@@ -896,7 +900,7 @@ function MusicApp({
   useEffect(() => {
     audioReady.current = setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix' });
     void audioReady.current.catch(() => Alert.alert('Audio', 'Impossibile configurare la sessione audio.'));
-    return () => { audioGeneration.current++; void invalidatePlaybackSeeks(player); };
+    return () => { audioGeneration.current++; activeAudioGeneration.current = null; void invalidatePlaybackSeeks(player); };
   }, []);
 
   const listeningSession = useRef<{ songId: string; version: number; seconds: number; previous: number | null } | null>(null);
@@ -1182,6 +1186,9 @@ function MusicApp({
     if (!next) return;
 
     const version = ++audioGeneration.current;
+    const previousActiveGeneration = activeAudioGeneration.current;
+    activeAudioGeneration.current = null;
+    let replaced = false;
     const previousQueue = queue;
     const previousIndex = index;
     const previousArtworkUri = currentArtworkUri;
@@ -1210,6 +1217,8 @@ function MusicApp({
       await invalidatePlaybackSeeks(player);
       if (version !== audioGeneration.current) return;
       player.replace(source);
+      replaced = true;
+      activeAudioGeneration.current = version;
       player.play();
       listeningSession.current = { songId: next.id, version, seconds: 0, previous: null };
 
@@ -1236,6 +1245,7 @@ function MusicApp({
       }
     } catch (e) {
       if (version === audioGeneration.current) {
+        activeAudioGeneration.current = replaced ? null : previousActiveGeneration;
         setQueue(previousQueue);
         setIndex(previousIndex);
         setCurrentArtworkUri(previousArtworkUri);
@@ -1289,7 +1299,17 @@ function MusicApp({
     if (index + 1 < queue.length) start(queue, index + 1, false);
     else if (repeat === 'all' && queue.length) start(queue, 0, false);
   }
-  useEffect(() => { if (status.didJustFinish && repeat !== 'one') next(); }, [status.didJustFinish]);
+  const completionAction = useRef(() => {});
+  completionAction.current = () => { if (repeat !== 'one') next(); };
+  useEffect(() => {
+    // EOF is an event, not a render state: React may batch true/false updates.
+    const subscription = observePlaybackCompletion(
+      player,
+      () => activeAudioGeneration.current,
+      () => completionAction.current(),
+    );
+    return () => subscription.remove();
+  }, [player]);
 
   useEffect(() => {
     setRemoteControlsEnabled(true);
@@ -1454,7 +1474,7 @@ function MusicApp({
       <SettingsScreen
         onClose={() => setSettingsOpen(false)}
         onLogout={() => {
-          audioGeneration.current++;
+          audioGeneration.current++; activeAudioGeneration.current = null;
 
           try {
             player.pause();
