@@ -31,6 +31,7 @@ async def lifespan(app):
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+        await network.stream_resolver.close()
         await network.close_catalog_client()
         await navidrome.close()
 
@@ -51,7 +52,8 @@ async def private_responses(request, call_next):
     response.headers['Cache-Control'] = 'no-store'
     # Time to response headers, not the duration of an audio transfer. No IDs,
     # URLs or credentials are included, so slow bridge work can be distinguished.
-    response.headers['Server-Timing'] = f'bridge;dur={(time.perf_counter() - started) * 1000:.1f}'
+    timing = response.headers.get('Server-Timing')
+    response.headers['Server-Timing'] = f'bridge;dur={(time.perf_counter() - started) * 1000:.1f}' + (',' + timing if timing else '')
     return response
 
 

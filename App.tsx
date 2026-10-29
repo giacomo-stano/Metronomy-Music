@@ -1,10 +1,12 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
+import { clearPreloadedSource, preload, setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import { seekPlayback, invalidatePlaybackSeeks } from './src/playbackTimeline';
 import { songPlaybackSource } from './src/songPlaybackSource';
+import { NextTrackPreparation, upcomingTrack } from './src/nextTrackPreparation';
+import { playbackStartup, type StartupAttempt } from './src/playbackStartup';
 import { rememberTrack } from './src/listeningProfile';
-import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, PanResponder, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, PanResponder, Platform, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { coverURL, streamURL, request, type Album, type HomeResponse, type Song, type SearchResponse, type Lyrics } from './src/api';
 import { ScreenInsetsProvider } from './src/ScreenInsets';
 import { tabLensWidth } from './src/responsiveLayout';
@@ -509,6 +511,13 @@ function MusicApp({
   const audioReady = useRef<Promise<void> | null>(null);
   const audioGeneration = useRef(0);
   const activeAudioGeneration = useRef<number | null>(null);
+  const startAbort = useRef<AbortController | null>(null);
+  const startupAttempt = useRef<StartupAttempt | null>(null);
+  const preparation = useRef<NextTrackPreparation | null>(null);
+  if (!preparation.current) preparation.current = new NextTrackPreparation(
+    source => preload(source, { preferredForwardBufferDuration: 5 }),
+    source => clearPreloadedSource(source),
+  );
   const remembered = useRef('');
   const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off');
   const [shuffle, setShuffle] = useState(false);
@@ -549,23 +558,30 @@ function MusicApp({
 
   // Keep the artwork required by the player already decoded/cached.
   useEffect(() => {
+    if (!status.playing || status.isBuffering || isOffline) return;
     const candidates = queue
-      .slice(Math.max(0, index), Math.max(0, index) + 6)
+      .slice(Math.max(0, index + 1), Math.max(0, index + 1) + 3)
       .map(song => coverURL(song.coverArt))
       .filter((value): value is string => !!value);
 
-    for (const uri of candidates) {
-      void Image.prefetch(uri).catch(() => {});
-    }
-  }, [current?.id, index, queue]);
+    const timer = setTimeout(() => {
+      for (const uri of candidates) void Image.prefetch(uri).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [current?.id, index, queue, status.playing, status.isBuffering, isOffline]);
   function deleted(id: string) {
     deletedSongs([id]);
   }
   function deletedSongs(ids: string[]) {
+    preparation.current?.clear();
     const now = playback.current;
     const selected = now.queue[now.index]?.id;
     const remaining = now.queue.filter(song => !ids.includes(song.id));
-    if (selected && ids.includes(selected)) { player.pause(); setExpanded(false); }
+    if (selected && ids.includes(selected)) {
+      audioGeneration.current++; activeAudioGeneration.current = null;
+      startAbort.current?.abort(); startupAttempt.current?.cancel();
+      player.pause(); setExpanded(false);
+    }
     setQueue(remaining); setIndex(remaining.findIndex(song => song.id === selected));
     setReload(n => n + 1);
   }
@@ -777,10 +793,12 @@ function MusicApp({
   }
 
   async function beforeRemoveAllLocal(ids: string[]) {
+    preparation.current?.clear();
     const now = playback.current;
     const selected = now.queue[now.index];
     if (selected && ids.includes(selected.id)) {
       audioGeneration.current++; activeAudioGeneration.current = null;
+      startAbort.current?.abort(); startupAttempt.current?.cancel();
       await invalidatePlaybackSeeks(player);
       player.pause();
       setExpanded(false);
@@ -900,7 +918,11 @@ function MusicApp({
   useEffect(() => {
     audioReady.current = setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix' });
     void audioReady.current.catch(() => Alert.alert('Audio', 'Impossibile configurare la sessione audio.'));
-    return () => { audioGeneration.current++; activeAudioGeneration.current = null; void invalidatePlaybackSeeks(player); };
+    return () => {
+      audioGeneration.current++; activeAudioGeneration.current = null;
+      startAbort.current?.abort(); preparation.current?.clear(); playbackStartup.reset();
+      void invalidatePlaybackSeeks(player);
+    };
   }, []);
 
   const listeningSession = useRef<{ songId: string; version: number; seconds: number; previous: number | null } | null>(null);
@@ -1186,6 +1208,13 @@ function MusicApp({
     if (!next) return;
 
     const version = ++audioGeneration.current;
+    const owner = currentAccount();
+    startAbort.current?.abort();
+    const controller = new AbortController();
+    startAbort.current = controller;
+    const prepared = preparation.current?.take(isOffline ? null : owner, next.id);
+    const attempt = playbackStartup.begin(owner, next.qobuzId ? 'Qobuz' : 'Server');
+    startupAttempt.current = attempt;
     const previousActiveGeneration = activeAudioGeneration.current;
     activeAudioGeneration.current = null;
     let replaced = false;
@@ -1206,16 +1235,27 @@ function MusicApp({
 
     try {
       await audioReady.current;
-      if (version !== audioGeneration.current) return;
+      if (version !== audioGeneration.current || currentAccount() !== owner) return;
 
-      const source = await songPlaybackSource(
-        next, isOffline, id => offlineStore.source(id),
+      // Revalidate local files even when a remote item has been prepared:
+      // newly downloaded or removed files must take effect immediately.
+      let local: string | undefined;
+      if (!next.qobuzId) {
+        try { local = await offlineStore.source(next.id); }
+        catch (error) { if (isOffline) throw error; }
+      }
+      if (version !== audioGeneration.current || currentAccount() !== owner) return;
+      const source = local ? { uri: local } : prepared?.source ?? await songPlaybackSource(
+        next, isOffline, async () => undefined,
+        { signal: controller.signal, onServerTiming: attempt.serverTiming },
       );
+      attempt.resolved(source.uri, !local && !!prepared);
 
-      if (version !== audioGeneration.current) return;
+      if (version !== audioGeneration.current || currentAccount() !== owner) return;
 
       await invalidatePlaybackSeeks(player);
-      if (version !== audioGeneration.current) return;
+      if (version !== audioGeneration.current || currentAccount() !== owner) return;
+      attempt.installed();
       player.replace(source);
       replaced = true;
       activeAudioGeneration.current = version;
@@ -1244,6 +1284,8 @@ function MusicApp({
         /* Optional in Expo Go. */
       }
     } catch (e) {
+      if (version !== audioGeneration.current || currentAccount() !== owner) return;
+      attempt.fail();
       if (version === audioGeneration.current) {
         activeAudioGeneration.current = replaced ? null : previousActiveGeneration;
         setQueue(previousQueue);
@@ -1257,6 +1299,9 @@ function MusicApp({
           ? e.message
           : 'Impossibile aprire il brano. Riprova.'
       );
+    } finally {
+      prepared?.release();
+      if (!replaced) attempt.cancel();
     }
   }
   const seek = (seconds: number) => { void seekPlayback(player, seconds, current?.duration).catch(() => Alert.alert('Riproduzione', 'Impossibile spostarsi in questo brano.')); };
@@ -1299,6 +1344,30 @@ function MusicApp({
     if (index + 1 < queue.length) start(queue, index + 1, false);
     else if (repeat === 'all' && queue.length) start(queue, 0, false);
   }
+  // Read the native clock without rerendering the screen on every tick.
+  const upcoming = upcomingTrack(queue, index, shuffle, repeat);
+  const prepareNext = useRef(() => {});
+  prepareNext.current = () => {
+    if (Platform.OS !== 'ios' || isOffline || offlineStore.removingAll || !upcoming) return;
+    const owner = currentAccount();
+    if (!owner || owner.offline) return;
+    preparation.current?.prepare(owner, upcoming.id, signal =>
+      songPlaybackSource(upcoming, false, id => offlineStore.source(id), { signal }));
+  };
+  useEffect(() => {
+    preparation.current?.clear();
+  }, [current?.id, upcoming?.id, isOffline, account, shuffle, repeat, offlineStore.removingAll]);
+  useEffect(() => {
+    const listener = player.addListener('playbackStatusUpdate', value => {
+      if (activeAudioGeneration.current === null || activeAudioGeneration.current !== audioGeneration.current) return;
+      startupAttempt.current?.observe(value);
+      const left = value.duration - value.currentTime;
+      if (value.isLoaded && value.playing && !value.isBuffering && !value.didJustFinish &&
+          value.currentTime > 0 && Number.isFinite(left) && left > 0 && left <= 25) prepareNext.current();
+    });
+    return () => listener.remove();
+  }, [player]);
+
   const completionAction = useRef(() => {});
   completionAction.current = () => { if (repeat !== 'one') next(); };
   useEffect(() => {
@@ -1475,6 +1544,7 @@ function MusicApp({
         onClose={() => setSettingsOpen(false)}
         onLogout={() => {
           audioGeneration.current++; activeAudioGeneration.current = null;
+          startAbort.current?.abort(); preparation.current?.clear(); playbackStartup.reset();
 
           try {
             player.pause();

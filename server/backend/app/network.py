@@ -17,10 +17,11 @@ from pathlib import Path
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import Response, APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from .config import settings
+from .stream_resolver import stream_resolver
 from .navidrome import navidrome
 from .library_match import library, same_recording, RecordingIndex
 from .sessions import current, identity, destinations, destination, refresh_access, sessions
@@ -356,30 +357,17 @@ def network_song(raw):
             'genre': item['genre'], 'coverArt': item['cover']}
 
 
-_stream_slots = asyncio.Semaphore(3)
-
-
 async def full_stream(track_id):
     valid_id(track_id, True)
     credentials()
-    process = None
-    async with _stream_slots:
-        try:
-            process = await asyncio.create_subprocess_exec('metronomy-appid', 'stream', track_id,
-                env={**os.environ, 'QOGET_CONFIG': settings.qoget_config}, stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL)
-            output, _ = await asyncio.wait_for(process.communicate(), 30)
-            data = json.loads(output)
-            parsed = urlsplit(data.get('url', ''))
-            if process.returncode or data.get('full') is not True or parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
-                raise ValueError()
-            return {'url': data['url']}
-        except (OSError, ValueError, TimeoutError, TypeError, AttributeError):
-            raise HTTPException(403, 'Riproduzione completa non disponibile. Verifica abbonamento Qobuz, disponibilità del brano e aggiornamento del bridge. Nessuna anteprima avviata.') from None
-        finally:
-            if process and process.returncode is None:
-                process.kill()
-                await process.wait()
+    try:
+        data = await stream_resolver.resolve(track_id)
+        parsed = urlsplit(data.get('url', ''))
+        if data.get('full') is not True or parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError()
+        return {'url': data['url']}
+    except (OSError, ValueError, TimeoutError, TypeError, AttributeError):
+        raise HTTPException(403, 'Riproduzione completa non disponibile. Verifica abbonamento Qobuz, disponibilità del brano e aggiornamento del bridge. Nessuna anteprima avviata.') from None
 
 
 def router(auth):
@@ -442,11 +430,16 @@ def router(auth):
         return {'song': network_song(raw)}
 
     @routes.get('/playback/{track_id}')
-    async def playback(track_id: str):
+    async def playback(track_id: str, response: Response):
+        started = time.perf_counter()
         raw = await catalog('track/get', {'track_id': valid_id(track_id, True)})
+        catalog_ms = (time.perf_counter() - started) * 1000
         if not raw.get('streamable'):
             raise HTTPException(403, 'Brano non disponibile per la riproduzione completa con questo account Qobuz.')
-        return await full_stream(track_id)
+        started = time.perf_counter()
+        result = await full_stream(track_id)
+        response.headers['Server-Timing'] = f'catalog;dur={catalog_ms:.1f},resolver;dur={(time.perf_counter() - started) * 1000:.1f}'
+        return result
 
     @routes.get('/lyrics/{track_id}')
     async def track_lyrics(track_id: str):

@@ -84,7 +84,9 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await self.client.get('/network/playback/123')).status_code, 403)
             stream.assert_not_called()
         with patch.object(network, 'catalog', AsyncMock(return_value=TRACK)), patch.object(network, 'full_stream', AsyncMock(return_value={'url': 'https://cdn.test/full'})):
-            self.assertEqual((await self.client.get('/network/playback/123')).json(), {'url': 'https://cdn.test/full'})
+            response = await self.client.get('/network/playback/123')
+            self.assertEqual(response.json(), {'url': 'https://cdn.test/full'})
+            self.assertRegex(response.headers['Server-Timing'], r'^catalog;dur=[0-9.]+,resolver;dur=[0-9.]+$')
             song = (await self.client.get('/network/track/123')).json()['song']
             self.assertEqual(song['id'], 'qobuz:123')
             self.assertEqual(song['qobuzId'], '123')
@@ -92,8 +94,7 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_stream_adapter_never_accepts_previews_or_leaks_output(self):
         for payload in [{'url': 'https://cdn.test/full', 'full': True}, {'url': 'https://cdn.test/private', 'sample': True}, {'url': 'http://cdn.test/full', 'full': True}, {'url': 'https://user:password@cdn.test/full', 'full': True}]:
-            process = SimpleNamespace(returncode=0, communicate=AsyncMock(return_value=(json.dumps(payload).encode(), b'')))
-            with patch.object(network, 'credentials', return_value={}), patch.object(network.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)) as spawn:
+            with patch.object(network, 'credentials', return_value={}), patch.object(network.stream_resolver, 'resolve', AsyncMock(return_value=payload)) as resolve:
                 if payload == {'url': 'https://cdn.test/full', 'full': True}:
                     self.assertEqual(await network.full_stream('123'), {'url': payload['url']})
                 else:
@@ -101,7 +102,7 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
                         await network.full_stream('123')
                     self.assertNotIn(payload['url'], failure.exception.detail)
                     self.assertEqual(failure.exception.status_code, 403)
-                self.assertEqual(spawn.call_args.args, ('metronomy-appid', 'stream', '123'))
+                resolve.assert_awaited_once_with('123')
 
     async def test_library_failures_do_not_bypass_download_checks(self):
         with patch.object(network.library, 'read', AsyncMock(return_value=[LOCAL])):

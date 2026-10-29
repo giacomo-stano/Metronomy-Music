@@ -61,6 +61,8 @@ jobs:
 
       - name: Playback timeline regression tests
         run: |
+          node tests/audio-preloading.cjs
+          node tests/playback-startup.cjs
           node tests/playback-completion.cjs
           node tests/playback-timeline.cjs
           node tests/playback-source.cjs
@@ -84,7 +86,9 @@ jobs:
         run: npx expo prebuild --platform ios --clean
 
       - name: Verify precise native audio timing is applied
-        run: node tests/precise-audio-timing.cjs --verify-installed
+        run: |
+          node tests/precise-audio-timing.cjs --verify-installed
+          node tests/audio-preloading.cjs --verify-installed
 
       - name: Ensure CocoaPods are installed
         run: |

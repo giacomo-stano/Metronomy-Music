@@ -20,6 +20,10 @@ import (
 )
 
 func main() {
+    if len(os.Args) == 2 && os.Args[1] == "stream-serve" {
+        serveStreams(os.Stdin, os.Stdout, newStreamSession())
+        return
+    }
     cfg, err := config.Load(config.Path())
     if err != nil || cfg.AuthToken == "" { os.Exit(1) }
     client := qobuz.New(qobuz.Options{AuthToken: cfg.AuthToken, AppID: cfg.AppID, Secrets: cfg.Secrets})

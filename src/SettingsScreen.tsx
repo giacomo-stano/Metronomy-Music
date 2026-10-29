@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { request, currentAccount } from './api';
 import { useTheme } from './theme';
 import StorageSection from './StorageSection';
+import { playbackStartup } from './playbackStartup';
 import appConfig from '../app.json';
 import { useOffline } from './OfflineDownloads';
 import Pressable from './SpringPressable';
@@ -41,6 +42,9 @@ export default function SettingsScreen({ onClose, onLogout }: { onClose: () => v
   const [qobuz, setQobuz] = useState<QobuzInfo>();
   const [qBusy, setQBusy] = useState(false);
   const [qRevision, setQRevision] = useState(0);
+  const [timingRevision, refreshTimings] = useState(0);
+  const startupReports = playbackStartup.snapshot(account);
+  const ms = (value?: number) => value === undefined ? '—' : (value / 1000).toFixed(2) + ' s';
 
   useEffect(() => {
     if (localMode) { setHealth('Modalità offline'); return; }
@@ -143,6 +147,21 @@ export default function SettingsScreen({ onClose, onLogout }: { onClose: () => v
           {!!offline.syncMessage && note(offline.syncMessage)}
           {note('Questi file sono salvati sull’iPhone, non sono il catalogo del server. Puoi rimuovere una copia dal menu del brano senza cancellarla da Navidrome.')}
           {localMode && note('Per completare copertine e testi mancanti, esci e accedi online.')}
+          {heading('Tempi di avvio audio')}
+          {startupReports.length ? startupReports.map((report, index) => <View key={timingRevision + ':' + index}>
+            {group(<>
+              {row('Ascolto ' + (index + 1), report.source + ' · ' + report.outcome + (report.prepared ? ' · preparato in anticipo' : ''))}
+              {row('Preparazione sorgente', ms(report.resolveMs))}
+              {row('Player pronto dal tocco', ms(report.readyMs))}
+              {row('Primo avanzamento dal tocco', ms(report.advanceMs))}
+              {report.bridgeMs !== undefined && row('Risposta bridge', ms(report.bridgeMs))}
+              {report.catalogMs !== undefined && row('Verifica catalogo Qobuz', ms(report.catalogMs))}
+              {report.resolverMs !== undefined && row('Risoluzione stream Qobuz', ms(report.resolverMs))}
+            </>)}
+          </View>) : note('Riproduci un brano per misurare il suo avvio.')}
+          <Pressable onPress={() => refreshTimings(value => value + 1)} style={s.button}><Text style={{ color: c.accent }}>Aggiorna misurazioni</Text></Pressable>
+          {note('Ultimi 8 avvii di questa sessione. Il primo avanzamento è rilevato dal player, non dal microfono. I tempi del bridge sono inclusi nella preparazione della sorgente, non si sommano. Nessun titolo, URL o dato dell’account viene salvato o inviato.')}
+
         </>}
         {page === 'appearance' && <>
           {note('Scegli il tema oppure segui automaticamente l’aspetto del tuo iPhone.')}

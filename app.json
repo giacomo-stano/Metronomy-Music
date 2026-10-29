@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/metronomy-icon-v2.png",
     "userInterfaceStyle": "automatic",
-    "plugins": [["expo-audio", { "enableBackgroundPlayback": true }], "./plugins/withPreciseAudioTiming"],
+    "plugins": [["expo-audio", { "enableBackgroundPlayback": true }], "./plugins/withPreciseAudioTiming", "./plugins/withAudioPreloading"],
     "ios": {
       "supportsTablet": true
     },

@@ -120,7 +120,9 @@ export async function probeAccount(value: Account, timeoutMs = 5000): Promise<bo
   }
 }
 
-export async function request<T>(path: string, timeoutMs = 15000, body?: unknown): Promise<T> {
+export type RequestOptions = { signal?: AbortSignal; onServerTiming?: (value: string | null) => void };
+export async function request<T>(path: string, timeoutMs = 15000, body?: unknown, options?: RequestOptions): Promise<T> {
+  if (options?.signal?.aborted) throw new Error('Richiesta annullata.');
   const active = configuration(); const { baseURL, token } = active;
   if (active.offline) {
     if (!local) throw new Error('Archivio offline in apertura. Riprova.');
@@ -130,9 +132,13 @@ export async function request<T>(path: string, timeoutMs = 15000, body?: unknown
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const abort = () => controller.abort();
+  options?.signal?.addEventListener('abort', abort, { once: true });
   try {
     const response = await fetch(`${baseURL}/${path}`, { method: body === undefined ? 'GET' : 'POST', body: body === undefined ? undefined : JSON.stringify(body), headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }, signal: controller.signal, redirect: 'error' });
     if (account !== active) throw new Error('Account cambiato: risposta ignorata.');
+    if (options?.signal?.aborted) throw new Error('Richiesta annullata.');
+    options?.onServerTiming?.(response.headers.get('Server-Timing'));
     if (response.status === 401) { expired?.(); throw new Error('Sessione scaduta. Accedi nuovamente.'); }
     if (!response.ok) {
       const error = await response.json().catch(() => null);
@@ -141,7 +147,7 @@ export async function request<T>(path: string, timeoutMs = 15000, body?: unknown
     const data = await response.json() as T;
     if (account !== active) throw new Error('Account cambiato: risposta ignorata.');
     return data;
-  } finally { clearTimeout(timeout); }
+  } finally { clearTimeout(timeout); options?.signal?.removeEventListener('abort', abort); }
 }
 
 function configuration() {

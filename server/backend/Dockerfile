@@ -5,7 +5,8 @@ RUN git clone https://github.com/davidetoniatti/qoget.git /src \
     && git checkout "$QOGET_COMMIT"
 WORKDIR /src
 COPY qoget-appid ./cmd/metronomy-appid
-RUN CGO_ENABLED=0 go build -o /out/qoget ./cmd/qoget \
+RUN CGO_ENABLED=0 go test ./cmd/metronomy-appid \
+    && CGO_ENABLED=0 go build -o /out/qoget ./cmd/qoget \
     && CGO_ENABLED=0 go build -o /out/metronomy-appid ./cmd/metronomy-appid \
     && cp LICENSE /out/QOGET_LICENSE
 
