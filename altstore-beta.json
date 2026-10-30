@@ -9,7 +9,7 @@
       "subtitle": "La tua musica, sul tuo server.",
       "localizedDescription": "Client Navidrome con ascolto offline e integrazione Qobuz. Versione di test: dati locali separati dalla stabile. Le operazioni sul server restano reali.",
       "tintColor": "#AF52DE",
-      "iconURL": "https://raw.githubusercontent.com/giacomo-stano/Metronomy-Music/08eb6b66219d1e1e57871298ec4bc0dbb3e86d4c/assets/metronomy-icon-v2.png",
+      "iconURL": "https://raw.githubusercontent.com/giacomo-stano/Metronomy-Music/000e2925465f81558b6f8fd7a72e636987ed0b71/assets/metronomy-icon-v2.png",
       "name": "Metronomy Beta",
       "bundleIdentifier": "com.anonymous.metronomy.beta",
       "appPermissions": {
@@ -19,6 +19,16 @@
         }
       },
       "versions": [
+        {
+          "version": "0.2.2",
+          "buildVersion": "58.1",
+          "marketingVersion": "0.2.2 Beta (58.1)",
+          "date": "2026-10-30T08:38:22.994Z",
+          "localizedDescription": "Gestione sequenza brani",
+          "downloadURL": "https://github.com/giacomo-stano/Metronomy-Music/releases/download/v0.2.2-beta.58.1/Metronomy-Beta.ipa",
+          "size": 14459608,
+          "minOSVersion": "16.4"
+        },
         {
           "version": "0.2.2",
           "buildVersion": "57.1",
