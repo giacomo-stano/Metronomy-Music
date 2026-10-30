@@ -31,6 +31,7 @@ import { songCatalogItem } from './src/networkCatalog';
 import AlbumActions from './src/AlbumActions';
 import { usePlaybackSignals } from './src/usePlaybackSignals';
 import { observePlaybackCompletion } from './src/playbackCompletion';
+import { startPlaybackWithRecovery } from './src/playbackHandoff';
 import { useMiniMotion } from './src/useMiniMotion';
 import { ThemeProvider, useTheme, type Palette } from './src/theme';
 import SettingsScreen from './src/SettingsScreen';
@@ -1249,17 +1250,24 @@ function MusicApp({
         next, isOffline, async () => undefined,
         { signal: controller.signal, onServerTiming: attempt.serverTiming },
       );
-      attempt.resolved(source.uri, !local && !!prepared);
-
       if (version !== audioGeneration.current || currentAccount() !== owner) return;
 
       await invalidatePlaybackSeeks(player);
       if (version !== audioGeneration.current || currentAccount() !== owner) return;
-      attempt.installed();
-      player.replace(source);
-      replaced = true;
+      await startPlaybackWithRecovery({
+        player, source, signal: controller.signal,
+        installed: () => { replaced = true; attempt.installed(); },
+        retrying: () => { activeAudioGeneration.current = null; },
+        discard: source => clearPreloadedSource(source),
+        freshSource: () => songPlaybackSource(
+          next, isOffline, id => offlineStore.source(id),
+          { signal: controller.signal, onServerTiming: attempt.serverTiming },
+        ),
+        resolved: (value, retried) => attempt.resolved(value.uri, !retried && !local && !!prepared),
+      });
+      if (version !== audioGeneration.current || currentAccount() !== owner) return;
       activeAudioGeneration.current = version;
-      player.play();
+      attempt.observe(player.currentStatus);
       listeningSession.current = { songId: next.id, version, seconds: 0, previous: null };
 
       try {
@@ -1288,9 +1296,11 @@ function MusicApp({
       attempt.fail();
       if (version === audioGeneration.current) {
         activeAudioGeneration.current = replaced ? null : previousActiveGeneration;
-        setQueue(previousQueue);
-        setIndex(previousIndex);
-        setCurrentArtworkUri(previousArtworkUri);
+        if (!replaced) {
+          setQueue(previousQueue);
+          setIndex(previousIndex);
+          setCurrentArtworkUri(previousArtworkUri);
+        }
       }
 
       Alert.alert(

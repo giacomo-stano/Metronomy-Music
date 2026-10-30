@@ -24,13 +24,39 @@ risoluzione autorizzata, poi l'iPhone legge la URL HTTPS restituita.
   sempre ricontrollate e hanno precedenza sullo stream, anche online.
 - Le tre copertine successive sono caricate solo dopo l'avvio del brano,
   con un ritardo di 1,5 secondi, per ridurre la concorrenza sulla connessione.
-- La patch Expo per il riuso dell'asset conserva la sorgente corretta per il
-  ripristino dei servizi audio e scarta un asset già fallito durante la preparazione.
+- La patch Expo riusa l'AVAsset già indicizzato, creando un AVPlayerItem distinto
+  per il player attivo. Non trasferisce l'elemento del player di precaricamento:
+  questo evita di dipendere dal distacco immediato della sua associazione nativa.
+  Il buffer del vecchio elemento non viene trasferito. La sorgente resta corretta
+  per il ripristino dei servizi audio; un asset già fallito viene aperto normalmente.
   La precisione della durata/seek e il formato FLAC richiesto restano invariati.
 
 Non vengono memorizzate autorizzazioni Navidrome: il bridge continua a verificare
 l'accesso come prima. Il primo brano a freddo, selezioni casuali, rete lenta,
 indicizzazione nativa e un server lento possono ancora richiedere attesa.
+
+## Cambio brano e recupero degli errori
+
+Il passaggio automatico e la selezione manuale usano lo stesso percorso. Dopo
+la sostituzione della sorgente, l'app attende che il nuovo elemento sia pronto,
+invia play una volta e osserva la conferma nativa di riproduzione. I messaggi
+di errore arrivati durante il caricamento vengono gestiti anche se la chiamata
+JavaScript replace/play non aveva generato un'eccezione.
+
+In caso di errore nativo o di mancato avvio entro 45 secondi, viene tentata una
+sola nuova apertura: eliminazione del preload, nuova verifica del file locale
+o nuova risoluzione Qobuz, sostituzione e riproduzione. Una seconda anomalia viene
+mostrata all'utente. Il cambio di selezione o account annulla sia l'attesa sia il
+recupero, così una risposta tardiva non avvia un brano precedente.
+
+La generazione audio diventa attiva solo dopo l'avvio, per ignorare un eventuale
+EOF del vecchio elemento durante il caricamento del successivo. Dopo l'avvio,
+l'osservatore temporaneo viene rimosso: una pausa dell'utente non causa riavvii.
+
+Questa correzione richiede una nuova build dell'app iOS; non modifica il bridge.
+I test simulano eccezioni HostFunction, errori asincroni, attesa, cancellazione e
+recupero. La riproduzione e l'associazione degli oggetti AVFoundation devono
+essere verificate su iPhone: i test JavaScript non eseguono il framework Apple.
 
 ## Misurare sul dispositivo
 
