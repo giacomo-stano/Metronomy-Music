@@ -2041,25 +2041,6 @@ const topStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuDismiss: {
-    zIndex: 80,
-    backgroundColor: 'transparent',
-  },
-  popoverShadow: {
-    position: 'absolute',
-    zIndex: 100,
-    borderRadius: 27,
-    shadowColor: '#000',
-    shadowOpacity: 0.28,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 20,
-  },
-  popoverClip: {
-    borderRadius: 27,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-  },
   filterRow: {
     minHeight: 57,
     paddingHorizontal: 14,
@@ -2077,40 +2058,6 @@ const topStyles = StyleSheet.create({
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  pageActionIcon: {
-    width: 38,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  checkSlot: {
-    width: 24,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  sortCheckSlot: {
-    width: 25,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  menuIconSlot: {
-    width: 29,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  menuLabel: {
-    flexShrink: 1,
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: '400',
-    letterSpacing: -0.22,
-  },
-  menuSubtitle: {
-    marginTop: 1,
-    fontSize: 11.5,
-    lineHeight: 14,
-    fontWeight: '400',
-    letterSpacing: -0.08,
   },
   menuSeparator: {
     height: StyleSheet.hairlineWidth,

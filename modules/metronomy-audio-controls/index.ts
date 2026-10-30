@@ -14,10 +14,6 @@ const RemoteControls = requireOptionalNativeModule(
   'MetronomyRemoteControls'
 ) as RemoteControlsNativeModule | null;
 
-export function remoteControlsAvailable() {
-  return !!RemoteControls;
-}
-
 export function setRemoteControlsEnabled(enabled: boolean) {
   RemoteControls?.setEnabled(enabled);
 }

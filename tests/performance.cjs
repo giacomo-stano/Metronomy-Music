@@ -43,5 +43,13 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
   const requests = Array.from({length: 5}, (_, i) => cache.preloadAlbumSongs('clear-' + i).catch(e => e));
   cache.clearAlbumSongsCache(); while (work.length) { work.shift()(); await tick(); }
   await Promise.all(requests); assert.equal(cache.peekAlbumSongs('clear-0'), undefined);
+  const oldAlbum = cache.preloadAlbumSongs('refresh');
+  const freshAlbum = cache.preloadAlbumSongs('refresh', true);
+  const finishOld = work.shift(), finishFresh = work.shift();
+  finishFresh();
+  const freshSongs = await freshAlbum;
+  finishOld(); await oldAlbum;
+  assert.equal(cache.peekAlbumSongs('refresh'), freshSongs,
+    'a late prefetch cannot overwrite the result of a forced refresh');
   console.log('Performance: playback signal filtering, bounded/concurrent/priority album prefetch, deduplication and account invalidation passed.');
 })().catch(e => { console.error(e); process.exitCode = 1; });

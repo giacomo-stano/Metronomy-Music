@@ -1,5 +1,3 @@
-import asyncio
-import json
 import os
 import sys
 import unittest
@@ -106,7 +104,7 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_library_failures_do_not_bypass_download_checks(self):
         with patch.object(network.library, 'read', AsyncMock(return_value=[LOCAL])):
-            self.assertEqual((await network.duplicate(TRACK, 'track'))['id'], 'local1')
+            self.assertEqual(await network.download_targets(TRACK, 'track'), [])
         with patch.object(network.library, 'read', AsyncMock(side_effect=HTTPException(503, 'Unavailable'))):
             items, checked = await network.checked_items([TRACK], 'track')
             self.assertFalse(checked)

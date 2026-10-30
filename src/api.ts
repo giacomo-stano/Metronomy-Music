@@ -128,6 +128,7 @@ export async function request<T>(path: string, timeoutMs = 15000, body?: unknown
     if (!local) throw new Error('Archivio offline in apertura. Riprova.');
     const data = await local.read(path, body);
     if (account !== active) throw new Error('Account cambiato: risposta ignorata.');
+    if (options?.signal?.aborted) throw new Error('Richiesta annullata.');
     return data as T;
   }
   const controller = new AbortController();
@@ -146,6 +147,7 @@ export async function request<T>(path: string, timeoutMs = 15000, body?: unknown
     }
     const data = await response.json() as T;
     if (account !== active) throw new Error('Account cambiato: risposta ignorata.');
+    if (options?.signal?.aborted) throw new Error('Richiesta annullata.');
     return data;
   } finally { clearTimeout(timeout); options?.signal?.removeEventListener('abort', abort); }
 }
@@ -153,14 +155,6 @@ export async function request<T>(path: string, timeoutMs = 15000, body?: unknown
 function configuration() {
   if (!account) throw new Error('Accedi con il tuo account Navidrome.');
   return account;
-}
-
-export async function getHome(): Promise<HomeResponse> {
-  return request<HomeResponse>('home');
-}
-
-export async function searchLibrary(query: string): Promise<SearchResponse> {
-  return request<SearchResponse>('search?q=' + encodeURIComponent(query));
 }
 
 export function streamURL(songId: string): string {

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Share, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Share, Text } from 'react-native';
 import FloatingMenu from './FloatingMenu';
 import { MenuRow, MenuQuickActions, MenuQuickAction, MenuSeparator } from './MenuControls';
 import { request, type Song } from './api';

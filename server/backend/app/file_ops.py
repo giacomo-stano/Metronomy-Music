@@ -146,7 +146,14 @@ def router(auth):
             data, path = await locate(song_id)
             if body.expires < time.time() or body.expires > time.time() + 300 or not hmac.compare_digest(body.token, confirmation(song_id, path, body.expires)):
                 raise HTTPException(409, 'Conferma scaduta o file modificato. Riapri il menu e riprova.')
-            entry_id = await asyncio.to_thread(move_to_trash, path, data)
+            operation = asyncio.create_task(asyncio.to_thread(move_to_trash, path, data))
+            try:
+                entry_id = await asyncio.shield(operation)
+            except asyncio.CancelledError:
+                # Cancelling an HTTP request does not stop its filesystem thread.
+                # Retain the deletion lock until the copy/unlink has finished.
+                await operation
+                raise
             library.expires = 0
             for session in sessions.values():
                 if session.index:

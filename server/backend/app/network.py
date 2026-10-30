@@ -124,14 +124,6 @@ def normalize(item, kind):
             'available': bool(item.get('streamable')), 'previewable': bool(item.get('sampleable') or item.get('previewable')), 'libraryMatch': None}
 
 
-async def duplicate(item, kind, fresh=False):
-    songs = await library.read(fresh)
-    if kind == 'track':
-        return next((s for s in songs if same_recording(item, s)), None)
-    state = inventory(await full_album(item, catalog), songs)
-    return {'id': state['libraryMatch']} if state['libraryComplete'] else None
-
-
 # Cache only Qobuz metadata, never an account's ownership result. Bound both
 # lifetime and concurrency; a failed lookup remains unknown, not "complete".
 _album_cache = OrderedDict()

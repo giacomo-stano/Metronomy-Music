@@ -16,7 +16,7 @@ import { mergeCatalog, type ArtistProfile, type Catalog, type CatalogItem } from
 import { ServerDownloadBadge } from './ServerDownloads';
 import CatalogAlbumsPage from './CatalogAlbumsPage';
 
-type Props = { initial: CatalogItem; active: boolean; revision: number; onClose: () => void; onPlay: (songs: Song[]) => void; onDownloaded: () => void; onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void };
+type Props = { initial: CatalogItem; active: boolean; revision: number; onClose: () => void; onPlay: (songs: Song[]) => void; onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void };
 const failure = (error: unknown) => error instanceof Error ? error.message : 'Impossibile caricare il catalogo. Riprova.';
 const year = (item: CatalogItem) => item.releaseDate?.slice(0, 4) || '';
 const share = (item: CatalogItem) => { void Share.share({ message: `https://open.qobuz.com/${item.kind}/${item.id}` }).catch(() => {}); };
@@ -38,7 +38,7 @@ export default function CatalogBrowser(props: Props) {
   return <DarkSurface><View style={[styles.fill, { marginTop: -insets.top }]}>{pages.map(({ item, albums }, index) => <View key={index + ':' + item.kind + ':' + item.id} style={[styles.fill, { display: index === pages.length - 1 ? 'flex' : 'none' }]}>{albums ? <CatalogAlbumsPage artist={item} initial={albums} active={props.active && index === pages.length - 1} revision={props.revision} onBack={back} onOpen={open} onPlay={props.onPlay} onScroll={props.onScroll} /> : <CatalogPage {...props} item={item} active={props.active && index === pages.length - 1} onBack={back} onOpen={open} onAlbums={(artist, catalog) => { if (pages.length < 12) setPages(old => [...old, { item: artist, albums: catalog }]); }} />}</View>)}</View></DarkSurface>;
 }
 
-function CatalogPage({ item, active, revision, onBack, onOpen, onAlbums, onPlay, onDownloaded, onScroll }: Props & { item: CatalogItem; onBack: () => void; onOpen: (item: CatalogItem) => void; onAlbums: (artist: CatalogItem, catalog: Catalog) => void }) {
+function CatalogPage({ item, active, revision, onBack, onOpen, onAlbums, onPlay, onScroll }: Props & { item: CatalogItem; onBack: () => void; onOpen: (item: CatalogItem) => void; onAlbums: (artist: CatalogItem, catalog: Catalog) => void }) {
   const { colors: c, isDark } = useTheme();
   const { reduceMotion } = useMotionPreferences();
   const { width } = useWindowDimensions();
@@ -153,7 +153,7 @@ function CatalogPage({ item, active, revision, onBack, onOpen, onAlbums, onPlay,
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: c.background, opacity: position.interpolate({ inputRange: [60, 190], outputRange: [0, 0.94], extrapolate: 'clamp' }) }]} />
       {circle('chevron-back', 'Indietro', onBack)}<View style={{ flex: 1 }} /><View style={[styles.pill, { borderColor: c.border }]}><GlassBackground /><Pressable onPress={() => share(current)} accessibilityLabel={'Condividi ' + current.title} style={styles.more}><Ionicons name="share-outline" size={27} color={c.text} /></Pressable><Pressable onPress={() => setAction(current)} accessibilityLabel={'Opzioni per ' + current.title} style={styles.more}><Ionicons name="ellipsis-horizontal" size={26} color={c.text} /></Pressable></View>
     </View>
-    {action && <NetworkActions key={action.kind + action.id} item={action} onClose={() => setAction(null)} onPlay={action.kind === 'artist' ? undefined : () => void play(action)} onDownloaded={onDownloaded} />}
+    {action && <NetworkActions key={action.kind + action.id} item={action} onClose={() => setAction(null)} onPlay={action.kind === 'artist' ? undefined : () => void play(action)} />}
     {info && <Modal transparent animationType={reduceMotion ? 'none' : 'slide'} onRequestClose={() => setInfo(false)}><View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: '#0008' }}><Pressable onPress={() => setInfo(false)} accessibilityLabel="Chiudi informazioni" style={StyleSheet.absoluteFill} /><View style={{ maxHeight: '78%', padding: 24, paddingBottom: 44, borderTopLeftRadius: 32, borderTopRightRadius: 32, backgroundColor: c.background }}><View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}><Text style={{ color: c.text, fontSize: 26, fontWeight: '700', flex: 1 }}>{current.title}</Text>{circle('close', 'Chiudi informazioni', () => setInfo(false))}</View><ScrollView><Text selectable style={{ color: c.text, fontSize: 17, lineHeight: 26 }}>{profile?.artist.biography || 'Biografia non disponibile su Qobuz.'}</Text>{!!profile?.artist.biographySource && <Text style={{ color: c.secondary, marginTop: 20 }}>Fonte: {profile.artist.biographySource}</Text>}<Text style={{ color: c.secondary, marginTop: 20 }}>Catalogo Qobuz</Text></ScrollView></View></View></Modal>}
   </Animated.View>;
 }

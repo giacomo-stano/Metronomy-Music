@@ -8,7 +8,7 @@ import { useTheme } from './theme';
 import { ServerDownloadBadge, useServerDownloads } from './ServerDownloads';
 import { serverState, isServerComplete, type ServerJob } from './serverDownloadState';
 
-export default function NetworkActions({ item, onClose, onPlay, onDownloaded }: { item: CatalogItem; onClose: () => void; onPlay?: () => void; onDownloaded?: () => void }) {
+export default function NetworkActions({ item, onClose, onPlay }: { item: CatalogItem; onClose: () => void; onPlay?: () => void }) {
   const { colors: c } = useTheme();
   const targets = currentAccount()?.destinations ?? [];
   const [destination, setDestination] = useState(targets.length === 1 ? targets[0].id : '');

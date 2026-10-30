@@ -1,10 +1,9 @@
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 import asyncio
 import time
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError

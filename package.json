@@ -24,6 +24,8 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
+    "test": "node scripts/test.cjs",
+    "typecheck": "tsc --noEmit",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",

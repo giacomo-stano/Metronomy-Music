@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Image, Modal, SafeAreaView, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Image, Modal, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
   runOnJS,
@@ -23,7 +23,7 @@ import { playerMorph, type PlayerOrigin } from './dockMotion';
 import { useScreenInsets } from './ScreenInsets';
 import { playerLayout } from './responsiveLayout';
 import { playbackTimeline, seekPlayback, invalidatePlaybackSeeks } from './playbackTimeline';
-import { DarkSurface, useTheme } from './theme';
+import { DarkSurface } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
 import NetworkActions from './NetworkActions';
 import { songCatalogItem } from './networkCatalog';
@@ -343,7 +343,6 @@ function QueueDragRow({
 
 export default function PlayerSheet(p: Props) {
   const status = usePlaybackSignals(p.player);
-  const { colors: c, isDark } = useTheme();
   const { width, height } = useWindowDimensions();
   const { top, bottom } = useScreenInsets();
   const [controlsHeight, setControlsHeight] = useState(303);
@@ -385,8 +384,6 @@ export default function PlayerSheet(p: Props) {
   // avoids black controls on bright/colourful covers.
   const playerText = '#ffffff';
   const playerSecondary = 'rgba(255,255,255,0.72)';
-  const playerMuted = 'rgba(255,255,255,0.30)';
-  const playerTrack = 'rgba(255,255,255,0.24)';
   useEffect(() => {
     mounted.current = true;
 
@@ -500,14 +497,6 @@ export default function PlayerSheet(p: Props) {
     );
   };
 
-  const restorePlayer = () => {
-    sheetY.value = withSpring(0, {
-      damping: 25,
-      stiffness: 265,
-      mass: 0.82,
-    });
-  };
-
   const playerPan = Gesture.Pan()
     .enabled(!menu && !networkMenu)
     .activeOffsetY(4)
@@ -617,7 +606,8 @@ export default function PlayerSheet(p: Props) {
     if (!previous) return;
 
     // Se nel frattempo è cambiato brano, non tocchiamo il nuovo playback.
-    if (activeSong.current !== previous.songId) return;
+    const isCurrent = () => mounted.current && activeSong.current === previous.songId;
+    if (!isCurrent()) return;
 
     try {
       /*
@@ -633,7 +623,7 @@ export default function PlayerSheet(p: Props) {
        * TypeScript la ammette.
        */
       await invalidatePlaybackSeeks(p.player);
-      if (activeSong.current !== previous.songId) return;
+      if (!isCurrent()) return;
       p.player.replace({ uri: remoteSource });
 
       /*
@@ -644,6 +634,7 @@ export default function PlayerSheet(p: Props) {
         setTimeout(resolve, 250);
       });
 
+      if (!isCurrent()) return;
       if (previous.position > 0) {
         try {
           await seekPlayback(p.player, previous.position, p.song.duration);
@@ -652,11 +643,12 @@ export default function PlayerSheet(p: Props) {
         }
       }
 
-      if (activeSong.current !== previous.songId) return;
+      if (!isCurrent()) return;
       if (previous.wasPlaying) {
         p.player.play();
       }
     } catch (e) {
+      if (!isCurrent()) return;
       Alert.alert(
         'Riproduzione',
         e instanceof Error
@@ -1875,20 +1867,6 @@ const playerStyles = StyleSheet.create({
     fontWeight: '500',
     fontVariant: ['tabular-nums'],
   },
-  hapticsChip: {
-    minHeight: 14,
-    paddingHorizontal: 5,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  hapticsText: {
-    color: 'rgba(255,255,255,0.40)',
-    fontSize: 8.5,
-    lineHeight: 11,
-  },
   transportRow: {
     height: 120,
     paddingHorizontal: 31,
@@ -1978,10 +1956,6 @@ const playerStyles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.5,
     marginBottom: 22,
-  },
-
-  menuBackdrop: {
-    backgroundColor: 'rgba(0,0,0,0.10)',
   },
 });
 

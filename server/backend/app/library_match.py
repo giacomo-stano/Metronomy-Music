@@ -87,8 +87,4 @@ class LibraryIndex:
             except (RuntimeError, httpx.HTTPError, TimeoutError):
                 raise HTTPException(503, 'Impossibile verificare tutta la libreria. Download sospeso: riprova tra poco.') from None
 
-    async def match(self, remote, fresh=False):
-        return next((song for song in await self.read(fresh) if same_recording(remote, song)), None)
-
-
 library = LibraryIndex()

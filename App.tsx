@@ -6,8 +6,8 @@ import { songPlaybackSource } from './src/songPlaybackSource';
 import { NextTrackPreparation, upcomingTrack } from './src/nextTrackPreparation';
 import { playbackStartup, type StartupAttempt } from './src/playbackStartup';
 import { rememberTrack } from './src/listeningProfile';
-import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, PanResponder, Platform, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { coverURL, streamURL, request, type Album, type HomeResponse, type Song, type SearchResponse, type Lyrics } from './src/api';
+import { ActivityIndicator, Alert, Animated, AppState, Easing, FlatList, Image, PanResponder, Platform, SafeAreaView, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { coverURL, request, type Album, type HomeResponse, type Song, type Lyrics } from './src/api';
 import { ScreenInsetsProvider } from './src/ScreenInsets';
 import { tabLensWidth } from './src/responsiveLayout';
 import SearchScreen from './src/SearchScreen';
@@ -505,7 +505,6 @@ function MusicApp({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResponse | null>(null);
   const [queue, setQueue] = useState<Song[]>([]);
   const [index, setIndex] = useState(-1);
   const [expanded, setExpanded] = useState(false);
@@ -1007,7 +1006,6 @@ function MusicApp({
         : albums.length > 0;
 
     setBusy(!hasVisibleCatalog);
-    setResults(null);
 
     const warmArtwork = async (items: { coverArt?: string }[]) => {
       const uris = items
@@ -1060,13 +1058,6 @@ function MusicApp({
           if (generation.current === version) {
             revealCatalog(() => setHome(data));
           }
-        } else if (tab === 'Cerca') {
-          if (query.trim()) {
-            const data = await request<SearchResponse>(
-              'search?q=' + encodeURIComponent(query.trim())
-            );
-            if (generation.current === version) setResults(data);
-          }
         } else {
           const data = await additionsCache.get('newest', () => request<{ albums: Album[]; hasMore: boolean }>('albums?sort=newest'));
 
@@ -1100,16 +1091,13 @@ function MusicApp({
       }
     };
 
-    const timer = setTimeout(
-      () => void run(),
-      tab === 'Cerca' ? 350 : 0
-    );
+    const timer = setTimeout(() => void run(), 0);
 
     return () => {
       clearTimeout(timer);
       generation.current++;
     };
-  }, [tab, album, albumMotionDone, query, reload, isOffline]);
+  }, [tab, album, albumMotionDone, reload, isOffline]);
 
   useEffect(() => {
     clearAlbumSongsCache();
@@ -2651,13 +2639,11 @@ function Button({ label, onPress, disabled = false, large = false, accessibility
 const makeStyles = (c: Palette) => StyleSheet.create({
   dock: { position: 'absolute', bottom: 24, left: 10, right: 10, zIndex: 60 },
   headingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10, marginBottom: 4 }, profile: { width: 46, height: 46, borderRadius: 23, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center' },
-  libraryRow: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingVertical: 19, borderBottomWidth: 0.5, borderColor: c.border },
   safe: { flex: 1, backgroundColor: c.background }, flex: { flex: 1 }, page: { padding: 20, paddingBottom: 190 },
   kicker: { color: c.secondary, fontSize: 11, letterSpacing: 2, fontWeight: '700', marginVertical: 10 },
   title: { color: c.text, fontSize: 36, fontWeight: '800', letterSpacing: -1 },
   section: { color: c.text, fontSize: 22, fontWeight: '700', marginTop: 28, marginBottom: 16 },
   text: { color: c.text, fontSize: 16, fontWeight: '600' }, sub: { color: c.secondary, fontSize: 13, marginTop: 4 }, accent: { color: c.accent },
-  hint: { color: c.secondary, fontSize: 15, lineHeight: 23, marginVertical: 22 },
   rail: { flexDirection: 'row', gap: 14 }, grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 }, cardTitle: { color: c.text, fontWeight: '600', marginTop: 9 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9 },
   songArtworkWrap: {
@@ -2679,7 +2665,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.22)',
   },
-  albumHero: { alignItems: 'center', gap: 12, marginVertical: 20 },
   albumTransitionBackdrop: {
     zIndex: 29,
     elevation: 29,
@@ -2859,7 +2844,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     fontSize: 10.5,
     lineHeight: 14,
   },
-  search: { color: c.text, backgroundColor: c.surface, borderRadius: 26, padding: 16, marginTop: 18, fontSize: 16 },
   connectivityBannerWrap: {
     position: 'absolute',
     top: 66,
@@ -3036,12 +3020,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     justifyContent: 'center',
   },
   button: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', padding: 10 }, buttonText: { color: c.accent, fontSize: 19, fontWeight: '700' },
-  player: { flex: 1, backgroundColor: c.background }, playerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15 },
-  playerBody: { alignItems: 'center', paddingHorizontal: 32, paddingBottom: 24, paddingTop: 18, gap: 18 },
-  trackInfo: { width: '100%', marginTop: 8 }, trackTitle: { color: c.text, fontSize: 26, fontWeight: '700' }, trackArtist: { color: c.secondary, fontSize: 21, marginTop: 6 },
-  seekArea: { height: 28, justifyContent: 'center' }, progress: { height: 5, borderRadius: 5, backgroundColor: c.border, overflow: 'hidden' }, fill: { height: 5, backgroundColor: c.text },
-  times: { flexDirection: 'row', justifyContent: 'space-between' }, controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', width: '100%' },
-  lyric: { color: c.muted, fontSize: 28, fontWeight: '700', lineHeight: 37, marginBottom: 22 }, lyricActive: { color: c.text },
+  player: { flex: 1, backgroundColor: c.background }, fill: { height: 5, backgroundColor: c.text }, controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', width: '100%' },
 });
 
 

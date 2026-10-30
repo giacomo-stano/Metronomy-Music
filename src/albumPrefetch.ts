@@ -41,8 +41,12 @@ export function preloadAlbumSongs(albumId: string, force = false, priority = fal
       void request<{ songs: Song[] }>('albums/' + encodeURIComponent(albumId)).then(data => {
         if (version !== generation || account !== currentAccount()) throw new Error('Caricamento album superato. Riprova.');
         const songs = Array.isArray(data.songs) ? data.songs : [];
-        cache.set(albumId, { songs, expires: Date.now() + 60000 });
-        while (cache.size > 40) cache.delete(cache.keys().next().value!);
+        // A forced refresh may finish before an older request for this album.
+        // Only the latest request can replace the shared cache entry.
+        if (pending.get(albumId) === promise) {
+          cache.set(albumId, { songs, expires: Date.now() + 60000 });
+          while (cache.size > 40) cache.delete(cache.keys().next().value!);
+        }
         resolve(songs);
       }).catch(reject).finally(() => { active--; drain(); });
     } };
