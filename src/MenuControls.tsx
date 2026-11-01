@@ -3,13 +3,15 @@ import { StyleSheet, Text, View } from 'react-native';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
 import Pressable from './SpringPressable';
 import { useTheme } from './theme';
+import { musicChrome } from './musicChrome';
 
-export function MenuRow({ icon, label, subtitle, onPress, disabled, destructive }: { icon: SFSymbol; label: string; subtitle?: string; onPress: () => void; disabled?: boolean; destructive?: boolean }) {
+export function MenuRow({ icon, label, subtitle, onPress, disabled, destructive, selected }: { icon: SFSymbol; label: string; subtitle?: string; onPress: () => void; disabled?: boolean; destructive?: boolean; selected?: boolean }) {
   const { colors: c } = useTheme();
   const color = destructive ? c.accent : c.text;
-  return <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress} style={[menuStyles.row, { opacity: disabled ? 0.4 : 1 }]}>
+  return <Pressable feedback="highlight" accessibilityRole="button" accessibilityState={{ disabled: !!disabled, selected }} disabled={disabled} onPress={onPress} style={({ pressed }) => [menuStyles.row, { opacity: disabled ? 0.4 : 1, backgroundColor: pressed ? c.border : 'transparent' }]}>
     <SymbolView name={icon} size={22} tintColor={color} style={{ width: 25 }} />
     <View style={{ flex: 1 }}><Text style={[menuStyles.label, { color }]}>{label}</Text>{!!subtitle && <Text style={[menuStyles.subtitle, { color: c.secondary }]}>{subtitle}</Text>}</View>
+    {selected && <SymbolView name="checkmark" size={18} tintColor={color} />}
   </Pressable>;
 }
 export function MenuQuickAction({ icon, label, onPress, disabled }: { icon: SFSymbol; label: string; onPress: () => void; disabled?: boolean }) {
@@ -19,8 +21,8 @@ export function MenuQuickAction({ icon, label, onPress, disabled }: { icon: SFSy
 export function MenuQuickActions({ children }: { children: ReactNode }) { return <View style={menuStyles.quickRow}>{children}</View>; }
 export function MenuSeparator() { const { colors: c } = useTheme(); return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginHorizontal: 22, marginVertical: 8 }} />; }
 export const menuStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 58, paddingHorizontal: 23, paddingVertical: 14 },
-  label: { fontSize: 17, lineHeight: 22, fontWeight: '400' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: musicChrome.menu.rowHeight, paddingHorizontal: musicChrome.menu.inset, paddingVertical: 14 },
+  label: { fontSize: musicChrome.menu.label, lineHeight: musicChrome.menu.lineHeight, fontWeight: '400' },
   subtitle: { fontSize: 14, lineHeight: 19, marginTop: 4 },
   quickRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 6, paddingTop: 10, paddingBottom: 10 },
   quick: { flex: 1, alignItems: 'center', minHeight: 76, paddingHorizontal: 3, paddingVertical: 6, gap: 9 },

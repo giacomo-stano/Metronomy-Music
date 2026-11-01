@@ -1,6 +1,6 @@
+import MusicControlButton from './MusicControlButton';
 import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import Pressable from './SpringPressable';
 import { ServerDownloadBadge } from './ServerDownloads';
 import type { CatalogItem } from './networkCatalog';
@@ -23,8 +23,8 @@ export default function SearchBrowseGrid({ items, onOpen, onActions }: {
         {!!item.artist && <Text numberOfLines={1} maxFontSizeMultiplier={1.5} style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 3 }}>{item.artist}</Text>}
       </View>
     </Pressable>
-    <Pressable onPress={() => onActions(item)} accessibilityRole="button" accessibilityLabel={'Opzioni per ' + item.title}
-      style={styles.options}><Ionicons name="ellipsis-horizontal" color="#fff" size={21} /></Pressable>
+    <MusicControlButton onPress={() => onActions(item)} accessibilityRole="button" accessibilityLabel={'Opzioni per ' + item.title}
+      style={styles.options} color="#fff" />
     <View style={styles.badge}><ServerDownloadBadge item={item} /></View>
   </View>)}</View>;
 }

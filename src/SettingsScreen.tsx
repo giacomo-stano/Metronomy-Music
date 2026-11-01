@@ -152,6 +152,10 @@ export default function SettingsScreen({ onClose, onLogout }: { onClose: () => v
             {group(<>
               {row('Ascolto ' + (index + 1), report.source + ' · ' + report.outcome + (report.prepared ? ' · preparato in anticipo' : ''))}
               {row('Preparazione sorgente', ms(report.resolveMs))}
+              {row('Sessione audio pronta dal tocco', ms(report.sessionReadyMs))}
+              {row('Verifica locale completata dal tocco', ms(report.localReadyMs))}
+              {row('Sorgente installata dal tocco', ms(report.installMs))}
+              {row('Caricamento nativo dopo installazione', ms(report.nativeReadyMs))}
               {row('Player pronto dal tocco', ms(report.readyMs))}
               {row('Primo avanzamento dal tocco', ms(report.advanceMs))}
               {report.bridgeMs !== undefined && row('Risposta bridge', ms(report.bridgeMs))}

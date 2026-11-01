@@ -1,3 +1,4 @@
+import MusicControlButton from './MusicControlButton';
 import { isServerComplete } from './serverDownloadState';
 import { Image, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,7 +22,7 @@ export default function CatalogSearchResults({ items, query, focused, onQuery, o
         <View style={{ flex: 1 }}><Text numberOfLines={1} style={{ color: c.text, fontSize: 17 }}>{item.title}</Text><Text numberOfLines={1} style={{ color: c.secondary, fontSize: 15, marginTop: 3 }}>{item.kind === 'artist' ? 'Artista' : (item.kind === 'album' ? 'Album' : 'Brano') + ' · ' + item.artist}</Text>{isServerComplete(item) && <Text style={{ color: c.secondary, fontSize: 11, marginTop: 2 }}>Già in libreria</Text>}</View>
       </Pressable>
       <ServerDownloadBadge item={item} />
-      <Pressable onPress={() => item.kind === 'artist' ? onOpen(item) : onActions(item)} accessibilityLabel={(item.kind === 'artist' ? 'Apri ' : 'Opzioni per ') + item.title} style={{ width: 44, minHeight: 50, alignItems: 'center', justifyContent: 'center' }}><Ionicons name={item.kind === 'artist' ? 'chevron-forward' : 'ellipsis-horizontal'} size={item.kind === 'artist' ? 19 : 23} color={c.secondary} /></Pressable>
+      {item.kind === 'artist' ? <Pressable onPress={() => onOpen(item)} accessibilityLabel={'Apri ' + item.title} style={{ width: 44, minHeight: 50, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="chevron-forward" size={19} color={c.secondary} /></Pressable> : <MusicControlButton onPress={() => onActions(item)} accessibilityLabel={'Opzioni per ' + item.title} color={c.secondary} />}
       <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 68, right: 0, height: 0.5, backgroundColor: c.border }} />
     </View>)}
   </>;

@@ -3,11 +3,12 @@ import { Pressable, StyleSheet, type View, type PressableProps } from 'react-nat
 import Reanimated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useMotionPreferences } from './motionPreferences';
 import { rememberMenuTrigger } from './menuAnchor';
+import { musicChrome } from './musicChrome';
 
 const Control = Reanimated.createAnimatedComponent(Pressable);
 const EMPTY_TRANSFORM = [] as const;
 
-export default forwardRef<View, PressableProps>(function SpringPressable({ style, onPress, onPressIn, onPressOut, disabled, ...props }, ref) {
+export default forwardRef<View, PressableProps & { feedback?: 'scale' | 'highlight' }>(function SpringPressable({ style, onPress, onPressIn, onPressOut, disabled, feedback = 'scale', ...props }, ref) {
   const { reduceMotion } = useMotionPreferences();
   const control = useRef<View | null>(null);
   const setRef = useCallback((view: View | null) => {
@@ -36,12 +37,12 @@ export default forwardRef<View, PressableProps>(function SpringPressable({ style
       onPressIn={event => {
         rememberMenuTrigger(control.current);
         if (typeof style === 'function') setPressed(true);
-        if (!disabled && !reduceMotion) scale.value = withTiming(0.97, { duration: 85 });
+        if (!disabled && !reduceMotion && feedback === 'scale') scale.value = withTiming(musicChrome.motion.pressScale, { duration: musicChrome.motion.pressDuration });
         onPressIn?.(event);
       }}
       onPressOut={event => {
         if (typeof style === 'function') setPressed(false);
-        scale.value = reduceMotion ? 1 : withSpring(1, { stiffness: 420, damping: 26, mass: 0.6 });
+        scale.value = reduceMotion || feedback === 'highlight' ? 1 : withSpring(1, musicChrome.motion.release);
         onPressOut?.(event);
       }}
     />

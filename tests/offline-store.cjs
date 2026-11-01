@@ -160,5 +160,36 @@ async function until(condition) { for(let i=0;i<100;i++) { if(condition()) retur
   account = { ...account, username: 'giacomo', offline: true };
   await store.removeAll(); assert(!files.has(kept), 'bulk local removal also works offline');
   api.request = originalRequest;
+  store.dispose();
+  // Hold an unrelated file audit indefinitely. First playback must validate
+  // only the chosen entry, and remote-only songs must not wait for that audit.
+  account = { ...account, username: 'cold-start' };
+  const coldRoot = 'file:///documents/metronomy-offline/cold/';
+  persisted.set(api.accountStorageKey(), JSON.stringify({ folder: 'cold', tracks: [
+    { song: song('slow'), file: 'slow.flac', bytes: 4 },
+    { song: song('chosen'), file: 'chosen.flac', bytes: 4 },
+    { song: song('missing'), file: 'missing.flac', bytes: 4 },
+  ] }));
+  files.set(coldRoot + 'slow.flac', 4); files.set(coldRoot + 'chosen.flac', 4);
+  let releaseAudit, enteredAudit = false;
+  const audit = new Promise(resolve => { releaseAudit = resolve; });
+  const info = native.getInfoAsync;
+  native.getInfoAsync = async path => { if (path === coldRoot + 'slow.flac') { enteredAudit = true; await audit; } return info(path); };
+  const cold = new OfflineStore();
+  await until(() => enteredAudit);
+  let chosen, missingSource = 'pending', remote = 'pending';
+  const early = Promise.all([
+    cold.source('chosen').then(v => { chosen = v; }),
+    cold.source('missing').then(v => { missingSource = v; }),
+    cold.source('remote-only').then(v => { remote = v; }),
+  ]);
+  try {
+    await until(() => chosen !== undefined && missingSource === undefined && remote === undefined);
+    assert.equal(chosen, coldRoot + 'chosen.flac');
+    assert.equal(cold.ready, false, 'playback must not depend on completion of the full audit');
+    assert.equal(JSON.parse(persisted.get(api.accountStorageKey())).tracks.length, 3, 'early lookup cannot save a partial library');
+  } finally { releaseAudit(); await cold.loading; await early; native.getInfoAsync = info; }
+  assert(cold.tracks.chosen && cold.tracks.slow && !cold.tracks.missing);
+  cold.dispose();
   store.dispose(); console.log('Offline store: downloads, cancellation, isolation, cached covers/lyrics/metadata, profile discovery, offline catalog and write restrictions passed.');
 })().catch(e => { console.error(e); process.exitCode = 1; });

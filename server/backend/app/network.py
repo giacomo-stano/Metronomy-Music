@@ -423,15 +423,27 @@ def router(auth):
 
     @routes.get('/playback/{track_id}')
     async def playback(track_id: str, response: Response):
-        started = time.perf_counter()
-        raw = await catalog('track/get', {'track_id': valid_id(track_id, True)})
-        catalog_ms = (time.perf_counter() - started) * 1000
-        if not raw.get('streamable'):
-            raise HTTPException(403, 'Brano non disponibile per la riproduzione completa con questo account Qobuz.')
-        started = time.perf_counter()
-        result = await full_stream(track_id)
-        response.headers['Server-Timing'] = f'catalog;dur={catalog_ms:.1f},resolver;dur={(time.perf_counter() - started) * 1000:.1f}'
-        return result
+        track_id = valid_id(track_id, True)
+        async def timed_stream():
+            started = time.perf_counter()
+            result = await full_stream(track_id)
+            return result, (time.perf_counter() - started) * 1000
+        # Independent network requests start together. Both authorization checks
+        # must succeed before exposing a signed URL; never cache entitlements.
+        resolver = asyncio.create_task(timed_stream())
+        try:
+            started = time.perf_counter()
+            raw = await catalog('track/get', {'track_id': track_id})
+            catalog_ms = (time.perf_counter() - started) * 1000
+            if not raw.get('streamable'):
+                raise HTTPException(403, 'Brano non disponibile per la riproduzione completa con questo account Qobuz.')
+            result, resolver_ms = await resolver
+            response.headers['Server-Timing'] = f'catalog;dur={catalog_ms:.1f},resolver;dur={resolver_ms:.1f}'
+            return result
+        finally:
+            if not resolver.done():
+                resolver.cancel()
+            await asyncio.gather(resolver, return_exceptions=True)
 
     @routes.get('/lyrics/{track_id}')
     async def track_lyrics(track_id: str):

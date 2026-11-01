@@ -2,6 +2,7 @@ export type StartupReport = {
   source: 'Qobuz' | 'Server' | 'iPhone';
   prepared: boolean;
   resolveMs?: number; readyMs?: number; advanceMs?: number;
+  sessionReadyMs?: number; localReadyMs?: number; installMs?: number; nativeReadyMs?: number;
   bridgeMs?: number; catalogMs?: number; resolverMs?: number;
   outcome: 'avviato' | 'errore' | 'tempo esaurito';
 };
@@ -36,12 +37,14 @@ export class PlaybackStartup {
     return {
       cancel,
       fail: () => finish('errore'),
+      sessionReady: () => { if (live) report.sessionReadyMs = elapsed(); },
+      localReady: () => { if (live) report.localReadyMs = elapsed(); },
       resolved: (uri: string, prepared: boolean) => {
         if (!live) return;
         report.resolveMs = elapsed(); report.prepared = prepared;
         if (!/^https?:\/\//i.test(uri)) report.source = 'iPhone';
       },
-      installed: () => { installed = this.now(); },
+      installed: () => { if (live) { installed = this.now(); report.installMs = elapsed(); } },
       serverTiming: (value: string | null) => {
         if (!live) return;
         // Accept only known numeric metrics, never arbitrary response content.
@@ -53,7 +56,10 @@ export class PlaybackStartup {
       },
       observe: (status: Status) => {
         if (!live || installed === undefined) return;
-        if (status.isLoaded && report.readyMs === undefined) report.readyMs = elapsed();
+        if (status.isLoaded && report.readyMs === undefined) {
+          report.readyMs = elapsed();
+          report.nativeReadyMs = Math.max(0, Math.round(this.now() - installed));
+        }
         if (status.isLoaded && status.playing && !status.isBuffering && status.currentTime > 0) {
           report.advanceMs = elapsed(); finish('avviato');
         }

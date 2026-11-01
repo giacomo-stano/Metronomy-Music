@@ -37,6 +37,9 @@ assert(native.includes('private var compactNavigationIndex: Int { selected == 3 
   'Search keeps the library symbol on the left, never two magnifying glasses');
 assert(native.includes('bar.items?[compactNavigationIndex].image'));
 assert(native.includes('sectionButton.accessibilityValue = names[compactNavigationIndex]'));
+assert(native.includes('if previous["selected"] as? Int != selected'), 'playback updates must not reinstall the compact glyph during its morph');
+assert(native.includes('self.layoutGeneration == generation'), 'an interrupted animation cannot hide the successor dock');
+assert(native.includes('bar.alpha = small ? 0 : 1') && native.includes('sectionButton.alpha = small ? 1 : 0'), 'cross-fade the old and new glyph instead of abruptly swapping at completion');
 assert(!/\b(?:let|var)\s+next\s*[:=]/.test(native), 'next is inherited from UIResponder and cannot be a stored button property');
 assert(!/\bnext\./.test(native), 'button references must use nextButton, not UIResponder.next');
 assert(native.includes('private let nextButton = UIButton') && native.includes('if nextButton.isEnabled { emit("next") }'), 'rename the control without changing the next command protocol');

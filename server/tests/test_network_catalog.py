@@ -1,4 +1,5 @@
 import os
+import asyncio
 import sys
 import unittest
 from pathlib import Path
@@ -89,6 +90,41 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(song['id'], 'qobuz:123')
             self.assertEqual(song['qobuzId'], '123')
             self.assertNotIn('url', song)
+
+    async def test_playback_metadata_and_resolver_overlap(self):
+        entered = set()
+        both = asyncio.Event()
+        async def wait_for_other(name, result):
+            entered.add(name)
+            if len(entered) == 2:
+                both.set()
+            await asyncio.wait_for(both.wait(), 1)
+            return result
+        async def catalog(*args):
+            return await wait_for_other('catalog', TRACK)
+        async def stream(*args):
+            return await wait_for_other('stream', {'url': 'https://cdn.test/full'})
+        with patch.object(network, 'catalog', side_effect=catalog), patch.object(network, 'full_stream', side_effect=stream):
+            response = await self.client.get('/network/playback/123')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(entered, {'catalog', 'stream'})
+
+    async def test_rejected_catalog_cancels_and_drains_resolver(self):
+        started, stopped = asyncio.Event(), asyncio.Event()
+        async def stream(*args):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                stopped.set()
+        async def denied(*args):
+            await started.wait()
+            return {**TRACK, 'streamable': False}
+        with patch.object(network, 'catalog', side_effect=denied), patch.object(network, 'full_stream', side_effect=stream):
+            response = await asyncio.wait_for(self.client.get('/network/playback/123'), 1)
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(stopped.is_set())
+        self.assertNotIn('url', response.json())
 
     async def test_stream_adapter_never_accepts_previews_or_leaks_output(self):
         for payload in [{'url': 'https://cdn.test/full', 'full': True}, {'url': 'https://cdn.test/private', 'sample': True}, {'url': 'http://cdn.test/full', 'full': True}, {'url': 'https://user:password@cdn.test/full', 'full': True}]:

@@ -92,7 +92,7 @@ const { shouldResetTab } = load('tabNavigation');
     const context = {
       exports: {}, require: () => jsx, songPage: type !== 'albums', collectionPage: type === 'albums', page: { type, endpoint }, pageMenu: false,
       openTopMenu: kind => { context.opened = kind; context.pageMenu = kind === 'page'; },
-      LibraryDownloadActions: 'LibraryDownloadActions', View: 'View', topStyles: {}, c: {}, p: { onRemoveLocal() {} },
+      LibraryDownloadActions: 'LibraryDownloadActions', MenuSeparator: 'MenuSeparator', View: 'View', topStyles: {}, c: {}, p: { onRemoveLocal() {} },
       closeTopMenu() {}, pageActionRow: () => null,
     };
     vm.runInNewContext(code, context); context.exports.openPageMenu();

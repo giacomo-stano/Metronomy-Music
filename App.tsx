@@ -1,3 +1,4 @@
+import MusicControlButton from './src/MusicControlButton';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { clearPreloadedSource, preload, setAudioModeAsync, useAudioPlayer } from 'expo-audio';
@@ -1224,6 +1225,7 @@ function MusicApp({
 
     try {
       await audioReady.current;
+      attempt.sessionReady();
       if (version !== audioGeneration.current || currentAccount() !== owner) return;
 
       // Revalidate local files even when a remote item has been prepared:
@@ -1234,6 +1236,7 @@ function MusicApp({
         catch (error) { if (isOffline) throw error; }
       }
       if (version !== audioGeneration.current || currentAccount() !== owner) return;
+      attempt.localReady();
       const source = local ? { uri: local } : prepared?.source ?? await songPlaybackSource(
         next, isOffline, async () => undefined,
         { signal: controller.signal, onServerTiming: attempt.serverTiming },
@@ -1465,20 +1468,12 @@ function MusicApp({
 
       <DownloadBadge song={song} />
 
-      <Pressable
-        accessibilityLabel={'Opzioni per ' + song.title}
+      <MusicControlButton accessibilityLabel={'Opzioni per ' + song.title}
         onPress={() => setActionSong(song)}
-        style={s.button}
-      >
-        <Ionicons
-          name="ellipsis-horizontal"
-          size={24}
-          color={c.secondary}
-        />
-      </Pressable>
+        style={s.button} color={c.secondary} />
     </View>
   ));
-  const albumCaption = (item: Album) => <View style={{ flexDirection: 'row', alignItems: 'center' }}><Pressable style={{ flex: 1 }} onPress={() => openAlbum(item)}><Text numberOfLines={1} style={s.cardTitle}>{item.name}</Text><Text numberOfLines={1} style={s.sub}>{item.artist}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={'Opzioni album ' + item.name} onPress={() => setActionAlbum(item)} style={{ width: 44, height: 48, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="ellipsis-horizontal" color={c.secondary} size={22} /></Pressable></View>;
+  const albumCaption = (item: Album) => <View style={{ flexDirection: 'row', alignItems: 'center' }}><Pressable style={{ flex: 1 }} onPress={() => openAlbum(item)}><Text numberOfLines={1} style={s.cardTitle}>{item.name}</Text><Text numberOfLines={1} style={s.sub}>{item.artist}</Text></Pressable><MusicControlButton accessibilityRole="button" accessibilityLabel={'Opzioni album ' + item.name} onPress={() => setActionAlbum(item)} style={{ width: 44, height: 48, alignItems: 'center', justifyContent: 'center' }} color={c.secondary} /></View>;
   const featured = (items: Album[]) => <ScrollView horizontal showsHorizontalScrollIndicator={false} decelerationRate="fast" snapToInterval={Math.min(width - 72, 320) + 14} contentContainerStyle={{ gap: 14 }}>{items.slice(0, 6).map(item => <View key={item.id} style={{ width: Math.min(width - 72, 320), borderRadius: 16, overflow: 'hidden', backgroundColor: c.surface }}><Pressable onPress={() => openAlbum(item)} accessibilityLabel={'Apri ' + item.name}><Artwork id={item.coverArt} size={Math.min(width - 72, 320)} /></Pressable><View style={{ padding: 16 }}><Text style={{ color: c.accent, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>NELLA TUA LIBRERIA</Text>{albumCaption(item)}</View></View>)}</ScrollView>;
   const cards = (items: Album[], rail = false) => <View style={rail ? s.rail : s.grid}>{items.map(item => <View key={item.id} style={{ width: rail ? 155 : (width - 54) / 2 }}><Pressable onPress={() => openAlbum(item)} accessibilityRole="button" accessibilityLabel={'Apri album ' + item.name}><Artwork id={item.coverArt} size={rail ? 155 : (width - 54) / 2} /></Pressable>{albumCaption(item)}</View>)}</View>;
 
@@ -1939,19 +1934,10 @@ function MusicApp({
                   />
                 </Pressable>
 
-                <Pressable
-                  accessibilityRole="button"
+                <MusicControlButton accessibilityRole="button"
                   accessibilityLabel={'Opzioni album ' + album.name}
                   onPress={() => setActionAlbum(album)}
-                  style={s.albumTopAction}
-                >
-                  <SymbolView
-                    name="ellipsis"
-                    size={19}
-                    weight="semibold"
-                    tintColor="#fff"
-                  />
-                </Pressable>
+                  style={s.albumTopAction} color="#fff" />
               </View>
             </View>
 
@@ -2117,19 +2103,10 @@ function MusicApp({
 
                     <DownloadBadge song={song} />
 
-                    <Pressable
-                      accessibilityRole="button"
+                    <MusicControlButton accessibilityRole="button"
                       accessibilityLabel={'Opzioni per ' + song.title}
                       onPress={() => setActionSong(song)}
-                      style={s.albumTrackMore}
-                    >
-                      <SymbolView
-                        name="ellipsis"
-                        size={17}
-                        weight="semibold"
-                        tintColor="rgba(255,255,255,0.72)"
-                      />
-                    </Pressable>
+                      style={s.albumTrackMore} color="rgba(255,255,255,0.72)" />
                   </View>
 
                   {i < albumSongs.length - 1 && (

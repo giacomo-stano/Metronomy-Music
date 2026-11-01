@@ -1,5 +1,6 @@
+import MusicControlButton from './MusicControlButton';
 import FloatingMenu from './FloatingMenu';
-import { MenuRow } from './MenuControls';
+import { MenuRow, MenuSeparator } from './MenuControls';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,7 +23,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
-import { GlassView } from 'expo-glass-effect';
 import { request, coverURL, isConnectivityFailure, type Album, type Song } from './api';
 import { useTheme } from './theme';
 import { DownloadBadge, useOffline } from './OfflineDownloads';
@@ -777,15 +777,9 @@ export default function LibraryScreen(p: Props) {
                 },
               ]}
             >
-              <GlassView
-                pointerEvents="none"
-                glassEffectStyle="regular"
-                isInteractive={false}
-                style={StyleSheet.absoluteFill}
-              />
+              <GlassBackground />
 
-              <Pressable
-                accessibilityRole="button"
+              <MusicControlButton accessibilityRole="button"
                 accessibilityLabel={
                   songPage
                     ? 'Filtra brani'
@@ -794,29 +788,12 @@ export default function LibraryScreen(p: Props) {
                       : 'Ordina'
                 }
                 onPress={openFilterMenu}
-                style={topStyles.controlButton}
-              >
-                <SymbolView
-                  name="line.3.horizontal.decrease"
-                  size={21}
-                  weight="medium"
-                  tintColor={c.text}
-                />
-              </Pressable>
+                style={topStyles.controlButton} color={c.text} kind="filter" />
 
-              <Pressable
-                accessibilityRole="button"
+              <MusicControlButton accessibilityRole="button"
                 accessibilityLabel={'Opzioni per ' + page.title}
                 onPress={openPageMenu}
-                style={topStyles.controlButton}
-              >
-                <SymbolView
-                  name="ellipsis"
-                  size={23}
-                  weight="semibold"
-                  tintColor={c.text}
-                />
-              </Pressable>
+                style={topStyles.controlButton} color={c.text} />
             </View>
           </View>
 
@@ -1025,9 +1002,9 @@ export default function LibraryScreen(p: Props) {
   const pageMenu = topMenu === 'page';
 
   const filterRow = (icon: SFSymbol, label: string, selected: boolean, action: () => void) =>
-    <MenuRow icon={selected ? 'checkmark.circle.fill' : icon} label={label} onPress={action} />;
+    <MenuRow icon={icon} selected={selected} label={label} onPress={action} />;
   const sortRow = (label: string, value: 'default' | 'title' | 'artist', subtitle?: string, options?: { selected?: boolean; onPress?: () => void }) =>
-    <MenuRow icon={(options?.selected ?? sortMode === value) ? 'checkmark' : 'arrow.up.arrow.down'} label={label} subtitle={subtitle} onPress={() => {
+    <MenuRow icon="arrow.up.arrow.down" selected={options?.selected ?? sortMode === value} label={label} subtitle={subtitle} onPress={() => {
       if (options?.onPress) { options.onPress(); return; }
       setSortMode(value); closeTopMenu();
     }} />;
@@ -1172,8 +1149,7 @@ export default function LibraryScreen(p: Props) {
                   </Text>
                 </Pressable>
 
-                <Pressable
-                  accessibilityRole="button"
+                <MusicControlButton accessibilityRole="button"
                   accessibilityLabel={'Opzioni album ' + album.name}
                   onPress={() => p.onAlbumActions(album)}
                   style={{
@@ -1183,14 +1159,7 @@ export default function LibraryScreen(p: Props) {
                     justifyContent: 'center',
                     marginRight: -5,
                     marginTop: -3,
-                  }}
-                >
-                  <Ionicons
-                    name="ellipsis-horizontal"
-                    color={c.secondary}
-                    size={19}
-                  />
-                </Pressable>
+                  }} color={c.secondary} />
               </View>
             </View>
           );
@@ -1270,23 +1239,14 @@ export default function LibraryScreen(p: Props) {
                 </Pressable>
 
                 <DownloadBadge song={song} />
-                <Pressable
-                  accessibilityLabel={'Opzioni per ' + song.title}
+                <MusicControlButton accessibilityLabel={'Opzioni per ' + song.title}
                   onPress={() => p.onActions(song)}
                   style={{
                     width: 42,
                     height: 50,
                     alignItems: 'center',
                     justifyContent: 'center',
-                  }}
-                >
-                  <SymbolView
-                    name="ellipsis"
-                    size={19}
-                    weight="semibold"
-                    tintColor={c.text}
-                  />
-                </Pressable>
+                  }} color={c.text} />
               </View>
             </View>
           );
@@ -1420,12 +1380,7 @@ export default function LibraryScreen(p: Props) {
                   },
                 ]}
               >
-                <GlassView
-                  pointerEvents="none"
-                  glassEffectStyle="regular"
-                  isInteractive={false}
-                  style={StyleSheet.absoluteFill}
-                />
+                <GlassBackground />
                 <SymbolView
                   name="chevron.left"
                   size={17}
@@ -1444,12 +1399,7 @@ export default function LibraryScreen(p: Props) {
                   },
                 ]}
               >
-                <GlassView
-                  pointerEvents="none"
-                  glassEffectStyle="regular"
-                  isInteractive={false}
-                  style={StyleSheet.absoluteFill}
-                />
+                <GlassBackground />
 
                 <Pressable
                   accessibilityRole="button"
@@ -1469,19 +1419,10 @@ export default function LibraryScreen(p: Props) {
                   />
                 </Pressable>
 
-                <Pressable
-                  accessibilityRole="button"
+                <MusicControlButton accessibilityRole="button"
                   accessibilityLabel="Altre opzioni artista"
                   onPress={openPageMenu}
-                  style={artistStyles.topAction}
-                >
-                  <SymbolView
-                    name="ellipsis"
-                    size={19}
-                    weight="semibold"
-                    tintColor={c.text}
-                  />
-                </Pressable>
+                  style={artistStyles.topAction} color={c.text} />
               </View>
             </View>
 
@@ -1724,12 +1665,7 @@ export default function LibraryScreen(p: Props) {
                     () => changeSongView('songs')
                   )}
 
-                  <View
-                    style={[
-                      topStyles.menuSeparator,
-                      { backgroundColor: c.border },
-                    ]}
-                  />
+                  <MenuSeparator />
 
                   {filterRow(
                     'star',
@@ -1738,12 +1674,7 @@ export default function LibraryScreen(p: Props) {
                     () => changeSongView('favorites')
                   )}
 
-                  <View
-                    style={[
-                      topStyles.menuSeparator,
-                      { backgroundColor: c.border },
-                    ]}
-                  />
+                  <MenuSeparator />
 
                   {filterRow(
                     'arrow.down.circle',
@@ -1770,12 +1701,7 @@ export default function LibraryScreen(p: Props) {
                     }
                   )}
 
-                  <View
-                    style={[
-                      topStyles.menuSeparator,
-                      { backgroundColor: c.border },
-                    ]}
-                  />
+                  <MenuSeparator />
 
                   {sortRow(
                     'Più vecchi prima',
@@ -1799,12 +1725,7 @@ export default function LibraryScreen(p: Props) {
                     <>
                       {sortRow('Titolo', 'title')}
 
-                      <View
-                        style={[
-                          topStyles.menuSeparator,
-                          { backgroundColor: c.border },
-                        ]}
-                      />
+                      <MenuSeparator />
 
                       {sortRow(
                         'Data di aggiunta',
@@ -1821,12 +1742,7 @@ export default function LibraryScreen(p: Props) {
                         }
                       )}
 
-                      <View
-                        style={[
-                          topStyles.menuSeparator,
-                          { backgroundColor: c.border },
-                        ]}
-                      />
+                      <MenuSeparator />
 
                       {sortRow('Artista', 'artist')}
                     </>
@@ -1836,21 +1752,11 @@ export default function LibraryScreen(p: Props) {
                     <>
                       {sortRow('Titolo', 'title')}
 
-                      <View
-                        style={[
-                          topStyles.menuSeparator,
-                          { backgroundColor: c.border },
-                        ]}
-                      />
+                      <MenuSeparator />
 
                       {sortRow('Artista', 'artist')}
 
-                      <View
-                        style={[
-                          topStyles.menuSeparator,
-                          { backgroundColor: c.border },
-                        ]}
-                      />
+                      <MenuSeparator />
 
                       {sortRow('Ordine originale', 'default')}
                     </>
@@ -1863,12 +1769,7 @@ export default function LibraryScreen(p: Props) {
                         'title'
                       )}
 
-                      <View
-                        style={[
-                          topStyles.menuSeparator,
-                          { backgroundColor: c.border },
-                        ]}
-                      />
+                      <MenuSeparator />
 
                       {sortRow('Ordine originale', 'default')}
                     </>
@@ -1885,12 +1786,7 @@ export default function LibraryScreen(p: Props) {
                     () => setTopMenu('sort')
                   )}
 
-                  <View
-                    style={[
-                      topStyles.menuSeparator,
-                      { backgroundColor: c.border },
-                    ]}
-                  />
+                  <MenuSeparator />
 
                   {pageActionRow(
                     'gearshape',
@@ -2058,11 +1954,6 @@ const topStyles = StyleSheet.create({
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  menuSeparator: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 53,
-    opacity: 0.75,
   },
 });
 

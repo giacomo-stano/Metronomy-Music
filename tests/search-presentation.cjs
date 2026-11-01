@@ -53,7 +53,7 @@ const modules = {
   './OfflineDownloads': { DownloadBadge: 'DownloadBadge' },
   './catalogPlayback': {}, './ServerDownloads': { useServerDownloads: () => ({ jobs: [] }) },
 };
-for (const name of ['SpringPressable', 'Discover', 'CatalogSearchResults', 'CatalogBrowser', 'NetworkActions']) modules['./' + name] = { __esModule: true, default: name };
+for (const name of ['MusicControlButton', 'SpringPressable', 'Discover', 'CatalogSearchResults', 'CatalogBrowser', 'NetworkActions']) modules['./' + name] = { __esModule: true, default: name };
 const screen = load('src/SearchScreen.tsx', modules, {
   setTimeout: fn => { const id = ++serial; timers.set(id, fn); return id; }, clearTimeout: id => timers.delete(id),
 });

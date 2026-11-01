@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { patchAudioUtils, audioUtilsPath, replacement } = require('../plugins/withPreciseAudioTiming');
+const { patchAudioUtils, patchStartupKeys, audioUtilsPath, replacement } = require('../plugins/withPreciseAudioTiming');
 
 const original = `    var options: [String: Any]?
     if let headers = source.headers {
@@ -19,9 +19,16 @@ assert.throws(() => patchAudioUtils(factory + factory), /unsupported/);
 assert.throws(() => patchAudioUtils(factory + '\nAVURLAssetPreferPreciseDurationAndTimingKey'), /unsupported/);
 
 const actual = fs.readFileSync(audioUtilsPath(process.cwd()), 'utf8');
+const startup = patchStartupKeys(patchAudioUtils(actual));
+assert(startup.includes('AVURLAssetPreferPreciseDurationAndTimingKey: true'), 'startup must preserve precise seeking');
+assert(startup.includes('return AVPlayerItem(asset: asset, automaticallyLoadedAssetKeys: [.tracks])'), 'duration indexing must not gate first playback');
+assert(!startup.includes('automaticallyLoadedAssetKeys: [.tracks, .duration]'));
+assert.equal(patchStartupKeys(startup), startup);
+assert.throws(() => patchStartupKeys('unknown factory'), /unsupported/);
 assert(patchAudioUtils(actual).includes(replacement), 'patch supports the installed native dependency');
 if (process.argv.includes('--verify-installed')) {
   assert(actual.replace(/\r\n/g, '\n').includes(replacement), 'iOS prebuild must apply the patch before compiling');
+  assert.equal(patchStartupKeys(actual), actual, 'iOS prebuild must apply nonblocking readiness');
 }
 const config = require('../app.json');
 assert(config.expo.plugins.includes('./plugins/withPreciseAudioTiming'));

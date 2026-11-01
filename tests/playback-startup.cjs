@@ -76,6 +76,7 @@ function load(path, mocks={}) {
   const {PlaybackStartup}=load('src/playbackStartup.ts');
   const timing=new PlaybackStartup(()=>now);
   let attempt=timing.begin(owner,'Qobuz');
+  attempt.sessionReady(); attempt.localReady();
   now+=100; attempt.resolved(audio.uri,true);
   attempt.serverTiming('bridge;dur=12.1,catalog;dur=3,resolver;dur=8,private;desc="secret"');
   attempt.installed(); now+=200;
@@ -84,6 +85,8 @@ function load(path, mocks={}) {
   now+=250; attempt.observe({isLoaded:true,playing:true,isBuffering:false,currentTime:.25});
   let report=timing.snapshot(owner)[0];
   assert.equal(report.advanceMs,550); assert.equal(report.readyMs,300);
+  assert.equal(report.sessionReadyMs,0); assert.equal(report.localReadyMs,0);
+  assert.equal(report.installMs,100); assert.equal(report.nativeReadyMs,200, 'native preparation is measured separately from source resolution');
   assert.equal(report.bridgeMs,12); assert.equal(report.catalogMs,3);
   assert(!JSON.stringify(report).includes('private') && !JSON.stringify(report).includes('https'));
   assert.equal(timing.snapshot(other).length,0);

@@ -43,6 +43,9 @@ export class OfflineStore {
   private jobs = new Map<string, Job>();
   private queue: Promise<void> = Promise.resolve();
   readonly loading: Promise<void>;
+  private indexEntries = new Map<string, LocalTrack>();
+  private resolveIndex!: () => void;
+  private readonly indexReady = new Promise<void>(resolve => { this.resolveIndex = resolve; });
   constructor() { this.loading = this.load(pendingOperations.get(this.key)); pendingOperations.set(this.key, this.loading); }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   snapshot = () => this.version;
@@ -88,6 +91,12 @@ export class OfflineStore {
       this.folder = data.folder;
       await FS.makeDirectoryAsync(this.root, { intermediates: true });
       for (const entry of data.tracks) {
+        if (safeFile.test(entry?.file) && typeof entry?.song?.id === 'string') this.indexEntries.set(entry.song.id, entry);
+      }
+      // Playback validates only its selected file; downloads/removals continue
+      // to wait for the complete audit and orphan cleanup via this.loading.
+      this.resolveIndex();
+      for (const entry of data.tracks) {
         if (!safeFile.test(entry?.file) || typeof entry?.song?.id !== 'string') continue;
         const info = await FS.getInfoAsync(this.file(entry.file));
         if (info.exists && !info.isDirectory && info.size > 0 && info.size === entry.bytes) {
@@ -108,15 +117,17 @@ export class OfflineStore {
       }
       await this.save();
     } catch (e) { this.error = e instanceof Error ? e.message : 'Archivio locale non disponibile.'; }
-    finally { this.ready = true; this.emit(); }
+    finally { this.ready = true; this.resolveIndex(); this.indexEntries.clear(); this.emit(); }
   }
   async source(songId: string): Promise<string | undefined> {
-    await this.loading;
-    const entry = this.tracks[songId];
+    await this.indexReady;
+    const entry = this.ready ? this.tracks[songId] : this.indexEntries.get(songId);
     if (!entry) return;
     const info = await FS.getInfoAsync(this.file(entry.file));
     if (info.exists && !info.isDirectory && info.size === entry.bytes) return this.file(entry.file);
-    delete this.tracks[songId]; await this.save(); this.emit();
+    // The audit owns persistence until it completes. Do not overwrite its
+    // partially populated index if a selected file is missing during startup.
+    if (this.ready) { delete this.tracks[songId]; await this.save(); this.emit(); }
   }
   async download(song: Song, shouldContinue: () => boolean = () => true) {
     const epoch = this.downloadEpoch;

@@ -15,6 +15,9 @@ assert(newPlayer.includes('self.source = source'), 'media-services recovery must
 const patchedPlayer = patchPlayer(fs.readFileSync(paths.player, 'utf8'));
 const method = patchedPlayer.slice(patchedPlayer.indexOf(newPlayer), patchedPlayer.indexOf('\n  func replaceCurrentSource('));
 assert(method.includes('AVPlayerItem(asset: item.asset'), 'each active player owns a distinct playback item');
+assert(!method.includes('automaticallyLoadedAssetKeys: [.tracks, .duration]'), 'preloaded items must not reintroduce duration indexing into readiness');
+const blockingPlayer = patchedPlayer.replace(newPlayer, newPlayer.replace('automaticallyLoadedAssetKeys: [.tracks]', 'automaticallyLoadedAssetKeys: [.tracks, .duration]'));
+assert.equal(patchPlayer(blockingPlayer), patchedPlayer, 'upgrade existing precise preload builds');
 assert(method.includes('replacePlayerItem(with: preparedItem)'));
 assert(!method.includes('replacePlayerItem(with: item)'), 'do not insert the cached player item into another player');
 assert(!newModule.includes('cachedPlayer.replaceCurrentItem'), 'do not transfer/detach a live cached queue item');

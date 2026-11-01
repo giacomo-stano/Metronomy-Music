@@ -15,7 +15,7 @@ const previousPlayer = `  func replaceWithPreloadedItem(_ item: AVPlayerItem?, s
     self.source = source`;
 const newPlayer = previousPlayer + `
     // Reuse indexed media, but give the active player its own playback item.
-    let preparedItem = AVPlayerItem(asset: item.asset, automaticallyLoadedAssetKeys: [.tracks, .duration])
+    let preparedItem = AVPlayerItem(asset: item.asset, automaticallyLoadedAssetKeys: [.tracks])
     preparedItem.preferredForwardBufferDuration = item.preferredForwardBufferDuration`;
 const oldModule = `          let cachedItem = cachedPlayer.currentItem
           cachedPlayer.replaceCurrentItem(with: nil)
@@ -36,7 +36,9 @@ function replaceOnce(input, before, after, name) {
   return text.replace(candidates[0], after);
 }
 const patchPlayer = input => {
-  const text = replaceOnce(input, [oldPlayer, previousPlayer], newPlayer, 'AudioPlayer.swift').replace(/\r\n/g, '\n');
+  const previousPreparedPlayer = newPlayer.replace('automaticallyLoadedAssetKeys: [.tracks]', 'automaticallyLoadedAssetKeys: [.tracks, .duration]');
+  const before = input.replace(/\r\n/g, '\n').includes(previousPreparedPlayer) ? previousPreparedPlayer : [oldPlayer, previousPlayer];
+  const text = replaceOnce(input, before, newPlayer, 'AudioPlayer.swift').replace(/\r\n/g, '\n');
   const start = text.indexOf(newPlayer);
   const end = text.indexOf('\n  func replaceCurrentSource(', start);
   if (start < 0 || end < 0) throw new Error('Audio preloading: unsupported AudioPlayer.swift method boundary.');

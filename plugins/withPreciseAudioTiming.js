@@ -23,6 +23,17 @@ function patchAudioUtils(input) {
   return source.replace(original, replacement);
 }
 
+// Precise timing is still required for FLAC/VBR seeks. Loading its duration is
+// not a prerequisite for the first sound: the UI uses catalog duration until
+// AVPlayer publishes the native duration. Keep the asset's precision option.
+function patchStartupKeys(input) {
+  const before = 'return AVPlayerItem(asset: asset, automaticallyLoadedAssetKeys: [.tracks, .duration])';
+  const after = 'return AVPlayerItem(asset: asset, automaticallyLoadedAssetKeys: [.tracks])';
+  if (input.includes(after) && !input.includes(before)) return input;
+  if (input.split(before).length !== 2) throw new Error('Audio startup: unsupported AudioUtils.swift factory.');
+  return input.replace(before, after);
+}
+
 function audioUtilsPath(projectRoot) {
   const packagePath = require.resolve('expo-audio/package.json', { paths: [projectRoot] });
   return path.join(path.dirname(packagePath), 'ios', 'AudioUtils.swift');
@@ -31,10 +42,11 @@ function audioUtilsPath(projectRoot) {
 module.exports = config => withDangerousMod(config, ['ios', async config => {
   const file = audioUtilsPath(config.modRequest.projectRoot);
   const source = await fs.readFile(file, 'utf8');
-  const patched = patchAudioUtils(source);
+  const patched = patchStartupKeys(patchAudioUtils(source));
   if (patched !== source) await fs.writeFile(file, patched);
   return config;
 }]);
 module.exports.patchAudioUtils = patchAudioUtils;
 module.exports.audioUtilsPath = audioUtilsPath;
 module.exports.replacement = replacement;
+module.exports.patchStartupKeys = patchStartupKeys;

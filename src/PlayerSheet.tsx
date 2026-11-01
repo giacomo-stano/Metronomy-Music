@@ -1,3 +1,4 @@
+import MusicControlButton from './MusicControlButton';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Image, Modal, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -996,18 +997,9 @@ export default function PlayerSheet(p: Props) {
                         )}
                       </Pressable>
 
-                      <Pressable
-                        accessibilityLabel="Altre opzioni"
+                      <MusicControlButton accessibilityLabel="Altre opzioni"
                         onPress={() => (menu ? closeMenu() : openMenu())}
-                        style={playerStyles.metaIconButton}
-                      >
-                        <SymbolView
-                          name="ellipsis"
-                          size={21}
-                          weight="medium"
-                          tintColor={playerText}
-                        />
-                      </Pressable>
+                        style={playerStyles.metaIconButton} color={playerText} />
                     </View>
                   </Animated.View>
 
@@ -1072,17 +1064,8 @@ export default function PlayerSheet(p: Props) {
                         />
                       </Pressable>
 
-                      <Pressable
-                        onPress={() => (menu ? closeMenu() : openMenu())}
-                        style={playerStyles.queueHeaderButton}
-                      >
-                        <SymbolView
-                          name="ellipsis"
-                          size={20}
-                          weight="medium"
-                          tintColor={playerText}
-                        />
-                      </Pressable>
+                      <MusicControlButton onPress={() => (menu ? closeMenu() : openMenu())}
+                        style={playerStyles.queueHeaderButton} color={playerText} />
                     </View>
 
                     <View style={playerStyles.queuePills}>

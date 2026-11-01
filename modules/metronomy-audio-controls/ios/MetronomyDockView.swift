@@ -35,6 +35,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
   private var artworkTask: URLSessionDataTask?
   private var artworkGeneration = 0
   private var layoutAnimator: UIViewPropertyAnimator?
+  private var layoutGeneration = 0
   // Artwork URLs may contain credentials. Never persist them to a URL cache or log them.
   private lazy var artworkSession: URLSession = {
     let config = URLSessionConfiguration.ephemeral
@@ -116,16 +117,26 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
 
   public override func didMoveToWindow() {
     super.didMoveToWindow()
-    if window != nil { refreshAppearance() }
-    else { layoutAnimator?.stopAnimation(true) }
+    if window != nil { refreshAppearance(); setNeedsLayout() }
+    else {
+      layoutGeneration += 1
+      layoutAnimator?.stopAnimation(true)
+      layoutAnimator = nil
+    }
   }
 
   func configure(_ value: [String: Any]) {
     let previous = configuration
     configuration = value
     selected = max(0, min(3, value["selected"] as? Int ?? 0))
-    bar.selectedItem = bar.items?[selected]
-    sectionButton.setImage(bar.items?[compactNavigationIndex].image, for: .normal)
+    if bar.selectedItem?.tag != selected { bar.selectedItem = bar.items?[selected] }
+    // Playback state updates must not restart UIButton's image transition while
+    // the dock is morphing. Only change the glyph on an actual tab selection.
+    if previous["selected"] as? Int != selected {
+      UIView.performWithoutAnimation {
+        sectionButton.setImage(bar.items?[compactNavigationIndex].image, for: .normal)
+      }
+    }
     sectionButton.accessibilityValue = names[compactNavigationIndex]
     sectionButton.tintColor = selected == 3 ? .label : .systemPink
     searchButton.tintColor = selected == 3 ? .systemPink : .label
@@ -277,6 +288,11 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     searchButton.frame = searchGlass.bounds
     sectionGlass.transform = small ? .identity : CGAffineTransform(scaleX: 0.01, y: 0.01)
     searchGlass.transform = small ? .identity : CGAffineTransform(scaleX: 0.01, y: 0.01)
+    // Cross-fade glyphs, not their glass ancestors. The old UIKit icon must be
+    // fully transparent before hiding its container at completion.
+    bar.alpha = small ? 0 : 1
+    sectionButton.alpha = small ? 1 : 0
+    searchButton.alpha = small ? 1 : 0
     sectionGlass.isUserInteractionEnabled = small
     searchGlass.isUserInteractionEnabled = small
     sectionGlass.accessibilityElementsHidden = !small
@@ -322,6 +338,8 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
   }
 
   private func animateLayout() {
+    layoutGeneration += 1
+    let generation = layoutGeneration
     if let animator = layoutAnimator {
       animator.stopAnimation(false)
       animator.finishAnimation(at: .current)
@@ -335,7 +353,7 @@ public final class MetronomyDockView: ExpoView, UITabBarDelegate {
     }
     let animator = UIViewPropertyAnimator(duration: 0.38, dampingRatio: 0.9) { [weak self] in self?.layoutIfNeeded() }
     animator.addCompletion { [weak self] _ in
-      guard let self else { return }
+      guard let self, self.layoutGeneration == generation else { return }
       self.barContainer.isHidden = self.shouldCompact
       self.barContainer.clipsToBounds = self.shouldCompact
       self.layoutAnimator = nil

@@ -6,6 +6,7 @@ import { measureMenuAnchor, type MenuAnchor } from './menuAnchor';
 import { useMotionPreferences } from './motionPreferences';
 import { useScreenInsets } from './ScreenInsets';
 import { menuLayout } from './menuLayout';
+import { musicChrome } from './musicChrome';
 
 export default function FloatingMenu({ children, onClose, busy = false }: { children: ReactNode; onClose: () => void; busy?: boolean }) {
   const { isDark } = useTheme();
@@ -26,7 +27,7 @@ export default function FloatingMenu({ children, onClose, busy = false }: { chil
   }, []);
   useEffect(() => {
     if (!ready) return;
-    const animation = Animated.spring(progress, { toValue: 1, damping: 26, stiffness: 340, useNativeDriver: true });
+    const animation = Animated.spring(progress, { toValue: 1, ...musicChrome.motion.menuOpen, useNativeDriver: true });
     if (reduceMotion) progress.setValue(1); else animation.start();
     return () => animation.stop();
   }, [progress, reduceMotion, ready]);
@@ -39,7 +40,7 @@ export default function FloatingMenu({ children, onClose, busy = false }: { chil
     if (busy || closing.current) return;
     closing.current = true;
     if (reduceMotion || !ready) { onClose(); return; }
-    Animated.timing(progress, { toValue: 0, duration: 140, useNativeDriver: true }).start(({ finished }) => { if (finished) onClose(); });
+    Animated.timing(progress, { toValue: 0, duration: musicChrome.motion.menuClose, useNativeDriver: true }).start(({ finished }) => { if (finished) onClose(); });
   }
   return <Modal transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
     <View style={{ flex: 1 }} accessibilityViewIsModal onAccessibilityEscape={close}>
@@ -47,8 +48,8 @@ export default function FloatingMenu({ children, onClose, busy = false }: { chil
       <Pressable disabled={busy} accessibilityRole="button" accessibilityLabel="Chiudi menu" onPress={close} style={StyleSheet.absoluteFill} />
       {/* Never fade a GlassView ancestor to zero: iOS can stop rendering its material.
           Measure offscreen first so the panel does not jump after its first layout. */}
-      <Animated.View pointerEvents={ready ? 'auto' : 'none'} accessibilityElementsHidden={!ready} importantForAccessibility={ready ? 'auto' : 'no-hide-descendants'} style={{ position: 'absolute', ...layout, left: ready ? layout.left : width + 24, borderRadius: 32, shadowColor: '#000', shadowOpacity: isDark ? .3 : .16, shadowRadius: 26, shadowOffset: { width: 0, height: 10 }, transformOrigin: 'top right', transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [.94, 1] }) }] }}>
-        <View style={{ maxHeight: layout.maxHeight, borderRadius: 32, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? '#ffffff30' : '#00000020' }}>
+      <Animated.View pointerEvents={ready ? 'auto' : 'none'} accessibilityElementsHidden={!ready} importantForAccessibility={ready ? 'auto' : 'no-hide-descendants'} style={{ position: 'absolute', ...layout, left: ready ? layout.left : width + 24, borderRadius: musicChrome.menu.radius, shadowColor: '#000', shadowOpacity: isDark ? .3 : .16, shadowRadius: 26, shadowOffset: { width: 0, height: 10 }, transformOrigin: 'top right', transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [.94, 1] }) }] }}>
+        <View style={{ maxHeight: layout.maxHeight, borderRadius: musicChrome.menu.radius, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? '#ffffff30' : '#00000020' }}>
           <GlassBackground />
           {/* Stable contrast even if native blur is unavailable; other app chrome stays unchanged. */}
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? (reduceTransparency ? '#29292c' : 'rgba(41,41,44,0.94)') : (reduceTransparency ? '#fafafa' : 'rgba(250,250,250,0.96)') }]} />
