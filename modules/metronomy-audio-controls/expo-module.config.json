@@ -5,7 +5,8 @@
       "MetronomyRemoteControlsModule",
       "MetronomyAirPlayModule",
       "MetronomySystemVolumeModule",
-      "MetronomyDockModule"
+      "MetronomyDockModule",
+      "MetronomyControlsModule"
     ]
   }
 }

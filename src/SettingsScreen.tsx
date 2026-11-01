@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, Pressable as NativePressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { request, currentAccount } from './api';
 import { useTheme } from './theme';
@@ -9,6 +9,7 @@ import appConfig from '../app.json';
 import { useOffline } from './OfflineDownloads';
 import Pressable from './SpringPressable';
 import GlassBackground from './GlassBackground';
+import { NativeSegments, nativeControlsAvailable } from './NativeControls';
 
 type Page = 'home' | 'server' | 'navidrome' | 'qobuz' | 'device' | 'appearance';
 type ServerInfo = { navidromeURL?: string; version?: string; apiVersion?: string; username: string; admin: boolean; expires: number; folders: { id: string; label: string; libraryId: string; path: string; hostPath?: string; available: boolean }[] };
@@ -83,7 +84,7 @@ export default function SettingsScreen({ onClose, onLogout }: { onClose: () => v
     <Ionicons name="chevron-forward" size={17} color={c.muted} />
   </Pressable>;
   const refresh = <Pressable disabled={busy || localMode} accessibilityRole="button" onPress={() => setRevision(v => v + 1)} style={s.button}>{busy ? <ActivityIndicator color={c.accent} /> : <Text style={{ color: localMode ? c.secondary : c.accent, fontSize: 16 }}>Verifica connessioni</Text>}</Pressable>;
-  const logout = <NativePressable disabled={!visible} accessibilityRole="button" onPress={() => dismiss(onLogout)} style={s.button}><Text style={{ color: c.accent, fontSize: 17 }}>Esci / Cambia account</Text></NativePressable>;
+  const logout = <Pressable disabled={!visible} accessibilityRole="button" onPress={() => dismiss(onLogout)} style={s.button}><Text style={{ color: c.accent, fontSize: 17 }}>Esci / Cambia account</Text></Pressable>;
 
   return <Modal visible={visible} animationType="slide" onDismiss={finishDismiss} onRequestClose={() => page === 'home' ? dismiss(onClose) : setPage('home')}>
     <SafeAreaView style={{ flex: 1, backgroundColor: c.background }}>
@@ -169,7 +170,7 @@ export default function SettingsScreen({ onClose, onLogout }: { onClose: () => v
         </>}
         {page === 'appearance' && <>
           {note('Scegli il tema oppure segui automaticamente l’aspetto del tuo iPhone.')}
-          {group(<>{(['system', 'light', 'dark'] as const).map((value, i) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: mode === value }} onPress={() => setMode(value)} style={s.link}><Ionicons name={i === 0 ? 'phone-portrait-outline' : i === 1 ? 'sunny-outline' : 'moon-outline'} size={23} color={c.accent} /><Text style={{ color: c.text, flex: 1, fontSize: 17 }}>{['Automatico', 'Chiaro', 'Scuro'][i]}</Text>{mode === value && <Ionicons name="checkmark" size={24} color={c.accent} />}</Pressable>)}</>)}
+          {nativeControlsAvailable ? <NativeSegments labels={['Automatico', 'Chiaro', 'Scuro']} selected={['system', 'light', 'dark'].indexOf(mode)} onSelect={index => setMode((['system', 'light', 'dark'] as const)[index])} label="Aspetto" /> : group(<>{(['system', 'light', 'dark'] as const).map((value, i) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: mode === value }} onPress={() => setMode(value)} style={s.link}><Ionicons name={i === 0 ? 'phone-portrait-outline' : i === 1 ? 'sunny-outline' : 'moon-outline'} size={23} color={c.accent} /><Text style={{ color: c.text, flex: 1, fontSize: 17 }}>{['Automatico', 'Chiaro', 'Scuro'][i]}</Text>{mode === value && <Ionicons name="checkmark" size={24} color={c.accent} />}</Pressable>)}</>)}
           <View style={[s.summary, { marginTop: 24, borderWidth: .5, borderColor: c.border, backgroundColor: c.surface }]}><View style={s.circle}><GlassBackground /><Ionicons name="musical-note" color={c.accent} size={24} /></View><View><Text style={{ color: c.text, fontSize: 17, fontWeight: '600' }}>La tua musica</Text><Text style={{ color: c.secondary, marginTop: 4 }}>Aspetto {isDark ? 'scuro' : 'chiaro'} attivo</Text></View></View>
         </>}
       </ScrollView>

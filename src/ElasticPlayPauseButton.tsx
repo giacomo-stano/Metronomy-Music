@@ -9,6 +9,7 @@ import { SymbolView } from 'expo-symbols';
 
 import Pressable from './SpringPressable';
 import { useMotionPreferences } from './motionPreferences';
+import { NativeButton, nativeControlsAvailable } from './NativeControls';
 
 type Props = {
   playing: boolean;
@@ -20,7 +21,11 @@ type Props = {
   variant?: 'ionicons' | 'symbol';
 };
 
-export default function ElasticPlayPauseButton({
+export default function ElasticPlayPauseButton(props: Props) {
+  return nativeControlsAvailable ? <NativeButton onPress={props.onPress} accessibilityLabel={props.accessibilityLabel} style={props.style}
+    content={{ symbol: props.playing ? 'pause.fill' : 'play.fill', color: props.color, iconSize: props.size }} /> : <FallbackPlayPauseButton {...props} />;
+}
+function FallbackPlayPauseButton({
   playing,
   onPress,
   accessibilityLabel,

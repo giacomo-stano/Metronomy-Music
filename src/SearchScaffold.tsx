@@ -8,6 +8,7 @@ import { useTheme } from './theme';
 import { useMotionPreferences } from './motionPreferences';
 import { SEARCH_TRANSITION_MS, searchTitleHeight } from './searchMotion';
 import { searchHeaderMetrics } from './responsiveLayout';
+import { NativeSegments, nativeControlsAvailable } from './NativeControls';
 
 type Props = {
   query: string; scope: 'qobuz' | 'library'; searching: boolean; resetKey: number;
@@ -105,14 +106,14 @@ export default function SearchScaffold(p: Props) {
             </Pressable>
           </Animated.View>
         </View>
-        <View onLayout={e => setScopeWidth(e.nativeEvent.layout.width)} style={[styles.scopes, { borderColor: c.border, height: scopeHeight, borderRadius: scopeHeight / 2 }]}>
+        {nativeControlsAvailable ? <NativeSegments labels={['Qobuz', 'Libreria']} selected={p.scope === 'library' ? 1 : 0} onSelect={index => p.onScope(index === 1 ? 'library' : 'qobuz')} label="Ambito della ricerca" style={{ height: scopeHeight, marginTop: 10 }} /> : <View onLayout={e => setScopeWidth(e.nativeEvent.layout.width)} style={[styles.scopes, { borderColor: c.border, height: scopeHeight, borderRadius: scopeHeight / 2 }]}>
           <GlassBackground />
           <Animated.View pointerEvents="none" style={[styles.selection, { width: Math.max(0, (scopeWidth - 6) / 2), backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)' }, selectionStyle]} />
           {(['qobuz', 'library'] as const).map(scope => <Pressable key={scope} onPress={() => p.onScope(scope)}
             accessibilityRole="tab" accessibilityState={{ selected: p.scope === scope }} style={styles.scope}>
             <Text maxFontSizeMultiplier={1.3} style={{ color: c.text, fontSize: 15, fontWeight: '500' }}>{scope === 'qobuz' ? 'Qobuz' : 'Libreria'}</Text>
           </Pressable>)}
-        </View>
+        </View>}
       </View>
     </View>
   </View>;

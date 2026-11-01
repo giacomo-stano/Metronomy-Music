@@ -1986,7 +1986,7 @@ function PlayerLyrics({ player, song, lyrics, message, source }: { player: Audio
   if (!lyrics) return <Text style={playerStyles.lyricsEmpty}>{message}</Text>;
   return <ScrollView ref={scroll} showsVerticalScrollIndicator={false} contentContainerStyle={playerStyles.lyricsContent}>
     <Text style={playerStyles.lyricsSource}>{source}</Text>
-    {lyrics.line.map((line, index) => <Pressable key={index} disabled={!lyrics.synced || line.start === undefined}
+    {lyrics.line.map((line, index) => <Pressable key={index} nativeControl={false} disabled={!lyrics.synced || line.start === undefined}
       onLayout={event => { positions.current[index] = event.nativeEvent.layout.y; }}
       onPress={() => { void seekPlayback(player, Math.max(0, ((line.start ?? 0) - (lyrics.offset ?? 0)) / 1000), song.duration).catch(() => Alert.alert('Riproduzione', 'Impossibile spostarsi nel brano.')); }}>
       <Text style={[playerStyles.lyricLine, { opacity: !lyrics.synced || active === index ? 1 : 0.3 }]}>{line.value || '♪'}</Text>

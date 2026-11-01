@@ -33,8 +33,9 @@ function component(file, extra = {}) {
   };
   const module = load(file, name => name === 'react' ? react : name === 'react/jsx-runtime' ? jsx :
     name === 'react-native-reanimated' ? reanimated : name === './motionPreferences' ? { useMotionPreferences: () => ({ reduceMotion: false }) } :
+    name === './NativeControls' ? { nativeControlsAvailable: false } :
     name === './sliderMath' ? math : name === 'react-native' ? { View: 'View' } : extra[name]);
-  return props => { cursor = 0; const result = module.default(props); const effects = pending; pending = []; effects.forEach(run => run()); return result; };
+  return props => { cursor = 0; let result = module.default(props); while (typeof result?.type === 'function') result = result.type(result.props); const effects = pending; pending = []; effects.forEach(run => run()); return result; };
 }
 
 (async () => {

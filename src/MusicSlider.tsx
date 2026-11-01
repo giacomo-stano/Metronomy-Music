@@ -4,6 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, { runOnJS, runOnUI, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useMotionPreferences } from './motionPreferences';
 import { clampFraction, sliderFraction } from './sliderMath';
+import { NativeSlider, nativeControlsAvailable } from './NativeControls';
 
 type Props = {
   value: number;
@@ -17,7 +18,10 @@ type Props = {
   height?: number;
 };
 
-export default memo(function MusicSlider({ value, onChange, onPreview, live = false, enabled = true, color, track, label, height = 5 }: Props) {
+export default memo(function MusicSlider(props: Props) {
+  return nativeControlsAvailable ? <NativeSlider {...props} /> : <FallbackMusicSlider {...props} />;
+});
+function FallbackMusicSlider({ value, onChange, onPreview, live = false, enabled = true, color, track, label, height = 5 }: Props) {
   const { reduceMotion } = useMotionPreferences();
   const width = useSharedValue(1);
   const shown = useSharedValue(clampFraction(value));
@@ -91,4 +95,4 @@ export default memo(function MusicSlider({ value, onChange, onPreview, live = fa
       </View>
     </GestureDetector>
   );
-});
+}

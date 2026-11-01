@@ -4,11 +4,20 @@ import Reanimated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } 
 import { useMotionPreferences } from './motionPreferences';
 import { rememberMenuTrigger } from './menuAnchor';
 import { musicChrome } from './musicChrome';
+import { NativeButton, nativeControlsAvailable } from './NativeControls';
+import { nativeButtonContent } from './nativeButtonContent';
 
 const Control = Reanimated.createAnimatedComponent(Pressable);
 const EMPTY_TRANSFORM = [] as const;
 
-export default forwardRef<View, PressableProps & { feedback?: 'scale' | 'highlight' }>(function SpringPressable({ style, onPress, onPressIn, onPressOut, disabled, feedback = 'scale', ...props }, ref) {
+type Props = PressableProps & { feedback?: 'scale' | 'highlight'; nativeControl?: boolean };
+export default forwardRef<View, Props>(function SpringPressable({ nativeControl = true, ...props }, ref) {
+  const descriptor = nativeControl && nativeControlsAvailable && !ref && typeof props.children !== 'function' && props.accessibilityRole !== 'link'
+    ? nativeButtonContent(props.children) : null;
+  if (descriptor) return <NativeButton {...props} content={descriptor.content}>{descriptor.sizing}</NativeButton>;
+  return <FallbackPressable {...props} ref={ref} />;
+});
+const FallbackPressable = forwardRef<View, Props>(function FallbackPressable({ style, onPress, onPressIn, onPressOut, disabled, feedback = 'scale', ...props }, ref) {
   const { reduceMotion } = useMotionPreferences();
   const control = useRef<View | null>(null);
   const setRef = useCallback((view: View | null) => {

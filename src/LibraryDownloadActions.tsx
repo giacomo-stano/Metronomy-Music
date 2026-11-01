@@ -4,6 +4,7 @@ import { MenuQuickAction, MenuQuickActions, MenuRow, MenuSeparator } from './Men
 import { useTheme } from './theme';
 import Pressable from './SpringPressable';
 import { currentAccount } from './api';
+import { MenuGroup } from './NativeMenuContext';
 
 export function LibraryDownloadStatus() {
   const { store } = useOffline('library');
@@ -46,12 +47,12 @@ export default function LibraryDownloadActions({ onClose, beforeRemove }: { onCl
       { text: 'Rimuovi download', style: 'destructive', onPress: () => void store.removeAll(beforeRemove).catch(error) },
     ]);
   }
-  return <>
+  return <MenuGroup>
     <MenuQuickActions>
       <MenuQuickAction icon={running ? 'stop.circle.fill' : 'arrow.down.circle.fill'} label={running ? 'Annulla download' : 'Scarica tutti su iPhone'} disabled={!store.ready || store.removingAll || (!running && !!currentAccount()?.offline)} onPress={running ? () => { onClose(); void store.cancelLibraryDownload().catch(error); } : download} />
     </MenuQuickActions>
     <MenuSeparator />
     <MenuRow icon="trash" label="Rimuovi tutti i download" subtitle={`${count} brani su questo iPhone · il server non cambia`} destructive disabled={!store.ready || store.removingAll || (!count && !running && !Object.keys(store.transfers).length)} onPress={remove} />
     <MenuSeparator />
-  </>;
+  </MenuGroup>;
 }
