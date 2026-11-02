@@ -146,12 +146,45 @@ firstButton.props.onAction({ nativeEvent: { action: 'press' } });
 assert.equal(presses, 11, 'native events use the latest handler');
 
 // Binding guards complement JS behavior tests; they are not a Swift build.
+// Older iOS and older binaries must keep working menus, while retaining the
+// other native controls. Never instantiate the native menu without support.
+for (const [os, module, supported] of [
+  ['ios', { supportsNativeMenus: true }, true],
+  ['ios', { supportsNativeMenus: false }, false],
+  ['ios', {}, false],
+  ['ios', null, false],
+  ['android', { supportsNativeMenus: true }, false],
+]) {
+  const registered = [];
+  const wrappers = load('src/NativeControls.tsx', {
+    react: wrapperReact, 'react/jsx-runtime': require('react/jsx-runtime'),
+    'react-native': { Platform: { OS: os } },
+    'expo-modules-core': {
+      requireOptionalNativeModule: () => module,
+      requireNativeViewManager: (_module, name) => { registered.push(name); return name; },
+    },
+    './menuAnchor': {}, './theme': {}, './nativeSliderCommands': { dispatchSliderAction },
+  });
+  assert.equal(wrappers.nativeMenusAvailable, supported);
+  assert.equal(registered.includes('MetronomyMenuView'), supported);
+  assert.equal(wrappers.nativeControlsAvailable, os === 'ios' && !!module);
+  const floating = load('src/FloatingMenu.tsx', {
+    react: wrapperReact, 'react/jsx-runtime': require('react/jsx-runtime'),
+    'react-native': {}, './GlassBackground': {}, './theme': {}, './menuAnchor': {},
+    './motionPreferences': {}, './ScreenInsets': {}, './menuLayout': {}, './musicChrome': {},
+    './NativeControls': wrappers,
+    './NativeFloatingMenu': { __esModule: true, default: 'NativeFloatingMenu' },
+  });
+  const menu = floating.default({ onClose() {}, children: null });
+  assert.equal(menu.type === 'NativeFloatingMenu', supported, 'unsupported devices render the fallback menu');
+}
 const swift = fs.readFileSync('modules/metronomy-audio-controls/ios/MetronomyControlsView.swift', 'utf8');
 const config = JSON.parse(fs.readFileSync('modules/metronomy-audio-controls/expo-module.config.json'));
 assert(config.apple.modules.includes('MetronomyControlsModule'));
 for (const api of ['UIButton(type: .system)', 'UISlider()', 'UISegmentedControl()', 'performPrimaryAction()', 'updateVisibleMenu', '.keepsMenuPresented', 'preferredElementSize']) assert(swift.includes(api), api);
 assert(swift.includes('if !slider.isTracking'), 'status updates cannot snap the thumb during scrubbing');
 assert(swift.includes('if #available(iOS 26.0, *)'), 'guard glass on older iOS');
+assert.match(swift, /if #available\(iOS 17\.4, \*\) \{\s*self\.presented = true\s*self\.button\.performPrimaryAction\(\)/, 'guard programmatic menus below iOS 17.4');
 assert(!/Selector\(|perform\(NSSelector|value\(forKey/.test(swift), 'public UIKit only');
 const volume = fs.readFileSync('modules/metronomy-audio-controls/ios/MetronomySystemVolumeView.swift', 'utf8');
 assert(!volume.includes('setThumbImage') && !volume.includes('subviews.compactMap'), 'preserve native system volume appearance');

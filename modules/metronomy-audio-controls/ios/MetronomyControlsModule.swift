@@ -3,6 +3,10 @@ import ExpoModulesCore
 public final class MetronomyControlsModule: Module {
   public func definition() -> ModuleDefinition {
     Name("MetronomyControls")
+    Constants {
+      if #available(iOS 17.4, *) { return ["supportsNativeMenus": true] }
+      return ["supportsNativeMenus": false]
+    }
     View(MetronomyButtonView.self) {
       Events("onAction")
       Prop("configuration") { (view: MetronomyButtonView, value: [String: Any]) in view.configure(value) }

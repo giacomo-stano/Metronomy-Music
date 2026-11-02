@@ -210,8 +210,15 @@ public final class MetronomyMenuView: ExpoView {
       guard let self else { return }
       self.scheduled = false
       guard self.window != nil, !self.closed, !self.presented else { return }
-      self.presented = true
-      self.button.performPrimaryAction()
+      if #available(iOS 17.4, *) {
+        self.presented = true
+        self.button.performPrimaryAction()
+      } else {
+        // JavaScript uses the fallback menu here. Close defensively if an
+        // incompatible caller mounts this view, rather than trapping touches.
+        self.closed = true
+        self.onAction(["action": "dismiss"])
+      }
     }
   }
 }

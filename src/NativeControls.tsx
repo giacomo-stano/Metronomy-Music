@@ -5,11 +5,13 @@ import { rememberMenuTrigger } from './menuAnchor';
 import { useTheme } from './theme';
 import { dispatchSliderAction, type SliderAction } from './nativeSliderCommands';
 
-export const nativeControlsAvailable = Platform.OS === 'ios' && !!requireOptionalNativeModule('MetronomyControls');
+const controlsModule = Platform.OS === 'ios' ? requireOptionalNativeModule<{ supportsNativeMenus?: boolean }>('MetronomyControls') : null;
+export const nativeControlsAvailable = !!controlsModule;
+export const nativeMenusAvailable = nativeControlsAvailable && controlsModule?.supportsNativeMenus === true;
 type NativeProps = ViewProps & { configuration: Record<string, unknown>; onAction: (event: NativeSyntheticEvent<Record<string, unknown>>) => void };
 function nativeView(name: string) { return nativeControlsAvailable ? requireNativeViewManager<NativeProps>('MetronomyControls', name) : null; }
 const Button = nativeView('MetronomyButtonView'), Slider = nativeView('MetronomySliderView'), Segments = nativeView('MetronomySegmentsView');
-export const NativeMenuView = nativeView('MetronomyMenuView');
+export const NativeMenuView = nativeMenusAvailable ? nativeView('MetronomyMenuView') : null;
 export function nativeColor(color: string) {
   const value = processColor(color);
   return typeof value === 'number' ? [(value >>> 16 & 255) / 255, (value >>> 8 & 255) / 255, (value & 255) / 255, (value >>> 24 & 255) / 255] : undefined;

@@ -19,6 +19,7 @@ Artwork cards, composite navigation rows, synchronized lyrics and screen transit
 
 ## Behavior and safety
 
+- Programmatic UIKit menus require iOS 17.4. The module exposes `supportsNativeMenus`; earlier iOS versions and binaries without that capability use the existing fallback menu while retaining the other supported native controls. The Swift call to `performPrimaryAction()` is availability-guarded as well.
 - The menu collector renders hook-owning actions such as offline downloads normally. Only layout wrappers are flattened. Numeric paths preserve ordering across fragments, asynchronous rows and download groups.
 - Menu callbacks stay in JavaScript. UIKit receives descriptors and identifiers; disabled, busy, stale and unmounted entries are checked again before dispatch.
 - Keeping menus presented permits favorite/download state and playlist submenus to update without dismissing and reopening the menu. Destructive confirmations and authorization remain in the existing action handlers.

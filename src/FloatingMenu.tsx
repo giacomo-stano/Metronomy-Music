@@ -7,11 +7,11 @@ import { useMotionPreferences } from './motionPreferences';
 import { useScreenInsets } from './ScreenInsets';
 import { menuLayout } from './menuLayout';
 import { musicChrome } from './musicChrome';
-import { nativeControlsAvailable } from './NativeControls';
+import { nativeMenusAvailable } from './NativeControls';
 import NativeFloatingMenu from './NativeFloatingMenu';
 
 export default function FloatingMenu(props: { children: ReactNode; onClose: () => void; busy?: boolean }) {
-  return nativeControlsAvailable ? <NativeFloatingMenu {...props} /> : <FallbackFloatingMenu {...props} />;
+  return nativeMenusAvailable ? <NativeFloatingMenu {...props} /> : <FallbackFloatingMenu {...props} />;
 }
 function FallbackFloatingMenu({ children, onClose, busy = false }: { children: ReactNode; onClose: () => void; busy?: boolean }) {
   const { isDark } = useTheme();
