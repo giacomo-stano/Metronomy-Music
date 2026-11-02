@@ -20,7 +20,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (account: Account) =
     const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardOpen(false));
     return () => { show.remove(); hide.remove(); };
   }, []);
-  const [url, setURL] = useState(process.env.EXPO_PUBLIC_METRONOMY_BASE_URL || 'http://192.168.1.24:8180');
+  const [url, setURL] = useState(process.env.EXPO_PUBLIC_METRONOMY_BASE_URL || 'http://10.0.0.1:8180');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
