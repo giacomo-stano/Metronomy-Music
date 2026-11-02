@@ -16,7 +16,7 @@ export function nativeColor(color: string) {
   const value = processColor(color);
   return typeof value === 'number' ? [(value >>> 16 & 255) / 255, (value >>> 8 & 255) / 255, (value & 255) / 255, (value >>> 24 & 255) / 255] : undefined;
 }
-export type ButtonContent = { title?: string; symbol?: string; color?: string; fontSize?: number; iconSize?: number; bold?: boolean; loading?: boolean; glass?: boolean };
+export type ButtonContent = { title?: string; symbol?: string; color?: string; fontSize?: number; iconSize?: number; iconWeight?: string; bold?: boolean; loading?: boolean; glass?: boolean };
 export function NativeButton({ content, children, style, onPress, onPressIn, onPressOut, onLongPress, disabled, delayLongPress, accessibilityLabel, accessibilityHint, accessibilityState, onLayout, testID }: Omit<PressableProps, 'children'> & { content: ButtonContent; children?: ReactNode }) {
   const { isDark, colors } = useTheme();
   const latest = useRef({ onPress, onPressIn, onPressOut, onLongPress, disabled });
@@ -27,10 +27,11 @@ export function NativeButton({ content, children, style, onPress, onPressIn, onP
   const flat = StyleSheet.flatten(base);
   const inset = typeof flat?.paddingHorizontal === 'number' ? flat.paddingHorizontal : typeof flat?.padding === 'number' ? flat.padding : 0;
   const hold = !!onLongPress, selected = !!accessibilityState?.selected;
-  const { title, symbol, color, fontSize, iconSize, bold, loading, glass } = content;
-  const configuration = useMemo(() => ({ title, symbol, fontSize, iconSize, bold, loading, glass, color: nativeColor(color ?? colors.text), dark: isDark,
+  const gap = typeof flat?.columnGap === 'number' ? flat.columnGap : typeof flat?.gap === 'number' ? flat.gap : 6;
+  const { title, symbol, color, fontSize, iconSize, iconWeight, bold, loading, glass } = content;
+  const configuration = useMemo(() => ({ title, symbol, fontSize, iconSize, iconWeight, gap, bold, loading, glass, color: nativeColor(color ?? colors.text), dark: isDark,
     inset, disabled: !!disabled, selected, label: accessibilityLabel ?? title, hint: accessibilityHint, longPress: hold, delayLongPress }),
-  [title, symbol, fontSize, iconSize, bold, loading, glass, color, colors.text, isDark, inset, disabled, selected, accessibilityLabel, accessibilityHint, hold, delayLongPress]);
+  [title, symbol, fontSize, iconSize, iconWeight, gap, bold, loading, glass, color, colors.text, isDark, inset, disabled, selected, accessibilityLabel, accessibilityHint, hold, delayLongPress]);
   const handleAction = useCallback((event: NativeSyntheticEvent<Record<string, unknown>>) => {
       const current = latest.current, command = event.nativeEvent;
       if (!alive.current || current.disabled) return;

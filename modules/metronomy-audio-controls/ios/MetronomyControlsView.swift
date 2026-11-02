@@ -6,6 +6,16 @@ private func controlColor(_ value: Any?, fallback: UIColor = .label) -> UIColor 
   return UIColor(red: CGFloat(rgba[0]), green: CGFloat(rgba[1]), blue: CGFloat(rgba[2]), alpha: CGFloat(rgba[3]))
 }
 
+// React Native's icon size is a bounding box, not a font point size. Wide SF
+// Symbols (notably skip/forward) can exceed that box at the same point size.
+private func controlSymbolConfiguration(_ name: String?, size: CGFloat, weight: UIImage.SymbolWeight) -> UIImage.SymbolConfiguration {
+  let proposed = UIImage.SymbolConfiguration(pointSize: size, weight: weight, scale: .medium)
+  guard let name, let image = UIImage(systemName: name, withConfiguration: proposed) else { return proposed }
+  let extent = max(image.size.width, image.size.height)
+  let pointSize = extent > size ? size * size / extent : size
+  return UIImage.SymbolConfiguration(pointSize: pointSize, weight: weight, scale: .medium)
+}
+
 public final class MetronomyButtonView: ExpoView {
   let onAction = EventDispatcher()
   private let button = UIButton(type: .system)
@@ -24,19 +34,25 @@ public final class MetronomyButtonView: ExpoView {
     if value["glass"] as? Bool == true {
       if #available(iOS 26.0, *) { config = .glass() } else { config = .gray() }
     }
+    config.buttonSize = .small
     config.title = value["title"] as? String
-    config.image = (value["symbol"] as? String).flatMap { UIImage(systemName: $0) }
-    config.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: CGFloat(value["iconSize"] as? Double ?? 22), weight: .medium)
+    let symbol = value["symbol"] as? String
+    config.image = symbol.flatMap { UIImage(systemName: $0) }
+    let weights: [String: UIImage.SymbolWeight] = ["ultraLight": .ultraLight, "thin": .thin, "light": .light, "regular": .regular, "medium": .medium, "semibold": .semibold, "bold": .bold, "heavy": .heavy, "black": .black]
+    let weight = weights[value["iconWeight"] as? String ?? "regular"] ?? .regular
+    let requestedSize = value["iconSize"] as? Double ?? 22
+    let iconSize = CGFloat(requestedSize.isFinite ? max(1, requestedSize) : 22)
+    config.preferredSymbolConfigurationForImage = controlSymbolConfiguration(symbol, size: iconSize, weight: weight)
     config.baseForegroundColor = controlColor(value["color"])
-    config.imagePadding = 8
+    config.imagePadding = CGFloat(value["gap"] as? Double ?? 6)
     let inset = CGFloat(value["inset"] as? Double ?? 0)
     config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: inset, bottom: 0, trailing: inset)
     config.showsActivityIndicator = value["loading"] as? Bool ?? false
     let size = CGFloat(value["fontSize"] as? Double ?? 17)
-    let weight: UIFont.Weight = value["bold"] as? Bool == true ? .semibold : .regular
+    let titleWeight: UIFont.Weight = value["bold"] as? Bool == true ? .semibold : .regular
     config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
       var outgoing = incoming
-      outgoing.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: size, weight: weight))
+      outgoing.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: size, weight: titleWeight))
       return outgoing
     }
     config.titleLineBreakMode = .byWordWrapping
@@ -166,7 +182,8 @@ public final class MetronomyMenuView: ExpoView {
     func flush() {
       guard !actions.isEmpty else { return }
       let group = UIMenu(options: .displayInline, children: actions)
-      group.preferredElementSize = quick ? .small : .large
+      // Let UIKit choose normal row dimensions; only quick actions use tiles.
+      if quick { group.preferredElementSize = .small }
       groups.append(group); actions = []
     }
     for entry in entries {

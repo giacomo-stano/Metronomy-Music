@@ -35,13 +35,14 @@ export function nativeButtonContent(children: ReactNode): { content: ButtonConte
         const style = StyleSheet.flatten(props.style as TextStyle);
         if (style?.opacity != null || style?.textShadowColor || style?.textDecorationLine) { valid = false; return; }
         content.color = typeof style?.color === 'string' ? style.color : content.color;
-        content.fontSize = style?.fontSize;
+        content.fontSize = style?.fontSize ?? 14;
         content.bold = style?.fontWeight === 'bold' || Number(style?.fontWeight) >= 600;
       } else if (child.type === SymbolView || child.type === Ionicons) {
         if (++icons > 1 || typeof props.name !== 'string') { valid = false; return; }
         content.symbol = child.type === SymbolView ? props.name : symbols[props.name];
         if (!content.symbol) valid = false;
         content.iconSize = typeof props.size === 'number' ? props.size : 22;
+        content.iconWeight = child.type === SymbolView && typeof props.weight === 'string' ? props.weight : 'regular';
         const color = child.type === SymbolView ? props.tintColor : props.color;
         if (!content.color && typeof color === 'string') content.color = color;
       } else if (child.type === ActivityIndicator) {

@@ -13,7 +13,7 @@ export default function MusicControlButton({ kind = 'options', color, style, ...
   const tint = color ?? colors.text;
   if (nativeControlsAvailable) return <NativeButton {...props} style={style}
     accessibilityLabel={props.accessibilityLabel ?? (kind === 'filter' ? 'Filtra e ordina' : 'Altre opzioni')}
-    content={{ symbol: kind === 'filter' ? 'line.3.horizontal.decrease' : 'ellipsis', color: tint, iconSize: musicChrome.control.icon }} />;
+    content={{ symbol: kind === 'filter' ? 'line.3.horizontal.decrease' : 'ellipsis', color: tint, iconSize: musicChrome.control.icon, iconWeight: 'semibold' }} />;
   return <Pressable {...props} accessibilityRole="button" accessibilityLabel={props.accessibilityLabel ?? (kind === 'filter' ? 'Filtra e ordina' : 'Altre opzioni')} style={state => [
     { alignItems: 'center', justifyContent: 'center' },
     typeof style === 'function' ? style(state) : style,

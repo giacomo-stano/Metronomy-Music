@@ -7,7 +7,7 @@ The iOS build now uses public UIKit controls for the standard interactions that 
 | Interaction | Implementation |
 | --- | --- |
 | Song, album, catalog, player and library filter menus | `UIButton.menu` / `UIMenu` / `UIAction`; UIKit owns layout, scrolling, highlighting and presentation/dismissal |
-| Quick menu actions | Inline menu group with the system's small element size; ordinary rows retain large elements, subtitles, selection and destructive state |
+| Quick menu actions | Inline menu group with the system's small element size; ordinary rows use UIKit's default size, subtitles, selection and destructive state |
 | Options/filter buttons, play/pause, simple text or symbol buttons | `UIButton`; existing shared button entry point converts supported content while keeping callbacks and disabled state |
 | Individual glass buttons | `UIButton.Configuration.glass()` on iOS 26+, system gray configuration on older iOS |
 | Playback seek and fallback app volume | `UISlider`; commit seeks at release, cancel safely, support VoiceOver adjustments |
@@ -19,6 +19,7 @@ Artwork cards, composite navigation rows, synchronized lyrics and screen transit
 
 ## Behavior and safety
 
+- Native button symbols respect the requested icon bounding box instead of treating it as a font point size. Preserve symbol weights, explicit label sizes, React Native's 14-point default text and configured gaps. Keep the existing 44-point minimum touch target and Dynamic Type scaling. Buttons use the compact UIKit configuration; standard menu rows no longer force large sizing.
 - Programmatic UIKit menus require iOS 17.4. The module exposes `supportsNativeMenus`; earlier iOS versions and binaries without that capability use the existing fallback menu while retaining the other supported native controls. The Swift call to `performPrimaryAction()` is availability-guarded as well.
 - The menu collector renders hook-owning actions such as offline downloads normally. Only layout wrappers are flattened. Numeric paths preserve ordering across fragments, asynchronous rows and download groups.
 - Menu callbacks stay in JavaScript. UIKit receives descriptors and identifiers; disabled, busy, stale and unmounted entries are checked again before dispatch.
