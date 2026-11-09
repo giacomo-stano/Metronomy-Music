@@ -28,9 +28,8 @@ function patchAudioUtils(input, precise = true) {
   return source.replace(original, expected);
 }
 
-// Precise timing is still required for FLAC/VBR seeks. Loading its duration is
-// not a prerequisite for the first sound: the UI uses catalog duration until
-// AVPlayer publishes the native duration. Keep the asset's precision option.
+// Accurate seeks may depend on precise indexing (especially FLAC/VBR).
+// Duration discovery must not gate first sound in either diagnostic mode.
 function patchStartupKeys(input) {
   const before = 'return AVPlayerItem(asset: asset, automaticallyLoadedAssetKeys: [.tracks, .duration])';
   const after = 'return AVPlayerItem(asset: asset, automaticallyLoadedAssetKeys: [.tracks])';
