@@ -87,7 +87,7 @@ final class FLACProbeModel: ObservableObject {
             sourceURL = target.absoluteString
             errorMessage = ""
         } catch {
-            errorMessage = "Importazione locale non riuscita: \\(error.localizedDescription)"
+            errorMessage = "Importazione locale non riuscita: \(error.localizedDescription)"
         }
     }
 }
@@ -121,13 +121,13 @@ struct ContentView: View {
                     }
                     .font(.caption)
                     Divider()
-                    Text("Durata nativa: \\(format(model.duration)) s")
-                    Text("Posizione nativa: \\(format(model.position)) s")
-                    Text("Posizione seek richiesta: \\(format(model.requestedSeek)) s")
-                    Text("Oltre la durata: \\(format(model.secondsBeyondDuration)) s")
-                    Text("Stato player: \\(model.state)")
-                    Text("Tempo dall'avvio: \\(format(model.wallElapsed)) s")
-                    Text("Primo avanzamento: \\(model.firstSoundCandidate)")
+                    Text("Durata nativa: \(format(model.duration)) s")
+                    Text("Posizione nativa: \(format(model.position)) s")
+                    Text("Posizione seek richiesta: \(format(model.requestedSeek)) s")
+                    Text("Oltre la durata: \(format(model.secondsBeyondDuration)) s")
+                    Text("Stato player: \(model.state)")
+                    Text("Tempo dall'avvio: \(format(model.wallElapsed)) s")
+                    Text("Primo avanzamento: \(model.firstSoundCandidate)")
                     if !model.errorMessage.isEmpty {
                         Text(model.errorMessage).foregroundStyle(.red)
                     }
