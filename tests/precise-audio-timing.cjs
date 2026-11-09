@@ -10,7 +10,6 @@ const factory = original + '\n\n    let asset = AVURLAsset(url: finalUrl, option
 const precise = process.env.METRONOMY_PRECISE_AUDIO_TIMING !== 'false';
 const patched = patchAudioUtils(factory, precise);
 const selected = precise ? replacement : standardReplacement;
-const alternative = precise ? standardReplacement : replacement;
 const standard = patchAudioUtils(factory, false);
 assert(standard.includes('AVURLAssetPreferPreciseDurationAndTimingKey: false'));
 assert.equal(patchAudioUtils(standard, false), standard);
