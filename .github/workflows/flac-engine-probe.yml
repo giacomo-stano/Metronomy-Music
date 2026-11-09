@@ -1,0 +1,71 @@
+name: Test alternative FLAC engine (iOS)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'experiments/flac-engine-probe/**'
+      - '.github/workflows/flac-engine-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-flac-probe:
+    name: Compile isolated FLAC engine probe
+    runs-on: macos-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate native project
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          cd experiments/flac-engine-probe
+          xcodegen generate
+          xcodebuild -resolvePackageDependencies -project MetronomyFLACProbe.xcodeproj -scheme MetronomyFLACProbe
+
+      - name: Compile unsigned iOS Release IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd experiments/flac-engine-probe
+          mkdir -p build
+          set +e
+          xcodebuild \
+            -project MetronomyFLACProbe.xcodeproj \
+            -scheme MetronomyFLACProbe \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee build/xcodebuild.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            grep -nE 'error:|SwiftCompile|CompileSwift' build/xcodebuild.log | tail -n 200 || true
+            exit "$STATUS"
+          fi
+          PRODUCTS=build/DerivedData/Build/Products/Release-iphoneos
+          APP_PATH="$(find "$PRODUCTS" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          [ -n "$APP_PATH" ]
+          ACTUAL=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP_PATH/Info.plist")
+          test "$ACTUAL" = "com.anonymous.metronomy.flacprobe" || (echo "Unexpected bundle $ACTUAL" && exit 1)
+          mkdir -p build/Payload
+          cp -R "$APP_PATH" build/Payload/
+          (cd build && /usr/bin/zip -qry Metronomy-FLAC-Probe-unsigned.ipa Payload)
+          ls -lh build/Metronomy-FLAC-Probe-unsigned.ipa
+
+      - name: Upload diagnostic unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Metronomy-FLAC-Probe-unsigned
+          path: experiments/flac-engine-probe/build/Metronomy-FLAC-Probe-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
