@@ -1,0 +1,44 @@
+name: MetronomyFLACProbe
+options:
+  bundleIdPrefix: com.anonymous.metronomy
+  deploymentTarget:
+    iOS: "16.4"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.4"
+    SUPPORTS_MACCATALYST: NO
+packages:
+  AudioStreaming:
+    url: https://github.com/dimitris-c/AudioStreaming.git
+    revision: b4848909377c2e36d31d2afd0a244e48c9a0f5a7
+targets:
+  MetronomyFLACProbe:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    dependencies:
+      - package: AudioStreaming
+        product: AudioStreaming
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.anonymous.metronomy.flacprobe
+        PRODUCT_NAME: Metronomy FLAC Probe
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: FLAC Probe
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.0.1"
+        ENABLE_BITCODE: NO
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: "FLAC Probe"
+        LSRequiresIPhoneOS: true
+        UIRequiredDeviceCapabilities: [arm64]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
