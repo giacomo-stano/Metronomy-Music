@@ -5,6 +5,7 @@ import { request, currentAccount } from './api';
 import { useTheme } from './theme';
 import StorageSection from './StorageSection';
 import { playbackStartup } from './playbackStartup';
+import { timelineSamples, clearTimelineSamples } from './playbackTimelineDiagnostics';
 import appConfig from '../app.json';
 import { useOffline } from './OfflineDownloads';
 import Pressable from './SpringPressable';
@@ -45,6 +46,7 @@ export default function SettingsScreen({ onClose, onLogout }: { onClose: () => v
   const [qRevision, setQRevision] = useState(0);
   const [timingRevision, refreshTimings] = useState(0);
   const startupReports = playbackStartup.snapshot(account);
+  const seekSamples = timelineSamples();
   const ms = (value?: number) => value === undefined ? '—' : (value / 1000).toFixed(2) + ' s';
 
   useEffect(() => {
@@ -166,6 +168,21 @@ export default function SettingsScreen({ onClose, onLogout }: { onClose: () => v
           </View>) : note('Riproduci un brano per misurare il suo avvio.')}
           <Pressable onPress={() => refreshTimings(value => value + 1)} style={s.button}><Text style={{ color: c.accent }}>Aggiorna misurazioni</Text></Pressable>
           {note('Ultimi 8 avvii di questa sessione. Il primo avanzamento è rilevato dal player, non dal microfono. I tempi del bridge sono inclusi nella preparazione della sorgente, non si sommano. Nessun titolo, URL o dato dell’account viene salvato o inviato.')}
+          {heading('Diagnostica FLAC e seek')}
+          {seekSamples.length ? seekSamples.map((sample, index) => <View key={'seek:' + timingRevision + ':' + index}>
+            {group(<>
+              {row('Evento ' + (index + 1), sample.label)}
+              {row('Durata nativa AVPlayer', sample.nativeDuration.toFixed(3) + ' s')}
+              {row('Durata catalogo', sample.catalogDuration.toFixed(3) + ' s')}
+              {row('Differenza durata', (sample.nativeDuration - sample.catalogDuration).toFixed(3) + ' s')}
+              {row('Posizione nativa NON limitata', sample.nativePosition.toFixed(3) + ' s')}
+              {row('Stato', (sample.playing ? 'In riproduzione' : 'Non in riproduzione') + (sample.buffering ? ' · buffering' : ''))}
+              {row('Timestamp sessione', (sample.elapsedMs / 1000).toFixed(1) + ' s')}
+            </>)}
+          </View>) : note('Esegui un seek verso la fine del brano per vedere durata e posizione native.')}
+          <Pressable onPress={() => refreshTimings(value => value + 1)} style={s.button}><Text style={{ color: c.accent }}>Aggiorna diagnostica</Text></Pressable>
+          <Pressable onPress={() => { clearTimelineSamples(); refreshTimings(value => value + 1); }} style={s.button}><Text style={{ color: c.accent }}>Azzera diagnostica seek</Text></Pressable>
+          {note('Solo memoria temporanea di questa sessione. Nessun titolo del brano, URL, token o account nei campioni. La barra di avanzamento e le richieste di seek non vengono modificate.')}
 
         </>}
         {page === 'appearance' && <>

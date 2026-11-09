@@ -24,6 +24,7 @@ import { playerMorph, type PlayerOrigin } from './dockMotion';
 import { useScreenInsets } from './ScreenInsets';
 import { playerLayout } from './responsiveLayout';
 import { playbackTimeline, seekPlayback, invalidatePlaybackSeeks } from './playbackTimeline';
+import { captureTimeline } from './playbackTimelineDiagnostics';
 import { DarkSurface } from './theme';
 import { LocalDownloadAction, DownloadBadge } from './OfflineDownloads';
 import NetworkActions from './NetworkActions';
@@ -1949,13 +1950,37 @@ const PlaybackProgress = memo(function PlaybackProgress({ player, song, visible 
   const pending = useRef(false);
   const seekSequence = useRef(0);
   const alive = useRef(true);
+  const lastNearEndSample = useRef(0);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  // Store only occasional diagnostic samples near the native end of the asset.
+  // Do not alter the displayed progress or the seek path.
+  useEffect(() => {
+    if (!visible || !status.isLoaded || !(status.duration > 0)) return;
+    if (status.currentTime < status.duration - 8) return;
+    const now = Date.now();
+    if (now - lastNearEndSample.current < 1500) return;
+    lastNearEndSample.current = now;
+    captureTimeline('vicino alla fine', status, song.duration);
+  }, [visible, status.isLoaded, status.currentTime, status.duration, status.playing, status.isBuffering, song.duration]);
   const onPreview = useCallback((value: number | null) => { if (value !== null || !pending.current) setPreview(value); }, []);
   const commit = useCallback((fraction: number) => {
     const sequence = ++seekSequence.current;
     pending.current = true;
     setPreview(fraction);
-    void seekPlayback(player, fraction * playbackTimeline(player.currentStatus, song.duration).duration, song.duration)
+    const before = player.currentStatus;
+    const requested = fraction * playbackTimeline(before, song.duration).duration;
+    captureTimeline('prima seek ' + Math.round(fraction * 100) + '%', before, song.duration);
+    void seekPlayback(player, requested, song.duration)
+      .then(applied => {
+        if (applied && alive.current && seekSequence.current === sequence) {
+          captureTimeline('seek completato ' + requested.toFixed(2) + 's', player.currentStatus, song.duration);
+          setTimeout(() => {
+            if (alive.current && seekSequence.current === sequence) {
+              captureTimeline('1.5s dopo seek', player.currentStatus, song.duration);
+            }
+          }, 1500);
+        }
+      })
       .catch(() => { if (alive.current && seekSequence.current === sequence) Alert.alert('Riproduzione', 'Impossibile spostarsi nel brano.'); })
       .finally(() => { if (seekSequence.current === sequence) { pending.current = false; if (alive.current) setPreview(null); } });
   }, [player, song.duration]);
