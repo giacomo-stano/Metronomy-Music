@@ -41,3 +41,4 @@ targets:
         UIRequiredDeviceCapabilities: [arm64]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
