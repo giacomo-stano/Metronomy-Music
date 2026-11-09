@@ -8,6 +8,11 @@ on:
         type: choice
         options: [artifact, beta, stable]
         default: artifact
+      precise_audio_timing:
+        description: 'Diagnostica avvio: precise = normale; standard = disabilita timing preciso (solo artifact)'
+        type: choice
+        options: [precise, standard]
+        default: precise
       confirm_stable:
         description: 'Confermo la pubblicazione di una release stabile (solo main)'
         type: boolean
@@ -25,6 +30,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  METRONOMY_PRECISE_AUDIO_TIMING: ${{ inputs.precise_audio_timing == 'standard' && 'false' || 'true' }}
   RELEASE_CHANNEL: ${{ inputs.channel || 'artifact' }}
   CONFIRM_STABLE: ${{ inputs.confirm_stable || false }}
   METRONOMY_CHANNEL: ${{ inputs.channel == 'beta' && 'beta' || 'stable' }}
@@ -48,6 +54,14 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Guard experimental artifact from publication
+        shell: bash
+        run: |
+          if [ "${{ inputs.precise_audio_timing }}" = "standard" ] && [ "${{ inputs.channel }}" != "artifact" ]; then
+            echo "Standard timing is experimental: build with channel=artifact only."
+            exit 1
+          fi
+
       - name: Install JavaScript dependencies
         run: npm ci
 
@@ -69,7 +83,7 @@ jobs:
           CI: "1"
         run: npx expo prebuild --platform ios --clean
 
-      - name: Verify precise native audio timing is applied
+      - name: Verify selected native audio timing is applied
         run: |
           node tests/precise-audio-timing.cjs --verify-installed
           node tests/audio-preloading.cjs --verify-installed

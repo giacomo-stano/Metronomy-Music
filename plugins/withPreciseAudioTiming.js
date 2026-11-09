@@ -14,18 +14,22 @@ const replacement = `    // Metronomy: index the asset precisely before seeking 
       options["AVURLAssetHTTPHeaderFieldsKey"] = headers
     }`;
 
-function patchAudioUtils(input) {
+const standardReplacement = replacement.replace('AVURLAssetPreferPreciseDurationAndTimingKey: true', 'AVURLAssetPreferPreciseDurationAndTimingKey: false');
+
+// Diagnostic option is deliberately build-time only: each IPA has one reproducible
+// native AVURLAsset behavior. Default remains the previously shipped precise mode.
+function patchAudioUtils(input, precise = true) {
   const source = input.replace(/\r\n/g, '\n');
-  if (source.includes(replacement) && !source.includes(original)) return input;
+  const expected = precise ? replacement : standardReplacement;
+  if (source.includes(expected) && !source.includes(original)) return input;
   if (source.split(original).length !== 2 || source.includes('AVURLAssetPreferPreciseDurationAndTimingKey')) {
     throw new Error('Precise audio timing: unsupported expo-audio AudioUtils.swift. Review the patch before building.');
   }
-  return source.replace(original, replacement);
+  return source.replace(original, expected);
 }
 
-// Precise timing is still required for FLAC/VBR seeks. Loading its duration is
-// not a prerequisite for the first sound: the UI uses catalog duration until
-// AVPlayer publishes the native duration. Keep the asset's precision option.
+// Accurate seeks may depend on precise indexing (especially FLAC/VBR).
+// Duration discovery must not gate first sound in either diagnostic mode.
 function patchStartupKeys(input) {
   const before = 'return AVPlayerItem(asset: asset, automaticallyLoadedAssetKeys: [.tracks, .duration])';
   const after = 'return AVPlayerItem(asset: asset, automaticallyLoadedAssetKeys: [.tracks])';
@@ -42,11 +46,13 @@ function audioUtilsPath(projectRoot) {
 module.exports = config => withDangerousMod(config, ['ios', async config => {
   const file = audioUtilsPath(config.modRequest.projectRoot);
   const source = await fs.readFile(file, 'utf8');
-  const patched = patchStartupKeys(patchAudioUtils(source));
+  const precise = process.env.METRONOMY_PRECISE_AUDIO_TIMING !== 'false';
+  const patched = patchStartupKeys(patchAudioUtils(source, precise));
   if (patched !== source) await fs.writeFile(file, patched);
   return config;
 }]);
 module.exports.patchAudioUtils = patchAudioUtils;
 module.exports.audioUtilsPath = audioUtilsPath;
 module.exports.replacement = replacement;
+module.exports.standardReplacement = standardReplacement;
 module.exports.patchStartupKeys = patchStartupKeys;
