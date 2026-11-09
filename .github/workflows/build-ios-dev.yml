@@ -1,0 +1,127 @@
+name: Build Metronomy Dev iOS IPA
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'app.config.js'
+      - '.github/workflows/build-ios-dev.yml'
+      - 'src/**'
+      - 'plugins/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-dev-ios:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'experiment/dev-client-metro'
+    name: Build unsigned iOS Dev Client
+    runs-on: macos-latest
+    timeout-minutes: 55
+    env:
+      METRONOMY_CHANNEL: dev
+      METRONOMY_PRECISE_AUDIO_TIMING: 'false'
+      METRONOMY_BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+      EXPO_PUBLIC_RELEASE_CHANNEL: dev
+      EXPO_PUBLIC_BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+      CI: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked project dependencies
+        run: npm ci
+
+      - name: Add Expo SDK 57 Dev Client only for this diagnostic build
+        run: npm install --no-save --package-lock=false 'expo-dev-client@~57.0.19'
+
+      - name: Verify native development configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e "const c=require('./app.config.js')({config:require('./app.json').expo});if(c.ios.bundleIdentifier!=='com.anonymous.metronomy.dev'||!c.plugins.includes('expo-dev-client'))process.exit(1);console.log(c.name,c.ios.bundleIdentifier)"
+          npx tsc --noEmit
+          npm test
+
+      - name: Generate iOS project
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Verify native audio patches
+        run: |
+          node tests/precise-audio-timing.cjs --verify-installed
+          node tests/audio-preloading.cjs --verify-installed
+
+      - name: Install CocoaPods
+        run: cd ios && pod install
+
+      - name: Check Dev Client is linked
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -qi 'expo-dev-launcher' ios/Podfile.lock || (echo 'Expo Dev Launcher missing' && exit 1)
+          grep -q 'MetronomyAudioControls' ios/Podfile.lock || (echo 'Metronomy native controls missing' && exit 1)
+
+      - name: Discover workspace and scheme
+        id: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          [ -n "$WORKSPACE" ]
+          SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
+          echo "workspace=$WORKSPACE" >> "$GITHUB_OUTPUT"
+          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
+
+      - name: Compile Debug app for physical iPhone without signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          set +e
+          xcodebuild \
+            -workspace "${{ steps.project.outputs.workspace }}" \
+            -scheme "${{ steps.project.outputs.scheme }}" \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee build/xcodebuild-dev.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            grep -nE 'error:|SwiftCompile|CompileSwift' build/xcodebuild-dev.log | tail -n 160 || true
+            exit "$STATUS"
+          fi
+
+      - name: Verify bundle identity and package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRODUCTS=build/DerivedData/Build/Products/Debug-iphoneos
+          APP_PATH="$(find "$PRODUCTS" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          [ -n "$APP_PATH" ]
+          ACTUAL=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP_PATH/Info.plist")
+          test "$ACTUAL" = 'com.anonymous.metronomy.dev' || (echo "Unexpected bundle ID $ACTUAL" && exit 1)
+          rm -rf build/Payload
+          mkdir -p build/Payload
+          cp -R "$APP_PATH" build/Payload/
+          (cd build && /usr/bin/zip -qry Metronomy-Dev-unsigned.ipa Payload)
+          ls -lh build/Metronomy-Dev-unsigned.ipa
+
+      - name: Upload unsigned Dev Client
+        uses: actions/upload-artifact@v4
+        with:
+          name: Metronomy-Dev-iOS-unsigned
+          path: build/Metronomy-Dev-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
