@@ -10,6 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 
 from .config import settings
+from .stream_diagnostics import trace_context, trace_headers, trace_failure, traced_bytes
 from .imports import import_queue
 from .models import ImportRequest, ImportRequestCreate
 from .navidrome import navidrome
@@ -322,8 +323,23 @@ async def lyrics(song_id: str, _: None = Depends(require_api_key)) -> dict:
 
 @app.get("/stream/{song_id}")
 async def stream(song_id: str, request: Request, _: None = Depends(require_api_key)) -> StreamingResponse:
-    response = await navidrome.stream(song_id, request.headers.get("range"))
-    return StreamingResponse(navidrome.bytes(response), status_code=response.status_code, headers=upstream_headers(response), media_type=response.headers.get("content-type"))
+    requested_range = request.headers.get("range")
+    # Disabled by default: no measurable tracing overhead in normal use.
+    trace = trace_context(song_id, requested_range) if settings.stream_trace else None
+    try:
+        response = await navidrome.stream(song_id, requested_range)
+    except HTTPException as error:
+        if trace is not None:
+            trace_failure(trace, error.status_code)
+        raise
+    if trace is not None:
+        trace_headers(trace, response.status_code, response.headers)
+    body = navidrome.bytes(response)
+    return StreamingResponse(
+        traced_bytes(body, trace) if trace is not None else body,
+        status_code=response.status_code, headers=upstream_headers(response),
+        media_type=response.headers.get("content-type"),
+    )
 
 
 @app.get("/cover/{cover_art_id}")

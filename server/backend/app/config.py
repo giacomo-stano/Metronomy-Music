@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     navidrome_username: str = ""
     navidrome_password: str = ""
     multi_user: bool = True
+    stream_trace: bool = False
     accounts_file: str = "/config/accounts.json"
     app_api_key: str | None = None
     qoget_config: str = "/data/config/qoget/config.json"
